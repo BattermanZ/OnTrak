@@ -85,7 +85,13 @@
         <button type="submit" class="btn btn-primary w-100">{{ 'Update Activity' if edit_activity else 'Add Activity' }}</button>
     </form>
 
-    <!-- Section to display current activities grouped by day -->
+    <!-- Add container for displaying current activity details -->
+    <div id="current-activity-details" class="text-center mt-4">
+        <!-- This will be updated dynamically by JavaScript -->
+        No activity in progress
+    </div>
+
+    
     <h2 class="text-center mb-4">Current Activities</h2>
     <div class="row">
         {% for day, day_activities in grouped_activities.items() %}

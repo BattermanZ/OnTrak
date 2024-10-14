@@ -44,42 +44,22 @@
         </form>
     </div>
 
-    <!-- Buttons to start and stop activities -->
-    <div class="text-center mb-4">
-        <button id="start-activity" class="btn btn-primary">Start Activity</button>
-        <button id="stop-activity" class="btn btn-danger ms-2">Stop Activity</button>
-        <div id="countdown" class="mt-3"></div>
-        <div id="activity-progress-container">
-            <div id="activity-progress-bar"></div>
-        </div>
+    <!-- Add container for displaying current activity details -->
+    <div id="current-activity-details" class="text-center mt-4">
+        <!-- This will be updated dynamically by JavaScript -->
+        No activity in progress
+    </div>
+    <button id="start-activity" class="btn btn-primary">Start Activity</button>
+    <button id="stop-activity" class="btn btn-danger ms-2">Stop Activity</button>
+    <div id="countdown" class="mt-3"></div>
+    <div id="activity-progress-container">
+        <div id="activity-progress-bar"></div>
     </div>
 
-    <!-- Display cards for today's progress, current activity, and upcoming activity -->
+    <!-- Display cards for today's progress and upcoming activity -->
     <div class="row mb-4">
-        <!-- Card for today's progress -->
-        <div class="col-md-4">
-            <div class="card text-white bg-primary mb-3">
-                <div class="card-header">Today's Progress</div>
-                <div class="card-body">
-                    <h5 class="card-title text-center">Activities Completed</h5>
-                    <p class="card-text text-center">{{ completed_activities }} out of {{ grouped_activities[selected_day]|length }} activities completed</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Card for current activity in progress -->
-        <div class="col-md-4">
-            <div class="card text-white bg-info mb-3">
-                <div class="card-header">Current Activity</div>
-                <div class="card-body">
-                    <h5 class="card-title text-center">Activity in Progress</h5>
-                    <p id="current-activity-details" class="card-text text-center" data-activity-id="">No activity in progress</p>
-                </div>
-            </div>
-        </div>
-
         <!-- Card for upcoming activity -->
-        <div class="col-md-4">
+        <div class="col-md-6 offset-md-3">
             <div class="card text-white bg-warning mb-3">
                 <div class="card-header">Upcoming Activity</div>
                 <div class="card-body">
@@ -145,6 +125,9 @@
                 body: JSON.stringify({ day: selectedDay })
             })
             .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error response received: ${response.status} - ${response.statusText}`);
+                }
                 console.info("Received response for start activity request.");
                 return response.json();
             })
@@ -154,18 +137,19 @@
                     console.error(`Error starting activity: ${data.error}`);
                 } else {
                     console.info(`Activity started: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
-                    document.getElementById("current-activity-details").innerText = `${data.name}: ${data.start_time} - ${data.end_time}`;
-                    document.getElementById("current-activity-details").setAttribute("data-activity-id", data.activity_id);
+                    document.getElementById("current-activity-details").innerHTML = `Start Time: ${data.start_time}<br>End Time: ${data.end_time}`;
+                    document.getElementById("countdown").setAttribute("data-activity-id", data.activity_id);
                     startProgressBar(data.start_time, data.end_time);
                 }
             })
             .catch(error => {
+                alert("Failed to start activity. Please check the console for more details.");
                 console.error("Error in start activity request:", error);
             });
         });
 
         document.getElementById("stop-activity").addEventListener("click", function() {
-            const activityId = document.getElementById("current-activity-details").getAttribute("data-activity-id");
+            const activityId = document.getElementById("countdown").getAttribute("data-activity-id");
             if (!activityId) {
                 alert("No activity in progress to stop.");
                 console.error("Attempted to stop activity when no activity was in progress.");
@@ -180,6 +164,9 @@
                 body: JSON.stringify({ activity_id: activityId })
             })
             .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error response received: ${response.status} - ${response.statusText}`);
+                }
                 console.info("Received response for stop activity request.");
                 return response.json();
             })
@@ -190,11 +177,12 @@
                 } else {
                     console.info(`Activity stopped with ID: ${activityId}`);
                     document.getElementById("current-activity-details").innerText = "No activity in progress";
-                    document.getElementById("current-activity-details").removeAttribute("data-activity-id");
+                    document.getElementById("countdown").removeAttribute("data-activity-id");
                     stopProgressBar();
                 }
             })
             .catch(error => {
+                alert("Failed to stop activity. Please check the console for more details.");
                 console.error("Error in stop activity request:", error);
             });
         });
