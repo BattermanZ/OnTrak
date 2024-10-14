@@ -29,8 +29,7 @@ class DatabaseHelper:
                         description TEXT,
                         start_time TEXT NOT NULL,
                         end_time TEXT NOT NULL,
-                        day TEXT NOT NULL,
-                        status TEXT DEFAULT 'not started'
+                        day TEXT NOT NULL
                     )
                 ''')
                 conn.commit()
@@ -108,20 +107,7 @@ class DatabaseHelper:
             WHERE id = ?
         ''', (name, duration, description, start_time, end_time, day, activity_id))
 
-    def update_activity_status(self, activity_id, status):
-        """
-        Update the status of an activity in the database.
-        
-        Args:
-            activity_id (int): The ID of the activity to update.
-            status (str): The new status for the activity (e.g., 'started', 'stopped').
-        """
-        self.logger.log_info(f"Updating status of activity ID: {activity_id} to '{status}'.")
-        self._execute_query('''
-            UPDATE activities
-            SET status = ?
-            WHERE id = ?
-        ''', (status, activity_id))
+                
 
     def delete_activity(self, activity_id):
         """
@@ -129,6 +115,8 @@ class DatabaseHelper:
         """
         self.logger.log_info(f"Deleting activity ID: {activity_id}")
         self._execute_query('DELETE FROM activities WHERE id = ?', (activity_id,))
+
+                
 
 # Example usage
 if __name__ == "__main__":

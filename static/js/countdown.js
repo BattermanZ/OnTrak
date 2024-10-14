@@ -53,6 +53,7 @@ document.getElementById('start-activity').addEventListener('click', function(eve
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
         },
         body: JSON.stringify({ day: selectedDay })
     })
@@ -86,9 +87,7 @@ document.getElementById('start-activity').addEventListener('click', function(eve
         startCountdown(data.start_time, data.end_time);
 
         // Update the activity details in the UI
-        const currentActivityDetails = document.getElementById('current-activity-details');
-        currentActivityDetails.innerHTML = `Start Time: ${data.start_time}<br>End Time: ${data.end_time}`;
-        currentActivityDetails.setAttribute('data-activity-id', data.activity_id);
+        updateCurrentActivityDetails(data.start_time, data.end_time, data.activity_id);
     })
     .catch(error => {
         console.error('Error starting activity:', error);
@@ -121,6 +120,7 @@ document.getElementById('stop-activity').addEventListener('click', function(even
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
         },
         body: JSON.stringify({ activity_id: currentActivity.id })
     })
@@ -144,7 +144,6 @@ document.getElementById('stop-activity').addEventListener('click', function(even
 
         // Clear countdown timer and update UI
         stopCountdown();
-        document.getElementById('current-activity-details').innerHTML = 'Activity has been stopped.';
         document.getElementById('current-activity-details').innerHTML = 'No activity in progress';
         localStorage.removeItem('currentActivity');
     })
@@ -171,9 +170,7 @@ document.addEventListener('DOMContentLoaded', function() {
         startCountdown(startTime, endTime);
 
         // Update the activity details in the UI
-        const currentActivityDetails = document.getElementById('current-activity-details');
-        currentActivityDetails.innerHTML = `Start Time: ${startTime}<br>End Time: ${endTime}`;
-        currentActivityDetails.setAttribute('data-activity-id', id);
+        updateCurrentActivityDetails(startTime, endTime, id);
     }
 });
 
@@ -209,4 +206,11 @@ function stopCountdown() {
     console.info('Stopping countdown timer.');
     clearInterval(window.countdownInterval);
     document.getElementById('countdown').textContent = '';
+}
+
+// Function to update current activity details in the UI
+function updateCurrentActivityDetails(startTime, endTime, activityId) {
+    const currentActivityDetails = document.getElementById('current-activity-details');
+    currentActivityDetails.innerHTML = `Start Time: ${startTime}<br>End Time: ${endTime}`;
+    currentActivityDetails.setAttribute('data-activity-id', activityId);
 }

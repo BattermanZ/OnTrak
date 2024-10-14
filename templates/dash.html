@@ -58,6 +58,17 @@
 
     <!-- Display cards for today's progress and upcoming activity -->
     <div class="row mb-4">
+        <!-- Card for current activity -->
+        <div class="col-md-6 offset-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Current Activity</div>
+                <div class="card-body">
+                    <h5 class="card-title text-center">Ongoing Activity</h5>
+                    <p class="card-text text-center">{% if current_activity %}"{{ current_activity[1] }}" from {{ current_activity[4] }} to {{ current_activity[5] }}{% else %}No activity in progress{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Card for upcoming activity -->
         <div class="col-md-6 offset-md-3">
             <div class="card text-white bg-warning mb-3">
@@ -120,7 +131,8 @@
             fetch("/start_activity", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
                 },
                 body: JSON.stringify({ day: selectedDay })
             })
@@ -159,7 +171,8 @@
             fetch("/stop_activity", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
                 },
                 body: JSON.stringify({ activity_id: activityId })
             })

@@ -1,9 +1,11 @@
-from flask import Flask, request, render_template, redirect, url_for, jsonify
+from flask import Flask, request, render_template, redirect, url_for, jsonify, make_response
 from datetime import datetime, timedelta
 from helpers.database_helper import DatabaseHelper
 from helpers.logging_helper import LoggingHelper
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 # Initialize helpers
 db_helper = DatabaseHelper()
@@ -33,9 +35,10 @@ def dashboard():
     grouped_activities = group_activities_by_day(activities)
     today_activities = grouped_activities.get(selected_day, [])
     upcoming_activity = next((a for a in today_activities if datetime.strptime(a[4], '%H:%M') > datetime.now()), None)
+    current_activity = None
 
     logger.log_info(f"Dashboard page accessed for {selected_day}.")
-    return render_template('dash.html', grouped_activities=grouped_activities, upcoming_activity=upcoming_activity, selected_day=selected_day)
+    return render_template('dash.html', grouped_activities=grouped_activities, upcoming_activity=upcoming_activity, current_activity=current_activity, selected_day=selected_day)
 
 @app.route('/get_current_activity', methods=['GET'])
 def get_current_activity():
@@ -80,10 +83,11 @@ def start_activity():
 
     activity_id = next_activity[0]
     start_time, end_time = next_activity[4], next_activity[5]
-    db_helper.update_activity_status(activity_id, status='started')  # Mark activity as started
     logger.log_info(f"Activity ID {activity_id} started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
 
-    return jsonify({"activity_id": activity_id, "name": next_activity[1], "start_time": start_time, "end_time": end_time, "duration": next_activity[2]})
+    response = make_response(jsonify({"activity_id": activity_id, "name": next_activity[1], "start_time": start_time, "end_time": end_time, "duration": next_activity[2]}))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @app.route('/stop_activity', methods=['POST'])
 def stop_activity():
@@ -95,10 +99,11 @@ def stop_activity():
     if not activity_id:
         return jsonify({"error": "Activity ID is missing."}), 400
 
-    db_helper.update_activity_status(activity_id, status='stopped')  # Mark activity as stopped
-    logger.log_info(f"Activity ID {activity_id} has been stopped.")
+        logger.log_info(f"Activity ID {activity_id} has been stopped.")
 
-    return jsonify({"status": "success"})
+    response = make_response(jsonify({"status": "success"}))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
