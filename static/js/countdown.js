@@ -78,6 +78,7 @@ document.getElementById('start-activity').addEventListener('click', function(eve
         // Store current activity details in local storage
         localStorage.setItem('currentActivity', JSON.stringify({
             id: data.activity_id,
+            name: data.name,
             startTime: data.start_time,
             endTime: data.end_time,
             day: selectedDay
@@ -86,8 +87,11 @@ document.getElementById('start-activity').addEventListener('click', function(eve
         // Start countdown timer
         startCountdown(data.start_time, data.end_time);
 
+        // Start progress bar
+        startProgressBar(data.start_time, data.end_time);
+
         // Update the activity details in the UI
-        updateCurrentActivityDetails(data.start_time, data.end_time, data.activity_id);
+        updateCurrentActivityDetails(data.name, data.start_time, data.end_time);
     })
     .catch(error => {
         console.error('Error starting activity:', error);
@@ -144,6 +148,7 @@ document.getElementById('stop-activity').addEventListener('click', function(even
 
         // Clear countdown timer and update UI
         stopCountdown();
+        stopProgressBar();
         document.getElementById('current-activity-details').innerHTML = 'No activity in progress';
         localStorage.removeItem('currentActivity');
     })
@@ -163,14 +168,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load current activity details from local storage if available
     const currentActivity = JSON.parse(localStorage.getItem('currentActivity'));
     if (currentActivity) {
-        const { startTime, endTime, day, id } = currentActivity;
-        console.info(`Found ongoing activity in local storage: ID ${id}, Start Time: ${startTime}, End Time: ${endTime}, Day: ${day}`);
+        const { startTime, endTime, day, id, name } = currentActivity;
+        console.info(`Found ongoing activity in local storage: ID ${id}, Name: ${name}, Start Time: ${startTime}, End Time: ${endTime}, Day: ${day}`);
 
         document.getElementById('day').value = day;
         startCountdown(startTime, endTime);
+        startProgressBar(startTime, endTime);
 
         // Update the activity details in the UI
-        updateCurrentActivityDetails(startTime, endTime, id);
+        updateCurrentActivityDetails(name, startTime, endTime);
     }
 });
 
@@ -192,7 +198,7 @@ function startCountdown(startTime, endTime) {
         const minutes = Math.floor((timeRemaining / 1000 / 60) % 60);
         const hours = Math.floor((timeRemaining / 1000 / 60 / 60));
 
-        document.getElementById('current-activity-details').innerHTML = timeRemaining > 0
+        document.getElementById('countdown').innerHTML = timeRemaining > 0
             ? `Time remaining: ${hours} hours ${minutes} minutes`
             : 'Activity time has elapsed.';
     }
@@ -209,8 +215,102 @@ function stopCountdown() {
 }
 
 // Function to update current activity details in the UI
-function updateCurrentActivityDetails(startTime, endTime, activityId) {
+function updateCurrentActivityDetails(activityName, startTime, endTime) {
     const currentActivityDetails = document.getElementById('current-activity-details');
-    currentActivityDetails.innerHTML = `Start Time: ${startTime}<br>End Time: ${endTime}`;
-    currentActivityDetails.setAttribute('data-activity-id', activityId);
+    currentActivityDetails.innerHTML = `${activityName} from ${startTime} to ${endTime}`;
 }
+
+// Function to start the progress bar
+function startProgressBar(startTime, endTime) {
+    const [startHours, startMinutes] = startTime.split(':').map(Number);
+    const [endHours, endMinutes] = endTime.split(':').map(Number);
+
+    const startDate = new Date();
+    startDate.setHours(startHours, startMinutes, 0, 0);
+
+    const endDate = new Date();
+    endDate.setHours(endHours, endMinutes, 0, 0);
+
+    const totalDuration = endDate - startDate;
+
+    function updateProgressBar() {
+        const currentTime = new Date();
+        const elapsedTime = Math.max(0, currentTime - startDate);
+        const progress = Math.min(100, (elapsedTime / totalDuration) * 100);
+
+        document.getElementById('activity-progress-bar').style.width = `${progress}%`;
+    }
+
+    updateProgressBar();
+    window.progressBarInterval = setInterval(updateProgressBar, 1000);
+}
+
+// Function to stop the progress bar
+function stopProgressBar() {
+    console.info('Stopping progress bar.');
+    clearInterval(window.progressBarInterval);
+    document.getElementById('activity-progress-bar').style.width = '0%';
+}
+
+// Event listener for skipping to the next activity
+document.getElementById('skip-activity').addEventListener('click', function(event) {
+    event.preventDefault();
+    const button = event.target;
+    button.disabled = true; // Prevent double triggering
+
+    console.info('Skipping to the next activity.');
+
+    // Send a request to the server to skip to the next activity
+    const selectedDay = document.getElementById('day').value;
+    fetch('/skip_activity', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
+        },
+        body: JSON.stringify({ day: selectedDay })
+    })
+    .then(response => {
+        console.info('Received response for skip activity request.');
+        if (!response.ok) {
+            console.error(`Error response received: ${response.status} - ${response.statusText}`);
+            throw new Error(`Error: ${response.status} - ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.error) {
+            console.error(`Error skipping activity: ${data.error}`);
+            alert(data.error);
+            button.disabled = false;
+            return;
+        }
+
+        console.info(`Activity skipped to successfully: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
+
+        // Store current activity details in local storage
+        localStorage.setItem('currentActivity', JSON.stringify({
+            id: data.activity_id,
+            name: data.name,
+            startTime: data.start_time,
+            endTime: data.end_time,
+            day: selectedDay
+        }));
+
+        // Start countdown timer
+        startCountdown(data.start_time, data.end_time);
+
+        // Start progress bar
+        startProgressBar(data.start_time, data.end_time);
+
+        // Update the activity details in the UI
+        updateCurrentActivityDetails(data.name, data.start_time, data.end_time);
+    })
+    .catch(error => {
+        console.error('Error skipping activity:', error);
+        alert('Failed to skip activity. Please check the console for more details.');
+    })
+    .finally(() => {
+        button.disabled = false;
+    });
+});

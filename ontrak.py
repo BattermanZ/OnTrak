@@ -34,8 +34,9 @@ def dashboard():
     activities = db_helper.get_activities()
     grouped_activities = group_activities_by_day(activities)
     today_activities = grouped_activities.get(selected_day, [])
-    upcoming_activity = next((a for a in today_activities if datetime.strptime(a[4], '%H:%M') > datetime.now()), None)
-    current_activity = None
+    now = datetime.now().strftime('%H:%M')
+    upcoming_activity = next((a for a in today_activities if a[4] > now), None)
+    current_activity = next((a for a in today_activities if a[4] <= now <= a[5]), None)
 
     logger.log_info(f"Dashboard page accessed for {selected_day}.")
     return render_template('dash.html', grouped_activities=grouped_activities, upcoming_activity=upcoming_activity, current_activity=current_activity, selected_day=selected_day)
@@ -89,6 +90,35 @@ def start_activity():
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
+@app.route('/skip_activity', methods=['POST'])
+def skip_activity():
+    """
+    Skip to the next activity, regardless of the start time.
+    """
+    selected_day = request.json.get('day')
+    logger.log_request('POST', '/skip_activity', {'day': selected_day})
+    validation_error = validate_day_parameter(selected_day, 'skip activity')
+    if validation_error:
+        return validation_error
+
+    activities = db_helper.get_activities_by_day(selected_day)
+    now = datetime.now().strftime('%H:%M')
+    current_index = next((i for i, a in enumerate(activities) if a[4] <= now <= a[5]), -1)
+    next_index = (current_index + 1) if current_index != -1 else 0
+
+    if next_index < len(activities):
+        next_activity = activities[next_index]
+        activity_id = next_activity[0]
+        start_time, end_time = next_activity[4], next_activity[5]
+        logger.log_info(f"Activity ID {activity_id} skipped to at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
+
+        response = make_response(jsonify({"activity_id": activity_id, "name": next_activity[1], "start_time": start_time, "end_time": end_time, "duration": next_activity[2]}))
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response
+    else:
+        logger.log_warning(f"No upcoming activities available to skip for {selected_day}.")
+        return jsonify({"error": "No upcoming activities available to skip."}), 400
+
 @app.route('/stop_activity', methods=['POST'])
 def stop_activity():
     """
@@ -99,7 +129,7 @@ def stop_activity():
     if not activity_id:
         return jsonify({"error": "Activity ID is missing."}), 400
 
-        logger.log_info(f"Activity ID {activity_id} has been stopped.")
+    logger.log_info(f"Activity ID {activity_id} has been stopped.")
 
     response = make_response(jsonify({"status": "success"}))
     response.headers['Access-Control-Allow-Origin'] = '*'
