@@ -42,7 +42,7 @@ class LoggingHelper:
         Log an error message, optionally including exception information.
         """
         if exc_info:
-            self.logger.error(f"{message}\n{traceback.format_exc()}")
+            self.logger.error(f"{message}", exc_info=True)
         else:
             self.logger.error(message)
 
@@ -67,16 +67,14 @@ class LoggingHelper:
         """
         Log a message received from the frontend (JavaScript).
         """
-        if level == 'info':
-            self.log_info(f"Frontend: {message}")
-        elif level == 'warning':
-            self.log_warning(f"Frontend: {message}")
-        elif level == 'error':
-            self.log_error(f"Frontend: {message}")
-        elif level == 'debug':
-            self.log_debug(f"Frontend: {message}")
-        else:
-            self.logger.error(f"Frontend: Unknown log level '{level}' - {message}")
+        log_methods = {
+            'info': self.log_info,
+            'warning': self.log_warning,
+            'error': self.log_error,
+            'debug': self.log_debug
+        }
+        log_method = log_methods.get(level, self.logger.error)
+        log_method(f"Frontend: {message}")
 
 # Flask endpoint to capture frontend logs
 app = Flask(__name__)
@@ -103,4 +101,4 @@ if __name__ == "__main__":
         raise ValueError("An example error")
     except ValueError as e:
         logger.log_error("An error occurred", exc_info=True)
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)

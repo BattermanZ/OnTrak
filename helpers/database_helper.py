@@ -107,16 +107,12 @@ class DatabaseHelper:
             WHERE id = ?
         ''', (name, duration, description, start_time, end_time, day, activity_id))
 
-                
-
     def delete_activity(self, activity_id):
         """
         Delete an activity from the database by its ID.
         """
         self.logger.log_info(f"Deleting activity ID: {activity_id}")
         self._execute_query('DELETE FROM activities WHERE id = ?', (activity_id,))
-
-                
 
 # Example usage
 if __name__ == "__main__":

@@ -64,8 +64,8 @@
             <div class="card text-white bg-success mb-3">
                 <div class="card-header">Current Activity</div>
                 <div class="card-body">
-                    <h5 class="card-title text-center">{{ current_activity[1] if current_activity else 'No activity in progress' }}</h5>
-                    <p class="card-text text-center">{% if current_activity %}{{ current_activity[4] }} to {{ current_activity[5] }}{% else %}{% endif %}</p>
+                    <h5 class="card-title text-center">No activity in progress</h5>
+                    <p class="card-text text-center"></p>
                 </div>
             </div>
         </div>
@@ -75,8 +75,8 @@
             <div class="card text-white bg-warning mb-3">
                 <div class="card-header">Upcoming Activity</div>
                 <div class="card-body">
-                    <h5 class="card-title text-center">{{ upcoming_activity[1] if upcoming_activity else 'No upcoming activity' }}</h5>
-                    <p class="card-text text-center">{% if upcoming_activity %}at {{ upcoming_activity[4] }}{% else %}{% endif %}</p>
+                    <h5 class="card-title text-center">No upcoming activity</h5>
+                    <p class="card-text text-center"></p>
                 </div>
             </div>
         </div>
@@ -122,10 +122,11 @@
     <script src="{{ url_for('static', filename='js/countdown.js') }}"></script>
     <script>
         function updateActivityBoxes(data) {
-            document.querySelector(".card.text-white.bg-success .card-title").innerText = data.current_activity ? data.current_activity[1] : "No activity in progress";
-            document.querySelector(".card.text-white.bg-success .card-text").innerText = data.current_activity ? `${data.current_activity[4]} to ${data.current_activity[5]}` : "";
-            document.querySelector(".card.text-white.bg-warning .card-title").innerText = data.upcoming_activity ? data.upcoming_activity[1] : "No upcoming activity";
-            document.querySelector(".card.text-white.bg-warning .card-text").innerText = data.upcoming_activity ? `at ${data.upcoming_activity[4]}` : "";
+            console.info("Updating activity boxes with data:", data);
+            document.querySelector(".card.text-white.bg-success .card-title").innerText = data.current_activity ? data.current_activity.name : "No activity in progress";
+            document.querySelector(".card.text-white.bg-success .card-text").innerText = data.current_activity ? `${data.current_activity.start_time} to ${data.current_activity.end_time}` : "";
+            document.querySelector(".card.text-white.bg-warning .card-title").innerText = data.upcoming_activity ? data.upcoming_activity.name : "No upcoming activity";
+            document.querySelector(".card.text-white.bg-warning .card-text").innerText = data.upcoming_activity ? `at ${data.upcoming_activity.start_time}` : "";
         }
 
         document.getElementById("start-activity").addEventListener("click", function() {
@@ -156,7 +157,7 @@
                     alert(data.error);
                     console.error(`Error starting activity: ${data.error}`);
                 } else {
-                    console.info(`Activity started: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
+                    console.info("Activity data received:", data);
                     document.getElementById("current-activity-details").innerHTML = `Start Time: ${data.start_time}<br>End Time: ${data.end_time}`;
                     document.getElementById("countdown").setAttribute("data-activity-id", data.activity_id);
                     startProgressBar(data.start_time, data.end_time);
@@ -197,11 +198,10 @@
                     alert(data.error);
                     console.error(`Error stopping activity: ${data.error}`);
                 } else {
-                    console.info(`Activity stopped with ID: ${activityId}`);
-                    document.getElementById("current-activity-details").innerText = "No activity in progress";
+                    console.info("Activity stopped successfully.");
+                    document.getElementById("current-activity-details").innerHTML = "No activity in progress";
                     document.getElementById("countdown").removeAttribute("data-activity-id");
-                    stopProgressBar();
-                    updateActivityBoxes(data);
+                    updateActivityBoxes({ current_activity: null, upcoming_activity: data.upcoming_activity });
                 }
             })
             .catch(error => {
@@ -238,10 +238,7 @@
                     alert(data.error);
                     console.error(`Error skipping activity: ${data.error}`);
                 } else {
-                    console.info(`Activity skipped to: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
-                    document.getElementById("current-activity-details").innerHTML = `Start Time: ${data.start_time}<br>End Time: ${data.end_time}`;
-                    document.getElementById("countdown").setAttribute("data-activity-id", data.activity_id);
-                    startProgressBar(data.start_time, data.end_time);
+                    console.info("Activity skipped successfully.");
                     updateActivityBoxes(data);
                 }
             })

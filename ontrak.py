@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 from helpers.database_helper import DatabaseHelper
 from helpers.logging_helper import LoggingHelper
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize helpers
 db_helper = DatabaseHelper()
@@ -83,8 +85,16 @@ def start_activity():
         return jsonify({"error": "No activities available to start."}), 400
 
     activity_id = next_activity[0]
-    start_time, end_time = next_activity[4], next_activity[5]
+    start_time, end_time = now, next_activity[5]  # Set current time as start time
     logger.log_info(f"Activity ID {activity_id} started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
+
+    socketio.emit('activity_started', {
+        "activity_id": activity_id,
+        "name": next_activity[1],
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": next_activity[2]
+    })
 
     response = make_response(jsonify({"activity_id": activity_id, "name": next_activity[1], "start_time": start_time, "end_time": end_time, "duration": next_activity[2]}))
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -109,8 +119,16 @@ def skip_activity():
     if next_index < len(activities):
         next_activity = activities[next_index]
         activity_id = next_activity[0]
-        start_time, end_time = next_activity[4], next_activity[5]
+        start_time, end_time = now, next_activity[5]  # Set current time as start time
         logger.log_info(f"Activity ID {activity_id} skipped to at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
+
+        socketio.emit('activity_skipped', {
+            "activity_id": activity_id,
+            "name": next_activity[1],
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": next_activity[2]
+        })
 
         response = make_response(jsonify({"activity_id": activity_id, "name": next_activity[1], "start_time": start_time, "end_time": end_time, "duration": next_activity[2]}))
         response.headers['Access-Control-Allow-Origin'] = '*'
@@ -130,6 +148,10 @@ def stop_activity():
         return jsonify({"error": "Activity ID is missing."}), 400
 
     logger.log_info(f"Activity ID {activity_id} has been stopped.")
+
+    socketio.emit('activity_stopped', {
+        "activity_id": activity_id
+    })
 
     response = make_response(jsonify({"status": "success"}))
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -225,4 +247,4 @@ def log_from_frontend():
         return jsonify({'error': 'Invalid log request'}), 400
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    socketio.run(app, debug=True)

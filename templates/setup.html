@@ -91,7 +91,6 @@
         No activity in progress
     </div>
 
-    
     <h2 class="text-center mb-4">Current Activities</h2>
     <div class="row">
         {% for day, day_activities in grouped_activities.items() %}
@@ -130,5 +129,14 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const currentActivityDetails = document.getElementById("current-activity-details");
+            const sessionActivity = sessionStorage.getItem("current_activity");
+            if (sessionActivity) {
+                currentActivityDetails.textContent = `Current activity: ${sessionActivity}`;
+            }
+        });
+    </script>
 </body>
 </html>
