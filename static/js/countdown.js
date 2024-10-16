@@ -1,234 +1,129 @@
-// Event listener for starting an activity
+// Event listener for starting or restarting an activity
 const startActivityButton = document.getElementById('start-activity');
+const stopActivityButton = document.getElementById('stop-activity');
+
+// Function to send a request to the server
+const sendRequest = (url, method, data) => fetch(url, {
+    method,
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: JSON.stringify(data)
+}).then(response => {
+    if (!response.ok) throw new Error(`Error: ${response.status} - ${response.statusText}`);
+    return response.json();
+});
+
+// Function to update the UI with the current activity details
+const updateActivityUI = (activity) => {
+    sessionStorage.setItem('currentActivity', JSON.stringify(activity));
+    startCountdown(activity.startTime, activity.endTime);
+    startProgressBar(activity.startTime, activity.endTime);
+    updateCurrentActivityDetails(activity.name, activity.startTime, activity.endTime);
+};
+
+// Function to handle button clicks for starting or stopping activities
+const handleButtonClick = (button, url, data, callback) => {
+    button.disabled = true;
+    sendRequest(url, 'POST', data)
+        .then(callback)
+        .catch(error => alert(`Failed to process request: ${error.message}`))
+        .finally(() => button.disabled = false);
+};
+
+// Event listener for starting or restarting an activity
 if (startActivityButton) {
-    startActivityButton.addEventListener('click', function(event) {
+    startActivityButton.addEventListener('click', (event) => {
         event.preventDefault();
-        const button = event.target;
-        button.disabled = true; // Prevent double triggering
-
-        const activityElements = document.querySelectorAll('tbody tr');
-        if (!activityElements.length) {
-            console.error('No activities available to start.');
-            alert('No activities available to start.');
-            button.disabled = false;
-            return;
-        }
-
-        // Find the next activity that has not yet started
-        let activityToStart = null;
-        const now = new Date();
-        activityElements.forEach(activityElement => {
-            const startTime = activityElement.querySelector('td:nth-child(2)').textContent;
-            const endTime = activityElement.querySelector('td:nth-child(3)').textContent;
-
-            const [startHours, startMinutes] = startTime.split(':').map(Number);
-            const [endHours, endMinutes] = endTime.split(':').map(Number);
-
-            const startDate = new Date();
-            startDate.setHours(startHours, startMinutes, 0, 0);
-
-            const endDate = new Date();
-            endDate.setHours(endHours, endMinutes, 0, 0);
-
-            // Select the first activity that has not ended
-            if (now < endDate && !activityToStart) {
-                activityToStart = activityElement;
-            }
-        });
-
-        if (!activityToStart) {
-            console.warn('All activities have already ended.');
-            alert('All activities have already ended.');
-            button.disabled = false;
-            return;
-        }
-
-        // Extract start and end times from the selected activity
-        const startTime = activityToStart.querySelector('td:nth-child(2)').textContent;
-        const endTime = activityToStart.querySelector('td:nth-child(3)').textContent;
-
-        console.info(`Starting activity with start time: ${startTime}, end time: ${endTime}`);
-
-        // Start the activity by sending a request to the server
         const selectedDay = document.getElementById('day').value;
-        fetch('/start_activity', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
-            },
-            body: JSON.stringify({ day: selectedDay })
-        })
-        .then(response => {
-            console.info('Received response for start activity request.');
-            if (!response.ok) {
-                console.error(`Error response received: ${response.status} - ${response.statusText}`);
-                throw new Error(`Error: ${response.status} - ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                console.error(`Error starting activity: ${data.error}`);
-                alert(data.error);
-                button.disabled = false;
-                return;
-            }
+        const userId = sessionStorage.getItem('user_id');
+        const currentActivity = JSON.parse(sessionStorage.getItem('currentActivity'));
 
-            console.info(`Activity started successfully: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
-
-            // Store current activity details in session storage
-            sessionStorage.setItem('currentActivity', JSON.stringify({
-                id: data.activity_id,
-                name: data.name,
-                startTime: data.start_time,
-                endTime: data.end_time,
-                day: selectedDay
-            }));
-
-            // Start countdown timer
-            startCountdown(data.start_time, data.end_time);
-
-            // Start progress bar
-            startProgressBar(data.start_time, data.end_time);
-
-            // Update the activity details in the UI
-            updateCurrentActivityDetails(data.name, data.start_time, data.end_time);
-        })
-        .catch(error => {
-            console.error('Error starting activity:', error);
-            alert('Failed to start activity. Please check the console for more details.');
-        })
-        .finally(() => {
-            button.disabled = false;
-        });
+        if (currentActivity && currentActivity.status === 'stopped') {
+            // Restart the stopped activity
+            handleButtonClick(startActivityButton, '/start_activity', { activity_id: currentActivity.id, user_id: userId, day: selectedDay }, (data) => {
+                if (data.error) throw new Error(data.error);
+                updateActivityUI({
+                    id: data.activity_id,
+                    name: data.name,
+                    startTime: data.start_time,
+                    endTime: data.end_time,
+                    day: selectedDay,
+                    status: 'in-progress'
+                });
+            });
+        } else {
+            // Start a new activity
+            handleButtonClick(startActivityButton, '/start_activity', { day: selectedDay, user_id: userId }, (data) => {
+                if (data.error) throw new Error(data.error);
+                updateActivityUI({
+                    id: data.activity_id,
+                    name: data.name,
+                    startTime: data.start_time,
+                    endTime: data.end_time,
+                    day: selectedDay,
+                    status: 'in-progress'
+                });
+            });
+        }
     });
 }
 
 // Event listener for stopping an activity
-const stopActivityButton = document.getElementById('stop-activity');
 if (stopActivityButton) {
-    stopActivityButton.addEventListener('click', function(event) {
+    stopActivityButton.addEventListener('click', (event) => {
         event.preventDefault();
-        const button = event.target;
-        button.disabled = true; // Prevent double triggering
-
-        // Get current activity details from session storage
         const currentActivity = JSON.parse(sessionStorage.getItem('currentActivity'));
+        const userId = sessionStorage.getItem('user_id');
         if (!currentActivity) {
-            console.warn('No activity is currently in progress.');
             alert('No activity is currently in progress.');
-            button.disabled = false;
             return;
         }
-
-        console.info(`Stopping activity with ID: ${currentActivity.id}`);
-
-        // Stop the activity by sending a request to the server
-        fetch('/stop_activity', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
-            },
-            body: JSON.stringify({ activity_id: currentActivity.id })
-        })
-        .then(response => {
-            console.info('Received response for stop activity request.');
-            if (!response.ok) {
-                console.error(`Error response received: ${response.status} - ${response.statusText}`);
-                throw new Error(`Error: ${response.status} - ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                console.error(`Error stopping activity: ${data.error}`);
-                alert(data.error);
-                button.disabled = false;
-                return;
-            }
-
-            console.info(`Activity stopped successfully with ID: ${currentActivity.id}`);
-
-            // Clear countdown timer and update UI
+        handleButtonClick(stopActivityButton, '/stop_activity', { activity_id: currentActivity.id, user_id: userId }, () => {
             stopCountdown();
             stopProgressBar();
             document.getElementById('current-activity-details').innerHTML = 'No activity in progress';
-            sessionStorage.removeItem('currentActivity');
-        })
-        .catch(error => {
-            console.error('Error stopping activity:', error);
-            alert('Failed to stop activity. Please check the console for more details.');
-        })
-        .finally(() => {
-            button.disabled = false;
+            currentActivity.status = 'stopped';
+            sessionStorage.setItem('currentActivity', JSON.stringify(currentActivity));
         });
     });
 }
 
-// Event listener for loading the page
-document.addEventListener('DOMContentLoaded', function() {
-    console.info('Page loaded. Checking for ongoing activity in session storage.');
-
-    // Load current activity details from session storage if available
+// Load the current activity from session storage when the page loads
+document.addEventListener('DOMContentLoaded', () => {
     const currentActivity = JSON.parse(sessionStorage.getItem('currentActivity'));
-    if (currentActivity) {
-        const { startTime, endTime, day, id, name } = currentActivity;
-        console.info(`Found ongoing activity in session storage: ID ${id}, Name: ${name}, Start Time: ${startTime}, End Time: ${endTime}, Day: ${day}`);
-
-        document.getElementById('day').value = day;
-        startCountdown(startTime, endTime);
-        startProgressBar(startTime, endTime);
-
-        // Update the activity details in the UI
-        updateCurrentActivityDetails(name, startTime, endTime);
+    if (currentActivity && currentActivity.status === 'in-progress') {
+        updateActivityUI(currentActivity);
     }
 });
 
 // Function to start the countdown timer
-function startCountdown(startTime, endTime) {
-    const [startHours, startMinutes] = startTime.split(':').map(Number);
+const startCountdown = (startTime, endTime) => {
     const [endHours, endMinutes] = endTime.split(':').map(Number);
-
-    const startDate = new Date();
-    startDate.setHours(startHours, startMinutes, 0, 0);
-
     const endDate = new Date();
     endDate.setHours(endHours, endMinutes, 0, 0);
 
-    function updateCountdown() {
-        const currentTime = new Date();
-        const timeRemaining = Math.max(0, endDate - currentTime);
-
-        const minutes = Math.floor((timeRemaining / 1000 / 60) % 60);
-        const hours = Math.floor((timeRemaining / 1000 / 60 / 60));
-
-        document.getElementById('countdown').innerHTML = timeRemaining > 0
-            ? `Time remaining: ${hours} hours ${minutes} minutes`
-            : 'Activity time has elapsed.';
-    }
+    const updateCountdown = () => {
+        const timeRemaining = Math.max(0, endDate - new Date());
+        const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
+        const minutes = Math.floor((timeRemaining / (1000 * 60)) % 60);
+        document.getElementById('countdown').innerHTML = timeRemaining > 0 ? `Time remaining: ${hours} hours ${minutes} minutes` : 'Activity time has elapsed.';
+    };
 
     updateCountdown();
     window.countdownInterval = setInterval(updateCountdown, 1000);
-}
+};
 
 // Function to stop the countdown timer
-function stopCountdown() {
-    console.info('Stopping countdown timer.');
+const stopCountdown = () => {
     clearInterval(window.countdownInterval);
     document.getElementById('countdown').textContent = '';
-}
-
-// Function to update current activity details in the UI
-function updateCurrentActivityDetails(activityName, startTime, endTime) {
-    const currentActivityDetails = document.getElementById('current-activity-details');
-    currentActivityDetails.innerHTML = `${activityName} (Start: ${startTime}, End: ${endTime})`;
-}
+};
 
 // Function to start the progress bar
-function startProgressBar(startTime, endTime) {
-    const progressBar = document.getElementById('progress-bar');
+const startProgressBar = (startTime, endTime) => {
+    const progressBar = document.getElementById('activity-progress-bar');
     if (!progressBar) return;
 
     const [startHours, startMinutes] = startTime.split(':').map(Number);
@@ -240,99 +135,30 @@ function startProgressBar(startTime, endTime) {
     const endDate = new Date();
     endDate.setHours(endHours, endMinutes, 0, 0);
 
-    function updateProgressBar() {
-        const currentTime = new Date();
-        const totalTime = endDate - startDate;
-        const timeElapsed = currentTime - startDate;
-        const progressPercentage = Math.min(100, Math.max(0, (timeElapsed / totalTime) * 100));
+    const updateProgressBar = () => {
+        const timeElapsed = Math.max(0, new Date() - startDate);
+        const totalDuration = endDate - startDate;
+        const progressPercentage = Math.min(100, (timeElapsed / totalDuration) * 100);
 
         progressBar.style.width = `${progressPercentage}%`;
         progressBar.setAttribute('aria-valuenow', progressPercentage);
-    }
+    };
 
     updateProgressBar();
     window.progressBarInterval = setInterval(updateProgressBar, 1000);
-}
+};
 
 // Function to stop the progress bar
-function stopProgressBar() {
-    console.info('Stopping progress bar.');
+const stopProgressBar = () => {
     clearInterval(window.progressBarInterval);
-    const progressBar = document.getElementById('progress-bar');
+    const progressBar = document.getElementById('activity-progress-bar');
     if (progressBar) {
         progressBar.style.width = '0%';
         progressBar.setAttribute('aria-valuenow', 0);
     }
-}
+};
 
-// Event listener for skipping to the next activity
-const skipActivityButton = document.getElementById('skip-activity');
-if (skipActivityButton) {
-    skipActivityButton.addEventListener('click', function(event) {
-        event.preventDefault();
-        const button = event.target;
-        button.disabled = true; // Prevent double triggering
-
-        // Get current activity details from session storage
-        const currentActivity = JSON.parse(sessionStorage.getItem('currentActivity'));
-        if (!currentActivity) {
-            console.warn('No activity is currently in progress. Cannot skip.');
-            alert('No activity is currently in progress.');
-            button.disabled = false;
-            return;
-        }
-
-        // Skip to the next activity by sending a request to the server
-        fetch('/skip_activity', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Add header to prevent 403 errors
-            },
-            body: JSON.stringify({ day: currentActivity.day })
-        })
-        .then(response => {
-            console.info('Received response for skip activity request.');
-            if (!response.ok) {
-                console.error(`Error response received: ${response.status} - ${response.statusText}`);
-                throw new Error(`Error: ${response.status} - ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.error) {
-                console.error(`Error skipping activity: ${data.error}`);
-                alert(data.error);
-                button.disabled = false;
-                return;
-            }
-
-            console.info(`Activity skipped successfully: ${data.name}, Start Time: ${data.start_time}, End Time: ${data.end_time}`);
-
-            // Store new activity details in session storage
-            sessionStorage.setItem('currentActivity', JSON.stringify({
-                id: data.activity_id,
-                name: data.name,
-                startTime: data.start_time,
-                endTime: data.end_time,
-                day: currentActivity.day
-            }));
-
-            // Start countdown timer and progress bar for the new activity
-            stopCountdown();
-            stopProgressBar();
-            startCountdown(data.start_time, data.end_time);
-            startProgressBar(data.start_time, data.end_time);
-
-            // Update the activity details in the UI
-            updateCurrentActivityDetails(data.name, data.start_time, data.end_time);
-        })
-        .catch(error => {
-            console.error('Error skipping activity:', error);
-            alert('Failed to skip activity. Please check the console for more details.');
-        })
-        .finally(() => {
-            button.disabled = false;
-        });
-    });
-}
+// Function to update the current activity details in the UI
+const updateCurrentActivityDetails = (activityName, startTime, endTime) => {
+    document.getElementById('current-activity-details').innerHTML = `${activityName} (Start: ${startTime}, End: ${endTime})`;
+};
