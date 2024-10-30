@@ -43,6 +43,7 @@ class LoggingHelper:
         """
         if exc_info:
             self.logger.error(f"{message}", exc_info=True)
+            self.logger.debug(f"Traceback: {traceback.format_exc()}")
         else:
             self.logger.error(message)
 
@@ -55,6 +56,16 @@ class LoggingHelper:
     def log_request(self, method, endpoint, params=None, status_code=None):
         """
         Log details of a request, including method, endpoint, parameters, and status code if available.
+        Adds extra information for better traceability.
+        """
+        log_message = f"Request: {method} {endpoint}"
+        if params:
+            log_message += f" | Params: {params}"
+        if status_code:
+            log_message += f" | Status: {status_code}"
+        self.logger.info(log_message)
+        """
+        Log details of a request, including method, endpoint, parameters, and status code if available.
         """
         log_message = f"Request: {method} {endpoint}"
         if params:
@@ -64,6 +75,18 @@ class LoggingHelper:
         self.logger.info(log_message)
 
     def log_from_frontend(self, level, message):
+        """
+        Log a message received from the frontend (JavaScript).
+        """
+        log_methods = {
+            'info': self.log_info,
+            'warning': self.log_warning,
+            'error': self.log_error,
+            'debug': self.log_debug
+        }
+        log_method = log_methods.get(level, self.logger.error)
+        log_method(f"Frontend: {message}")
+        self.logger.debug(f"Frontend log received with level '{level}' and message: {message}")
         """
         Log a message received from the frontend (JavaScript).
         """

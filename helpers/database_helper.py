@@ -29,16 +29,10 @@ class DatabaseHelper:
                         day TEXT NOT NULL
                     )
                 ''')
-                conn.execute('''
-                    CREATE TABLE IF NOT EXISTS activity_statuses (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id TEXT NOT NULL,
-                        activity_id INTEGER NOT NULL,
-                        status TEXT DEFAULT 'pending',
-                        FOREIGN KEY (activity_id) REFERENCES activities (id)
-                    )
-                ''')
                 self.logger.log_info("Database configured successfully.")
+        except sqlite3.OperationalError as oe:
+            # Handle the case where the column already exists
+            self.logger.log_error("Operational error configuring the database.", exc_info=True)
         except Exception as e:
             self.logger.log_error("Error configuring the database.", exc_info=True)
 
@@ -50,13 +44,14 @@ class DatabaseHelper:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute(query, params)
                 self.logger.log_debug(f"Executing query: {query} | Params: {params}")
+                self.logger.log_debug(f"Query executed successfully")
                 if fetch_one:
                     return cursor.fetchone()
                 if fetch_all:
                     return cursor.fetchall() or []
         except sqlite3.Error as e:
             self.logger.log_error(f"Database query error: {str(e)}", exc_info=True)
-            return []
+            raise
 
     def get_activities(self):
         """ Get all activities from the database. """
@@ -68,17 +63,38 @@ class DatabaseHelper:
 
     def get_activity_by_id(self, activity_id):
         """ Get a specific activity by its ID. """
+        self.logger.log_debug(f"Fetching activity by ID: {activity_id}")
         return self._execute_query('SELECT * FROM activities WHERE id = ?', (activity_id,), fetch_one=True)
 
     def insert_activity(self, name, duration, description, start_time, end_time, day):
-        """ Insert a new activity into the database. """
-        self._execute_query('''
-            INSERT INTO activities (name, duration, description, start_time, end_time, day)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (name, duration, description, start_time, end_time, day))
+        """
+        Insert a new activity into the database.
+        """
+        self.logger.log_debug(f"Inserting activity: Name={name}, Duration={duration}, Day={day}, Start Time={start_time}, End Time={end_time}")
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.isolation_level = 'IMMEDIATE'  # Use IMMEDIATE lock to reduce concurrency issues
+                cursor = conn.cursor()
+
+                # Insert the activity
+                cursor.execute('''
+                    INSERT INTO activities (name, duration, description, start_time, end_time, day)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (name, duration, description, start_time, end_time, day))
+
+                # Commit the transaction
+                conn.commit()
+                self.logger.log_info(f"Activity '{name}' has been inserted successfully.")
+                self.logger.log_debug(f"Inserted activity details: Name={name}, Duration={duration}, Day={day}, Start Time={start_time}, End Time={end_time}")
+        except sqlite3.Error as e:
+            # Rollback if there is any error
+            conn.rollback()
+            self.logger.log_error(f"Error inserting activity: {str(e)}", exc_info=True)
+            raise
 
     def update_activity(self, activity_id, name, duration, description, start_time, end_time, day):
         """ Update an existing activity in the database. """
+        self.logger.log_debug(f"Updating activity ID {activity_id}")
         self._execute_query('''
             UPDATE activities
             SET name = ?, duration = ?, description = ?, start_time = ?, end_time = ?, day = ?
@@ -87,39 +103,17 @@ class DatabaseHelper:
 
     def delete_activity(self, activity_id):
         """ Delete an activity from the database by its ID. """
+        self.logger.log_debug(f"Deleting activity ID {activity_id}")
         self._execute_query('DELETE FROM activities WHERE id = ?', (activity_id,))
-        self._execute_query('DELETE FROM activity_statuses WHERE activity_id = ?', (activity_id,))
 
     def get_next_activity(self, day, current_time):
         """ Get the next activity for a specific day based on the current time. """
+        self.logger.log_debug(f"Fetching next activity for day {day} after {current_time}")
         return self._execute_query(
-            'SELECT * FROM activities WHERE day = ? AND start_time > ? ORDER BY start_time ASC LIMIT 1',
+            'SELECT * FROM activities WHERE day = ? AND start_time >= ? ORDER BY start_time ASC LIMIT 1',
             (day, current_time),
             fetch_one=True
         )
-
-    def get_activity_statuses(self, user_id):
-        """ Get the status of all activities for a specific user. """
-        return self._execute_query('SELECT activity_id, status FROM activity_statuses WHERE user_id = ?', (user_id,), fetch_all=True)
-
-    def update_activity_status(self, user_id, activity_id, status):
-        """ Update the status of an activity for a specific user. """
-        existing_status = self._execute_query(
-            'SELECT * FROM activity_statuses WHERE user_id = ? AND activity_id = ?',
-            (user_id, activity_id),
-            fetch_one=True
-        )
-        if existing_status:
-            self._execute_query('''
-                UPDATE activity_statuses
-                SET status = ?
-                WHERE user_id = ? AND activity_id = ?
-            ''', (status, user_id, activity_id))
-        else:
-            self._execute_query('''
-                INSERT INTO activity_statuses (user_id, activity_id, status)
-                VALUES (?, ?, ?)
-            ''', (user_id, activity_id, status))
 
 # Example usage
 if __name__ == "__main__":
