@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import logging
 
 app = Flask(__name__)
@@ -35,7 +35,8 @@ class Activity(db.Model):
             "description": self.description,
             "start_time": self.start_time.strftime("%H:%M"),
             "duration": self.duration,
-            "completed": self.completed
+            "completed": self.completed,
+            "day": self.day
         }
 
 class Session(db.Model):
@@ -67,34 +68,72 @@ def dashboard():
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     if request.method == 'POST':
-        new_template = Template(
-            name=request.form['name'],
-            description=request.form['description'],
-            duration=int(request.form['duration'])
-        )
-        db.session.add(new_template)
-        db.session.commit()
-
-        activity_names = request.form.getlist('activity-name[]')
-        activity_days = request.form.getlist('activity-day[]')
-        activity_start_times = request.form.getlist('activity-start-time[]')
-        activity_durations = request.form.getlist('activity-duration[]')
-        activity_descriptions = request.form.getlist('activity-description[]')
-
-        for i in range(len(activity_names)):
-            new_activity = Activity(
-                template_id=new_template.id,
-                day=int(activity_days[i]),
-                name=activity_names[i],
-                description=activity_descriptions[i],
-                start_time=datetime.strptime(activity_start_times[i], '%H:%M').time(),
-                duration=int(activity_durations[i])
+        data = request.json
+        if 'id' in data:  # Updating existing template
+            template = Template.query.get(data['id'])
+            if template:
+                template.name = data['name']
+                template.description = data['description']
+                template.duration = data['duration']
+                
+                # Delete existing activities
+                Activity.query.filter_by(template_id=template.id).delete()
+                
+                # Add new activities
+                for activity in data['activities']:
+                    new_activity = Activity(
+                        template_id=template.id,
+                        day=activity['day'],
+                        name=activity['name'],
+                        description=activity['description'],
+                        start_time=datetime.strptime(activity['start_time'], '%H:%M').time(),
+                        duration=activity['duration']
+                    )
+                    db.session.add(new_activity)
+                
+                db.session.commit()
+                return jsonify({"success": True, "message": "Template updated successfully"})
+            else:
+                return jsonify({"success": False, "message": "Template not found"}), 404
+        else:  # Creating new template
+            new_template = Template(
+                name=data['name'],
+                description=data['description'],
+                duration=data['duration']
             )
-            db.session.add(new_activity)
-        db.session.commit()
-        return jsonify({"success": True, "message": "Template created successfully"})
+            db.session.add(new_template)
+            db.session.flush()  # This will assign an id to new_template
+            
+            for activity in data['activities']:
+                new_activity = Activity(
+                    template_id=new_template.id,
+                    day=activity['day'],
+                    name=activity['name'],
+                    description=activity['description'],
+                    start_time=datetime.strptime(activity['start_time'], '%H:%M').time(),
+                    duration=activity['duration']
+                )
+                db.session.add(new_activity)
+            
+            db.session.commit()
+            return jsonify({"success": True, "message": "Template created successfully"})
     
-    return render_template('setup.html')
+    templates = Template.query.all()
+    return render_template('setup.html', templates=templates)
+
+@app.route('/get_template/<int:template_id>')
+def get_template(template_id):
+    template = Template.query.get(template_id)
+    if template:
+        activities = Activity.query.filter_by(template_id=template_id).all()
+        return jsonify({
+            "id": template.id,
+            "name": template.name,
+            "description": template.description,
+            "duration": template.duration,
+            "activities": [activity.to_dict() for activity in activities]
+        })
+    return jsonify({"error": "Template not found"}), 404
 
 @app.route('/start_session', methods=['POST'])
 def start_session():

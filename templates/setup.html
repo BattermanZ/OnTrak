@@ -1,192 +1,46 @@
 {% extends "base.html" %}
-
 {% block title %}OnTrak Setup{% endblock %}
-
 {% block content %}
 <div class="container mt-5">
-    <h1 class="mb-4">Create Training Template</h1>
-    <form id="template-form" method="POST">
-        <div id="step1" class="step active">
-            <h2 class="mb-3">Basic Information</h2>
-            <div class="mb-3">
-                <label for="template-name" class="form-label">Template Name</label>
-                <input type="text" class="form-control" id="template-name" name="name" required>
-            </div>
-            <div class="mb-3">
-                <label for="template-description" class="form-label">Description</label>
-                <textarea class="form-control" id="template-description" name="description" rows="3"></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="template-duration" class="form-label">Duration (days)</label>
-                <input type="number" class="form-control" id="template-duration" name="duration" min="1" max="28" required>
-            </div>
+    <h1 class="mb-4">Template Setup</h1>
+    <div class="row">
+        <div class="col-md-4">
+            <h2>Existing Templates</h2>
+            <ul class="list-group" id="template-list">
+                {% for template in templates %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ template.name }}
+                    <button class="btn btn-primary btn-sm edit-template" data-template-id="{{ template.id }}">Edit</button>
+                </li>
+                {% endfor %}
+            </ul>
+            <button class="btn btn-success mt-3" id="new-template-btn">Create New Template</button>
         </div>
-
-        <div id="step2" class="step">
-            <h2 class="mb-3">Activities</h2>
-            <div id="activities-container"></div>
-            <button type="button" class="btn btn-secondary mt-2" id="add-activity">Add Activity</button>
-        </div>
-
-        <div id="step3" class="step">
-            <h2 class="mb-3">Preview</h2>
-            <div id="preview-container" class="border p-3 rounded"></div>
-        </div>
-
-        <div class="mt-4">
-            <button type="button" class="btn btn-secondary" id="prev-btn" style="display: none;">Previous</button>
-            <button type="button" class="btn btn-primary" id="next-btn">Next</button>
-            <button type="submit" class="btn btn-success" id="submit-btn" style="display: none;">Create Template</button>
-        </div>
-    </form>
-</div>
-
-<template id="activity-template">
-    <div class="card mb-3 activity-card">
-        <div class="card-body">
-            <h5 class="card-title">Activity <span class="activity-number"></span></h5>
-            <div class="mb-2">
-                <label class="form-label">Day</label>
-                <input type="number" class="form-control activity-day" name="activity-day[]" min="1" required>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Activity Name</label>
-                <input type="text" class="form-control activity-name" name="activity-name[]" required>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Start Time</label>
-                <input type="time" class="form-control activity-start-time" name="activity-start-time[]" required>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Duration (minutes)</label>
-                <input type="number" class="form-control activity-duration" name="activity-duration[]" min="1" required>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Description</label>
-                <textarea class="form-control activity-description" name="activity-description[]" rows="2"></textarea>
-            </div>
-            <button type="button" class="btn btn-danger remove-activity">Remove</button>
+        <div class="col-md-8">
+            <form id="template-form">
+                <input type="hidden" id="template-id">
+                <div class="mb-3">
+                    <label for="template-name" class="form-label">Template Name</label>
+                    <input type="text" class="form-control" id="template-name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="template-description" class="form-label">Description</label>
+                    <textarea class="form-control" id="template-description" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="template-duration" class="form-label">Duration (days)</label>
+                    <input type="number" class="form-control" id="template-duration" required min="1">
+                </div>
+                <h3>Activities</h3>
+                <div id="activities-container"></div>
+                <button type="button" class="btn btn-secondary mt-3" id="add-activity">Add Activity</button>
+                <button type="submit" class="btn btn-primary mt-3">Save Template</button>
+            </form>
         </div>
     </div>
-</template>
+</div>
+{% endblock %}
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('template-form');
-    const steps = document.querySelectorAll('.step');
-    const nextBtn = document.getElementById('next-btn');
-    const prevBtn = document.getElementById('prev-btn');
-    const submitBtn = document.getElementById('submit-btn');
-    const addActivityBtn = document.getElementById('add-activity');
-    const activitiesContainer = document.getElementById('activities-container');
-    const activityTemplate = document.getElementById('activity-template');
-    let currentStep = 0;
-
-    function showStep(stepIndex) {
-        steps.forEach((step, index) => {
-            if (index === stepIndex) {
-                step.classList.add('active');
-                step.style.display = 'block';
-            } else {
-                step.classList.remove('active');
-                step.style.display = 'none';
-            }
-        });
-        prevBtn.style.display = stepIndex > 0 ? 'inline-block' : 'none';
-        nextBtn.style.display = stepIndex < steps.length - 1 ? 'inline-block' : 'none';
-        submitBtn.style.display = stepIndex === steps.length - 1 ? 'inline-block' : 'none';
-    }
-
-    nextBtn.addEventListener('click', () => {
-        if (currentStep < steps.length - 1) {
-            currentStep++;
-            showStep(currentStep);
-            if (currentStep === 2) {
-                updatePreview();
-            }
-        }
-    });
-
-    prevBtn.addEventListener('click', () => {
-        if (currentStep > 0) {
-            currentStep--;
-            showStep(currentStep);
-        }
-    });
-
-    addActivityBtn.addEventListener('click', () => {
-        const newActivity = document.importNode(activityTemplate.content, true);
-        const activityNumber = activitiesContainer.children.length + 1;
-        newActivity.querySelector('.activity-number').textContent = activityNumber;
-        activitiesContainer.appendChild(newActivity);
-    });
-
-    activitiesContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('remove-activity')) {
-            e.target.closest('.activity-card').remove();
-            updateActivityNumbers();
-        }
-    });
-
-    function updateActivityNumbers() {
-        const activities = activitiesContainer.querySelectorAll('.activity-card');
-        activities.forEach((activity, index) => {
-            activity.querySelector('.activity-number').textContent = index + 1;
-        });
-    }
-
-    function updatePreview() {
-        const previewContainer = document.getElementById('preview-container');
-        const templateName = document.getElementById('template-name').value;
-        const templateDescription = document.getElementById('template-description').value;
-        const templateDuration = document.getElementById('template-duration').value;
-        const activities = activitiesContainer.querySelectorAll('.activity-card');
-
-        let previewHTML = `
-            <h3>${templateName}</h3>
-            <p>${templateDescription}</p>
-            <p>Duration: ${templateDuration} days</p>
-            <h4>Activities:</h4>
-            <ul>
-        `;
-
-        activities.forEach((activity) => {
-            const day = activity.querySelector('.activity-day').value;
-            const name = activity.querySelector('.activity-name').value;
-            const startTime = activity.querySelector('.activity-start-time').value;
-            const duration = activity.querySelector('.activity-duration').value;
-            previewHTML += `<li>Day ${day}: ${name} (${startTime}, ${duration} min)</li>`;
-        });
-
-        previewHTML += '</ul>';
-        previewContainer.innerHTML = previewHTML;
-    }
-
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const formData = new FormData(form);
-        
-        fetch('/setup', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Template created successfully!');
-                window.location.href = '/';  // Redirect to dashboard
-            } else {
-                alert('Failed to create template. Please try again.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred. Please try again.');
-        });
-    });
-
-    // Initialize the form
-    showStep(currentStep);
-});
-</script>
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/setup.js') }}"></script>
 {% endblock %}
