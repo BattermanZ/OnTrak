@@ -48,16 +48,20 @@ def setup():
         db.session.add(new_template)
         db.session.commit()
 
-        activities = request.form.getlist('activity')
-        for activity in activities:
-            act_data = activity.split(',')
+        activity_names = request.form.getlist('activity-name[]')
+        activity_days = request.form.getlist('activity-day[]')
+        activity_start_times = request.form.getlist('activity-start-time[]')
+        activity_durations = request.form.getlist('activity-duration[]')
+        activity_descriptions = request.form.getlist('activity-description[]')
+
+        for i in range(len(activity_names)):
             new_activity = Activity(
                 template_id=new_template.id,
-                day=int(act_data[0]),
-                name=act_data[1],
-                description=act_data[2],
-                start_time=datetime.strptime(act_data[3], '%H:%M').time(),
-                duration=int(act_data[4])
+                day=int(activity_days[i]),
+                name=activity_names[i],
+                description=activity_descriptions[i],
+                start_time=datetime.strptime(activity_start_times[i], '%H:%M').time(),
+                duration=int(activity_durations[i])
             )
             db.session.add(new_activity)
         db.session.commit()

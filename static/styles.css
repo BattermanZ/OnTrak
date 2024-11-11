@@ -1,0 +1,16 @@
+/* Add any custom styles here */
+body {
+    padding-top: 60px;
+}
+
+.step {
+    display: none;
+}
+
+.step.active {
+    display: block;
+}
+
+.activity-card {
+    margin-bottom: 20px;
+}
