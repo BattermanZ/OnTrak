@@ -1,22 +1,14 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
-import os
-import random
+from datetime import datetime, time
+import logging
 
-# Get the absolute path of the current file
-basedir = os.path.abspath(os.path.dirname(__file__))
-
-# Create the 'instance' directory if it doesn't exist
-instance_path = os.path.join(basedir, 'instance')
-if not os.path.exists(instance_path):
-    os.makedirs(instance_path)
-
-app = Flask(__name__, static_folder='react-app/build', static_url_path='')
-
-# Use absolute path for the database file
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'instance', 'ontrak.db')
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ontrak.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+logging.basicConfig(level=logging.DEBUG)
 
 class Template(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -33,14 +25,38 @@ class Activity(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(500))
     start_time = db.Column(db.Time, nullable=False)
-    duration = db.Column(db.Integer, nullable=False)  # duration in minutes
+    duration = db.Column(db.Integer, nullable=False)
+    completed = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "start_time": self.start_time.strftime("%H:%M"),
+            "duration": self.duration,
+            "completed": self.completed
+        }
 
 class Session(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     template_id = db.Column(db.Integer, db.ForeignKey('template.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     current_day = db.Column(db.Integer, default=1)
-    start_date = db.Column(db.Date, default=datetime.utcnow)
+    day_started = db.Column(db.Boolean, default=False)
+    current_activity_id = db.Column(db.Integer, db.ForeignKey('activity.id'))
+
+    def get_first_activity_of_day(self):
+        return Activity.query.filter_by(template_id=self.template_id, day=self.current_day).order_by(Activity.start_time).first()
+
+    def get_next_activity(self):
+        current_activity = Activity.query.get(self.current_activity_id)
+        if current_activity:
+            return Activity.query.filter_by(template_id=self.template_id, day=self.current_day).filter(Activity.start_time > current_activity.start_time).order_by(Activity.start_time).first()
+        return None
+
+    def get_day_activities(self):
+        return Activity.query.filter_by(template_id=self.template_id, day=self.current_day).order_by(Activity.start_time).all()
 
 @app.route('/')
 def dashboard():
@@ -48,9 +64,16 @@ def dashboard():
     templates = Template.query.all()
     return render_template('dashboard.html', sessions=active_sessions, templates=templates)
 
-@app.route('/setup')
+@app.route('/setup', methods=['GET', 'POST'])
 def setup():
-    return send_from_directory('react-app/build', 'index.html')
+    if request.method == 'POST':
+        new_template = Template(
+            name=request.form['name'],
+            description=request.form['description'],
+            duration=int(request.form['duration'])
+        )
+        db.session.add(new_template)
+        db.session.commit()
 
         activity_names = request.form.getlist('activity-name[]')
         activity_days = request.form.getlist('activity-day[]')
@@ -75,75 +98,89 @@ def setup():
 
 @app.route('/start_session', methods=['POST'])
 def start_session():
-    template_id = request.form['template_id']
-    session_name = request.form['session_name']
-    new_session = Session(template_id=template_id, name=session_name)
-    db.session.add(new_session)
-    db.session.commit()
-    return jsonify({"success": True, "session_id": new_session.id})
+    app.logger.info(f"Received start_session request: {request.form}")
+    template_id = request.form.get('template_id')
+    session_name = request.form.get('session_name')
+    
+    if not template_id or not session_name:
+        app.logger.error("Missing template_id or session_name")
+        return jsonify({"success": False, "message": "Missing template_id or session_name"}), 400
+    
+    try:
+        new_session = Session(template_id=template_id, name=session_name)
+        db.session.add(new_session)
+        db.session.commit()
+        app.logger.info(f"Created new session: {new_session.id}")
+        return jsonify({"success": True, "session_id": new_session.id})
+    except Exception as e:
+        app.logger.error(f"Error creating session: {str(e)}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/start_day/<int:session_id>', methods=['POST'])
+def start_day(session_id):
+    session = Session.query.get_or_404(session_id)
+    if not session.day_started:
+        session.day_started = True
+        first_activity = session.get_first_activity_of_day()
+        if first_activity:
+            session.current_activity_id = first_activity.id
+        db.session.commit()
+        return jsonify({"success": True, "message": "Day started successfully"})
+    return jsonify({"success": False, "message": "Day already started"})
 
 @app.route('/end_day/<int:session_id>', methods=['POST'])
 def end_day(session_id):
     session = Session.query.get_or_404(session_id)
     session.current_day += 1
+    session.day_started = False
+    session.current_activity_id = None
     if session.current_day > session.template.duration:
         db.session.delete(session)
     db.session.commit()
     return jsonify({"success": True})
 
-@app.route('/statistics')
-def statistics():
-    return render_template('statistics.html')
+@app.route('/skip_activity/<int:session_id>', methods=['POST'])
+def skip_activity(session_id):
+    session = Session.query.get_or_404(session_id)
+    current_activity = Activity.query.get(session.current_activity_id)
+    if current_activity:
+        current_activity.completed = True
+        next_activity = session.get_next_activity()
+        if next_activity:
+            session.current_activity_id = next_activity.id
+        else:
+            session.current_activity_id = None
+        db.session.commit()
+        return jsonify({"success": True, "message": "Activity skipped successfully"})
+    return jsonify({"success": False, "message": "No current activity to skip"})
 
-@app.route('/api/statistics')
-def get_statistics():
-    activities = ['Introduction', 'Theory', 'Practice', 'Break', 'Q&A', 'Wrap-up']
-    
-    time_data = {
-        'labels': activities,
-        'values': [random.randint(-15, 15) for _ in activities]
-    }
-    
-    completion_data = [70, 20, 10]  # Completed on time, late, not completed
-    
-    trend_data = {
-        'labels': ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        'datasets': [
-            {
-                'label': activity,
-                'data': [random.randint(30, 90) for _ in range(4)],
-                'borderColor': f'rgba({random.randint(0,255)}, {random.randint(0,255)}, {random.randint(0,255)}, 1)',
-                'fill': False
-            } for activity in activities
-        ]
-    }
-    
-    detailed_stats = [
-        {
-            'name': activity,
-            'scheduledDuration': random.randint(30, 90),
-            'actualDuration': random.randint(30, 90),
-            'completionRate': random.random(),
-            'trend': random.choice(['Improving', 'Stable', 'Declining'])
-        } for activity in activities
-    ]
+@app.route('/get_session_status/<int:session_id>')
+def get_session_status(session_id):
+    session = Session.query.get_or_404(session_id)
+    current_activity = Activity.query.get(session.current_activity_id) if session.current_activity_id else None
+    next_activity = session.get_next_activity()
+    day_activities = session.get_day_activities()
     
     return jsonify({
-        'timeData': time_data,
-        'completionData': completion_data,
-        'trendData': trend_data,
-        'detailedStats': detailed_stats
+        "current_day": session.current_day,
+        "day_started": session.day_started,
+        "current_activity": current_activity.to_dict() if current_activity else None,
+        "next_activity": next_activity.to_dict() if next_activity else None,
+        "day_activities": [activity.to_dict() for activity in day_activities]
     })
 
-@app.route('/static/<path:path>')
-def serve_static(path):
-    return send_from_directory('react-app/build/static', path)
-
-@app.route('/<path:path>')
-def catch_all(path):
-    if path.startswith('static/'):
-        return send_from_directory('react-app/build', path)
-    return send_from_directory('react-app/build', 'index.html')
+@app.route('/statistics')
+def statistics():
+    # For now, we'll just pass some dummy data
+    # In a real application, you'd query the database and calculate actual statistics
+    dummy_stats = {
+        'total_sessions': 10,
+        'total_activities_completed': 150,
+        'average_session_duration': '5 days',
+        'most_common_activity': 'Lecture'
+    }
+    return render_template('statistics.html', stats=dummy_stats)
 
 if __name__ == '__main__':
     with app.app_context():

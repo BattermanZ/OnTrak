@@ -1,0 +1,186 @@
+document.addEventListener('DOMContentLoaded', function() {
+    const startSessionForm = document.getElementById('start-session-form');
+    const activeSessionsContainer = document.getElementById('active-sessions');
+    const sessionDetails = document.getElementById('session-details');
+    const currentActivityName = document.getElementById('current-activity-name');
+    const currentActivityTime = document.getElementById('current-activity-time');
+    const currentActivityProgress = document.getElementById('current-activity-progress');
+    const nextActivityName = document.getElementById('next-activity-name');
+    const nextActivityTime = document.getElementById('next-activity-time');
+    const skipActivityBtn = document.getElementById('skip-activity');
+    const dayActivitiesList = document.getElementById('day-activities-list');
+
+    startSessionForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(startSessionForm);
+        
+        fetch('/start_session', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Session started successfully!');
+                location.reload();
+            } else {
+                alert('Failed to start session: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while starting the session');
+        });
+    });
+
+    activeSessionsContainer.addEventListener('click', function(e) {
+        if (e.target.classList.contains('view-session')) {
+            const sessionId = e.target.getAttribute('data-session-id');
+            updateSessionDetails(sessionId);
+        } else if (e.target.classList.contains('start-day')) {
+            const sessionId = e.target.getAttribute('data-session-id');
+            startDay(sessionId);
+        } else if (e.target.classList.contains('end-day')) {
+            const sessionId = e.target.getAttribute('data-session-id');
+            endDay(sessionId);
+        }
+    });
+
+    skipActivityBtn.addEventListener('click', function() {
+        const sessionId = sessionDetails.getAttribute('data-session-id');
+        skipActivity(sessionId);
+    });
+
+    function updateSessionDetails(sessionId) {
+        fetch(`/get_session_status/${sessionId}`)
+        .then(response => response.json())
+        .then(data => {
+            sessionDetails.style.display = 'block';
+            sessionDetails.setAttribute('data-session-id', sessionId);
+            
+            if (data.current_activity) {
+                currentActivityName.textContent = data.current_activity.name;
+                updateActivityTimes(data.current_activity);
+                document.getElementById('current-activity').style.display = 'block';
+            } else {
+                document.getElementById('current-activity').style.display = 'none';
+            }
+
+            if (data.next_activity) {
+                nextActivityName.textContent = data.next_activity.name;
+                nextActivityTime.textContent = `${data.next_activity.start_time} - ${data.next_activity.duration} minutes`;
+                document.getElementById('next-activity').style.display = 'block';
+            } else {
+                document.getElementById('next-activity').style.display = 'none';
+            }
+
+            // Update day planning
+            dayActivitiesList.innerHTML = '';
+            data.day_activities.forEach(activity => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item';
+                if (data.current_activity && activity.id === data.current_activity.id) {
+                    li.classList.add('active');
+                }
+                li.textContent = `${activity.start_time} - ${activity.name} (${activity.duration} min)`;
+                dayActivitiesList.appendChild(li);
+            });
+        });
+    }
+
+    function updateActivityTimes(activity) {
+        const startTime = parseTime(activity.start_time);
+        const endTime = addMinutes(startTime, activity.duration);
+        const now = new Date();
+
+        currentActivityTime.textContent = `${formatTime(startTime)} - ${formatTime(endTime)}`;
+
+        updateProgressBar(startTime, endTime, now, activity.duration);
+    }
+
+    function updateProgressBar(startTime, endTime, now, duration) {
+        const totalDuration = duration * 60; // Convert to seconds
+        const elapsedTime = (now - startTime) / 1000; // Convert to seconds
+        const remainingTime = Math.max(0, totalDuration - elapsedTime);
+        const overtime = Math.max(0, elapsedTime - totalDuration);
+
+        let progressPercentage, progressText;
+
+        if (overtime > 0) {
+            progressPercentage = 100;
+            progressText = `${Math.round(overtime / 60)} min overtime`;
+            currentActivityProgress.classList.remove('bg-primary');
+            currentActivityProgress.classList.add('bg-danger');
+        } else {
+            progressPercentage = (elapsedTime / totalDuration) * 100;
+            progressText = `${Math.round(remainingTime / 60)} min remaining`;
+            currentActivityProgress.classList.remove('bg-danger');
+            currentActivityProgress.classList.add('bg-primary');
+        }
+
+        currentActivityProgress.style.width = `${progressPercentage}%`;
+        currentActivityProgress.textContent = progressText;
+        currentActivityProgress.setAttribute('aria-valuenow', progressPercentage);
+    }
+
+    function parseTime(timeString) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    }
+
+    function addMinutes(date, minutes) {
+        return new Date(date.getTime() + minutes * 60000);
+    }
+
+    function formatTime(date) {
+        return date.toTimeString().slice(0, 5);
+    }
+
+    function startDay(sessionId) {
+        fetch(`/start_day/${sessionId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Day started successfully!');
+                location.reload();
+            } else {
+                alert(data.message);
+            }
+        });
+    }
+
+    function endDay(sessionId) {
+        fetch(`/end_day/${sessionId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Day ended successfully!');
+                location.reload();
+            } else {
+                alert('Failed to end day');
+            }
+        });
+    }
+
+    function skipActivity(sessionId) {
+        fetch(`/skip_activity/${sessionId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Activity skipped successfully!');
+                updateSessionDetails(sessionId);
+            } else {
+                alert(data.message);
+            }
+        });
+    }
+
+    // Update session details every minute
+    setInterval(() => {
+        const sessionId = sessionDetails.getAttribute('data-session-id');
+        if (sessionId) {
+            updateSessionDetails(sessionId);
+        }
+    }, 60000);
+});

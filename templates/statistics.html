@@ -1,173 +1,41 @@
 {% extends "base.html" %}
-
 {% block title %}OnTrak Statistics{% endblock %}
-
 {% block content %}
-<h1 class="mb-4">Training Statistics</h1>
-
-<div class="row">
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header">
-                Average Time Difference (Scheduled vs. Actual)
-            </div>
-            <div class="card-body">
-                <canvas id="timeChart"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header">
-                Activity Completion Rate
-            </div>
-            <div class="card-body">
-                <canvas id="completionChart"></canvas>
+<div class="container mt-5">
+    <h1 class="mb-4">Training Statistics</h1>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Total Sessions</h5>
+                    <p class="card-text display-4">{{ stats.total_sessions }}</p>
+                </div>
             </div>
         </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-12 mb-4">
-        <div class="card">
-            <div class="card-header">
-                Activity Trends Over Time
-            </div>
-            <div class="card-body">
-                <canvas id="trendChart"></canvas>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Total Activities Completed</h5>
+                    <p class="card-text display-4">{{ stats.total_activities_completed }}</p>
+                </div>
             </div>
         </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                Detailed Activity Statistics
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Average Session Duration</h5>
+                    <p class="card-text display-4">{{ stats.average_session_duration }}</p>
+                </div>
             </div>
-            <div class="card-body">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Activity Name</th>
-                            <th>Average Duration (Scheduled)</th>
-                            <th>Average Duration (Actual)</th>
-                            <th>Completion Rate</th>
-                            <th>Trend</th>
-                        </tr>
-                    </thead>
-                    <tbody id="statisticsTableBody">
-                        <!-- Table rows will be dynamically added here -->
-                    </tbody>
-                </table>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Most Common Activity</h5>
+                    <p class="card-text display-4">{{ stats.most_common_activity }}</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Fetch statistics data from the server
-    fetch('/api/statistics')
-        .then(response => response.json())
-        .then(data => {
-            createTimeChart(data.timeData);
-            createCompletionChart(data.completionData);
-            createTrendChart(data.trendData);
-            populateStatisticsTable(data.detailedStats);
-        })
-        .catch(error => console.error('Error fetching statistics:', error));
-
-    function createTimeChart(data) {
-        const ctx = document.getElementById('timeChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: data.labels,
-                datasets: [{
-                    label: 'Average Time Difference (minutes)',
-                    data: data.values,
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Minutes'
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function createCompletionChart(data) {
-        const ctx = document.getElementById('completionChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: ['Completed on Time', 'Completed Late', 'Not Completed'],
-                datasets: [{
-                    data: data,
-                    backgroundColor: [
-                        'rgba(75, 192, 192, 0.6)',
-                        'rgba(255, 206, 86, 0.6)',
-                        'rgba(255, 99, 132, 0.6)'
-                    ],
-                    borderColor: [
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(255, 206, 86, 1)',
-                        'rgba(255, 99, 132, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            }
-        });
-    }
-
-    function createTrendChart(data) {
-        const ctx = document.getElementById('trendChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.labels,
-                datasets: data.datasets
-            },
-            options: {
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Duration (minutes)'
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function populateStatisticsTable(data) {
-        const tableBody = document.getElementById('statisticsTableBody');
-        data.forEach(activity => {
-            const row = tableBody.insertRow();
-            row.insertCell(0).textContent = activity.name;
-            row.insertCell(1).textContent = activity.scheduledDuration.toFixed(2);
-            row.insertCell(2).textContent = activity.actualDuration.toFixed(2);
-            row.insertCell(3).textContent = `${(activity.completionRate * 100).toFixed(2)}%`;
-            row.insertCell(4).textContent = activity.trend;
-        });
-    }
-});
-</script>
 {% endblock %}
