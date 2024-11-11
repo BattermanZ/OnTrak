@@ -16,7 +16,7 @@ class Template(db.Model):
     description = db.Column(db.String(500))
     duration = db.Column(db.Integer, nullable=False)
     sessions = db.relationship('Session', backref='template', lazy=True)
-    activities = db.relationship('Activity', backref='template', lazy=True)
+    activities = db.relationship('Activity', backref='template', lazy=True, cascade="all, delete-orphan")
 
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -75,24 +75,8 @@ def setup():
                 template.name = data['name']
                 template.description = data['description']
                 template.duration = data['duration']
-                
-                # Delete existing activities
-                Activity.query.filter_by(template_id=template.id).delete()
-                
-                # Add new activities
-                for activity in data['activities']:
-                    new_activity = Activity(
-                        template_id=template.id,
-                        day=activity['day'],
-                        name=activity['name'],
-                        description=activity['description'],
-                        start_time=datetime.strptime(activity['start_time'], '%H:%M').time(),
-                        duration=activity['duration']
-                    )
-                    db.session.add(new_activity)
-                
                 db.session.commit()
-                return jsonify({"success": True, "message": "Template updated successfully"})
+                return jsonify({"success": True, "message": "Template updated successfully", "id": template.id})
             else:
                 return jsonify({"success": False, "message": "Template not found"}), 404
         else:  # Creating new template
@@ -102,21 +86,8 @@ def setup():
                 duration=data['duration']
             )
             db.session.add(new_template)
-            db.session.flush()  # This will assign an id to new_template
-            
-            for activity in data['activities']:
-                new_activity = Activity(
-                    template_id=new_template.id,
-                    day=activity['day'],
-                    name=activity['name'],
-                    description=activity['description'],
-                    start_time=datetime.strptime(activity['start_time'], '%H:%M').time(),
-                    duration=activity['duration']
-                )
-                db.session.add(new_activity)
-            
             db.session.commit()
-            return jsonify({"success": True, "message": "Template created successfully"})
+            return jsonify({"success": True, "message": "Template created successfully", "id": new_template.id})
     
     templates = Template.query.all()
     return render_template('setup.html', templates=templates)
@@ -134,6 +105,42 @@ def get_template(template_id):
             "activities": [activity.to_dict() for activity in activities]
         })
     return jsonify({"error": "Template not found"}), 404
+
+@app.route('/delete_template/<int:template_id>', methods=['DELETE'])
+def delete_template(template_id):
+    template = Template.query.get(template_id)
+    if template:
+        db.session.delete(template)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Template deleted successfully"})
+    return jsonify({"success": False, "message": "Template not found"}), 404
+
+@app.route('/save_day_activities/<int:template_id>/<int:day>', methods=['POST'])
+def save_day_activities(template_id, day):
+    template = Template.query.get(template_id)
+    if not template:
+        return jsonify({"success": False, "message": "Template not found"}), 404
+    
+    data = request.json
+    activities = data.get('activities', [])
+    
+    # Delete existing activities for this day
+    Activity.query.filter_by(template_id=template_id, day=day).delete()
+    
+    # Add new activities
+    for activity in activities:
+        new_activity = Activity(
+            template_id=template_id,
+            day=day,
+            name=activity['name'],
+            description=activity['description'],
+            start_time=datetime.strptime(activity['start_time'], '%H:%M').time(),
+            duration=activity['duration']
+        )
+        db.session.add(new_activity)
+    
+    db.session.commit()
+    return jsonify({"success": True, "message": f"Activities for day {day} saved successfully"})
 
 @app.route('/start_session', methods=['POST'])
 def start_session():

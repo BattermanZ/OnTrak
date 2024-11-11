@@ -10,7 +10,10 @@
                 {% for template in templates %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     {{ template.name }}
-                    <button class="btn btn-primary btn-sm edit-template" data-template-id="{{ template.id }}">Edit</button>
+                    <div>
+                        <button class="btn btn-primary btn-sm edit-template" data-template-id="{{ template.id }}">Edit</button>
+                        <button class="btn btn-danger btn-sm delete-template" data-template-id="{{ template.id }}">Delete</button>
+                    </div>
                 </li>
                 {% endfor %}
             </ul>
@@ -31,11 +34,19 @@
                     <label for="template-duration" class="form-label">Duration (days)</label>
                     <input type="number" class="form-control" id="template-duration" required min="1">
                 </div>
-                <h3>Activities</h3>
+                <button type="submit" class="btn btn-primary" id="save-template-btn">Save Template</button>
+            </form>
+            <div id="day-editor" class="mt-4" style="display: none;">
+                <h3>Day Activities</h3>
+                <div class="mb-3">
+                    <label for="day-select" class="form-label">Select Day</label>
+                    <select class="form-select" id="day-select"></select>
+                </div>
                 <div id="activities-container"></div>
                 <button type="button" class="btn btn-secondary mt-3" id="add-activity">Add Activity</button>
-                <button type="submit" class="btn btn-primary mt-3">Save Template</button>
-            </form>
+                <button type="button" class="btn btn-primary mt-3" id="save-day">Save Day</button>
+                <button type="button" class="btn btn-warning mt-3" id="clear-day">Clear Day</button>
+            </div>
         </div>
     </div>
 </div>

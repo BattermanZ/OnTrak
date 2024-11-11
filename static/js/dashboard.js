@@ -122,6 +122,9 @@ document.addEventListener('DOMContentLoaded', function() {
         activities.forEach(activity => {
             const li = document.createElement('li');
             li.className = 'list-group-item';
+            if (activity.name.toLowerCase().includes('break')) {
+                li.classList.add('activity-break');
+            }
             const startTime = parseTime(activity.start_time);
             const endTime = addMinutes(startTime, activity.duration);
             li.innerHTML = `
