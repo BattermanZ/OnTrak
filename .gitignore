@@ -1,5 +1,7 @@
 # Ignore Python virtual environment
 venv/
+react-app/node_modules/
+react-app/build/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

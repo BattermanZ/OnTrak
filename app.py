@@ -1,10 +1,21 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
+import os
 import random
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ontrak.db'
+# Get the absolute path of the current file
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Create the 'instance' directory if it doesn't exist
+instance_path = os.path.join(basedir, 'instance')
+if not os.path.exists(instance_path):
+    os.makedirs(instance_path)
+
+app = Flask(__name__, static_folder='react-app/build', static_url_path='')
+
+# Use absolute path for the database file
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'instance', 'ontrak.db')
 db = SQLAlchemy(app)
 
 class Template(db.Model):
@@ -37,33 +48,33 @@ def dashboard():
     templates = Template.query.all()
     return render_template('dashboard.html', sessions=active_sessions, templates=templates)
 
-@app.route('/setup', methods=['GET', 'POST'])
+@app.route('/setup')
 def setup():
-    if request.method == 'POST':
-        new_template = Template(
-            name=request.form['name'],
-            description=request.form['description'],
-            duration=int(request.form['duration'])
-        )
-        db.session.add(new_template)
-        db.session.commit()
+    return send_from_directory('react-app/build', 'index.html')
 
-        activities = request.form.getlist('activity')
-        for activity in activities:
-            act_data = activity.split(',')
-            new_activity = Activity(
-                template_id=new_template.id,
-                day=int(act_data[0]),
-                name=act_data[1],
-                description=act_data[2],
-                start_time=datetime.strptime(act_data[3], '%H:%M').time(),
-                duration=int(act_data[4])
-            )
-            db.session.add(new_activity)
-        db.session.commit()
-        return jsonify({"success": True, "message": "Template created successfully"})
-    
-    return render_template('setup.html')
+@app.route('/api/setup', methods=['POST'])
+def api_setup():
+    data = request.json
+    new_template = Template(
+        name=data['name'],
+        description=data['description'],
+        duration=int(data['duration'])
+    )
+    db.session.add(new_template)
+    db.session.commit()
+
+    for activity in data['activities']:
+        new_activity = Activity(
+            template_id=new_template.id,
+            day=int(activity['day']),
+            name=activity['name'],
+            description=activity['description'],
+            start_time=datetime.strptime(activity['startTime'], '%H:%M').time(),
+            duration=int(activity['duration'])
+        )
+        db.session.add(new_activity)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Template created successfully"})
 
 @app.route('/start_session', methods=['POST'])
 def start_session():
@@ -89,7 +100,6 @@ def statistics():
 
 @app.route('/api/statistics')
 def get_statistics():
-    # This is a mock-up of statistics data. In a real application, you would calculate this from your database.
     activities = ['Introduction', 'Theory', 'Practice', 'Break', 'Q&A', 'Wrap-up']
     
     time_data = {
@@ -127,6 +137,16 @@ def get_statistics():
         'trendData': trend_data,
         'detailedStats': detailed_stats
     })
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('react-app/build/static', path)
+
+@app.route('/<path:path>')
+def catch_all(path):
+    if path.startswith('static/'):
+        return send_from_directory('react-app/build', path)
+    return send_from_directory('react-app/build', 'index.html')
 
 if __name__ == '__main__':
     with app.app_context():
