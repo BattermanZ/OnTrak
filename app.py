@@ -52,29 +52,26 @@ def dashboard():
 def setup():
     return send_from_directory('react-app/build', 'index.html')
 
-@app.route('/api/setup', methods=['POST'])
-def api_setup():
-    data = request.json
-    new_template = Template(
-        name=data['name'],
-        description=data['description'],
-        duration=int(data['duration'])
-    )
-    db.session.add(new_template)
-    db.session.commit()
+        activity_names = request.form.getlist('activity-name[]')
+        activity_days = request.form.getlist('activity-day[]')
+        activity_start_times = request.form.getlist('activity-start-time[]')
+        activity_durations = request.form.getlist('activity-duration[]')
+        activity_descriptions = request.form.getlist('activity-description[]')
 
-    for activity in data['activities']:
-        new_activity = Activity(
-            template_id=new_template.id,
-            day=int(activity['day']),
-            name=activity['name'],
-            description=activity['description'],
-            start_time=datetime.strptime(activity['startTime'], '%H:%M').time(),
-            duration=int(activity['duration'])
-        )
-        db.session.add(new_activity)
-    db.session.commit()
-    return jsonify({"success": True, "message": "Template created successfully"})
+        for i in range(len(activity_names)):
+            new_activity = Activity(
+                template_id=new_template.id,
+                day=int(activity_days[i]),
+                name=activity_names[i],
+                description=activity_descriptions[i],
+                start_time=datetime.strptime(activity_start_times[i], '%H:%M').time(),
+                duration=int(activity_durations[i])
+            )
+            db.session.add(new_activity)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Template created successfully"})
+    
+    return render_template('setup.html')
 
 @app.route('/start_session', methods=['POST'])
 def start_session():
