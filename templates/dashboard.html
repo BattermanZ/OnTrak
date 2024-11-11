@@ -1,76 +1,130 @@
 {% extends "base.html" %}
 {% block title %}OnTrak Dashboard{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <h1 class="mb-4">Training Dashboard</h1>
+<div class="container-fluid mt-4">
     <div class="row">
+        <!-- Main content area -->
         <div class="col-md-8">
-            <h2>Active Sessions</h2>
-            <div id="active-sessions">
-                {% for session in sessions %}
-                <div class="card mb-3" id="session-{{ session.id }}">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ session.name }}</h5>
-                        <p class="card-text">Day {{ session.current_day }} of {{ session.template.duration }}</p>
-                        <button class="btn btn-primary view-session" data-session-id="{{ session.id }}">View</button>
-                        {% if not session.day_started %}
-                        <button class="btn btn-success start-day" data-session-id="{{ session.id }}">Start Day</button>
-                        {% endif %}
-                        <button class="btn btn-secondary end-day" data-session-id="{{ session.id }}">End Day</button>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="card-title">Current Session Progress</h2>
+                    <div class="progress mb-3" style="height: 30px;">
+                        <div id="current-activity-progress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0 min</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Current Activity</h5>
+                                    <p id="current-activity-name" class="card-text"></p>
+                                    <p id="current-activity-time" class="card-text"></p>
+                                    <button id="skip-activity" class="btn btn-warning">Skip to Next Activity</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Next Activity</h5>
+                                    <p id="next-activity-name" class="card-text"></p>
+                                    <p id="next-activity-time" class="card-text"></p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                {% endfor %}
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title">Day Schedule</h2>
+                    <ul id="day-activities-list" class="list-group timeline">
+                        <!-- Activities will be populated here by JavaScript -->
+                    </ul>
+                </div>
             </div>
         </div>
+        
+        <!-- Sidebar -->
         <div class="col-md-4">
-            <h2>Start New Training</h2>
-            <form id="start-session-form">
-                <div class="mb-3">
-                    <label for="template-select" class="form-label">Select Template</label>
-                    <select class="form-select" id="template-select" name="template_id" required>
-                        <option value="">Choose a template...</option>
-                        {% for template in templates %}
-                        <option value="{{ template.id }}">{{ template.name }}</option>
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h2 class="card-title">Start New Training</h2>
+                    <form id="start-session-form">
+                        <div class="mb-3">
+                            <label for="template-select" class="form-label">Select Template</label>
+                            <select class="form-select" id="template-select" name="template_id" required>
+                                <option value="">Choose a template...</option>
+                                {% for template in templates %}
+                                <option value="{{ template.id }}">{{ template.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="session-name" class="form-label">Session Name</label>
+                            <input type="text" class="form-control" id="session-name" name="session_name" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Start Training</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title">Active Sessions</h2>
+                    <div id="active-sessions">
+                        {% for session in sessions %}
+                        <div class="card mb-3" id="session-{{ session.id }}">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ session.name }}</h5>
+                                <p class="card-text">Day {{ session.current_day }} of {{ session.template.duration }}</p>
+                                <button class="btn btn-primary view-session" data-session-id="{{ session.id }}">View</button>
+                                {% if not session.day_started %}
+                                <button class="btn btn-success start-day" data-session-id="{{ session.id }}">Start Day</button>
+                                {% endif %}
+                                <button class="btn btn-secondary end-day" data-session-id="{{ session.id }}">End Day</button>
+                            </div>
+                        </div>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="session-name" class="form-label">Session Name</label>
-                    <input type="text" class="form-control" id="session-name" name="session_name" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Start Training</button>
-            </form>
-        </div>
-    </div>
-    <div id="session-details" class="mt-5" style="display: none;">
-        <h2>Session Details</h2>
-        <div id="current-activity" class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Current Activity</h5>
-                <p class="card-text" id="current-activity-name"></p>
-                <p class="card-text" id="current-activity-time"></p>
-                <div class="progress mb-3">
-                    <div id="current-activity-progress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0 min</div>
-                </div>
-                <button class="btn btn-warning" id="skip-activity">Skip to Next Activity</button>
-            </div>
-        </div>
-        <div id="next-activity" class="card mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Next Activity</h5>
-                <p class="card-text" id="next-activity-name"></p>
-                <p class="card-text" id="next-activity-time"></p>
-            </div>
-        </div>
-        <div id="day-planning" class="card">
-            <div class="card-body">
-                <h5 class="card-title">Day Planning</h5>
-                <ul id="day-activities-list" class="list-group">
-                </ul>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #007bff;
+    }
+    .timeline .list-group-item {
+        border-left: none;
+        padding-left: 20px;
+        margin-bottom: 20px;
+    }
+    .timeline .list-group-item::before {
+        content: '';
+        position: absolute;
+        left: -18px;
+        top: 15px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #007bff;
+    }
+</style>
 {% endblock %}
 
 {% block scripts %}

@@ -14,3 +14,48 @@ body {
 .activity-card {
     margin-bottom: 20px;
 }
+
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #007bff;
+}
+
+.timeline .list-group-item {
+    border-left: none;
+    padding-left: 20px;
+    margin-bottom: 20px;
+}
+
+.timeline .list-group-item::before {
+    content: '';
+    position: absolute;
+    left: -18px;
+    top: 15px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #007bff;
+}
+
+.progress {
+    height: 30px;
+}
+
+.card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.3s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+}

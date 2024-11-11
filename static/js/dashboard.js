@@ -1,7 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     const startSessionForm = document.getElementById('start-session-form');
     const activeSessionsContainer = document.getElementById('active-sessions');
-    const sessionDetails = document.getElementById('session-details');
     const currentActivityName = document.getElementById('current-activity-name');
     const currentActivityTime = document.getElementById('current-activity-time');
     const currentActivityProgress = document.getElementById('current-activity-progress');
@@ -9,6 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const nextActivityTime = document.getElementById('next-activity-time');
     const skipActivityBtn = document.getElementById('skip-activity');
     const dayActivitiesList = document.getElementById('day-activities-list');
+
+    let currentSessionId = null;
 
     startSessionForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -36,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
     activeSessionsContainer.addEventListener('click', function(e) {
         if (e.target.classList.contains('view-session')) {
             const sessionId = e.target.getAttribute('data-session-id');
+            currentSessionId = sessionId;
             updateSessionDetails(sessionId);
         } else if (e.target.classList.contains('start-day')) {
             const sessionId = e.target.getAttribute('data-session-id');
@@ -47,44 +49,36 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     skipActivityBtn.addEventListener('click', function() {
-        const sessionId = sessionDetails.getAttribute('data-session-id');
-        skipActivity(sessionId);
+        if (currentSessionId) {
+            skipActivity(currentSessionId);
+        } else {
+            alert('No active session selected');
+        }
     });
 
     function updateSessionDetails(sessionId) {
         fetch(`/get_session_status/${sessionId}`)
         .then(response => response.json())
         .then(data => {
-            sessionDetails.style.display = 'block';
-            sessionDetails.setAttribute('data-session-id', sessionId);
-            
             if (data.current_activity) {
                 currentActivityName.textContent = data.current_activity.name;
                 updateActivityTimes(data.current_activity);
-                document.getElementById('current-activity').style.display = 'block';
             } else {
-                document.getElementById('current-activity').style.display = 'none';
+                currentActivityName.textContent = 'No current activity';
+                currentActivityTime.textContent = '';
+                currentActivityProgress.style.width = '0%';
+                currentActivityProgress.textContent = '';
             }
 
             if (data.next_activity) {
                 nextActivityName.textContent = data.next_activity.name;
                 nextActivityTime.textContent = `${data.next_activity.start_time} - ${data.next_activity.duration} minutes`;
-                document.getElementById('next-activity').style.display = 'block';
             } else {
-                document.getElementById('next-activity').style.display = 'none';
+                nextActivityName.textContent = 'No next activity';
+                nextActivityTime.textContent = '';
             }
 
-            // Update day planning
-            dayActivitiesList.innerHTML = '';
-            data.day_activities.forEach(activity => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item';
-                if (data.current_activity && activity.id === data.current_activity.id) {
-                    li.classList.add('active');
-                }
-                li.textContent = `${activity.start_time} - ${activity.name} (${activity.duration} min)`;
-                dayActivitiesList.appendChild(li);
-            });
+            updateDaySchedule(data.day_activities);
         });
     }
 
@@ -121,6 +115,22 @@ document.addEventListener('DOMContentLoaded', function() {
         currentActivityProgress.style.width = `${progressPercentage}%`;
         currentActivityProgress.textContent = progressText;
         currentActivityProgress.setAttribute('aria-valuenow', progressPercentage);
+    }
+
+    function updateDaySchedule(activities) {
+        dayActivitiesList.innerHTML = '';
+        activities.forEach(activity => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            const startTime = parseTime(activity.start_time);
+            const endTime = addMinutes(startTime, activity.duration);
+            li.innerHTML = `
+                <h5>${activity.name}</h5>
+                <p>${formatTime(startTime)} - ${formatTime(endTime)}</p>
+                <p>${activity.description || 'No description available'}</p>
+            `;
+            dayActivitiesList.appendChild(li);
+        });
     }
 
     function parseTime(timeString) {
@@ -176,11 +186,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Update session details every minute
+    // Update session details every minute if a session is selected
     setInterval(() => {
-        const sessionId = sessionDetails.getAttribute('data-session-id');
-        if (sessionId) {
-            updateSessionDetails(sessionId);
+        if (currentSessionId) {
+            updateSessionDetails(currentSessionId);
         }
     }, 60000);
 });
