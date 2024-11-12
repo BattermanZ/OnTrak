@@ -1,17 +1,20 @@
+import logging
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, time, timedelta
-import logging
 import subprocess
 import json
+import re
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ontrak.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class Template(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -71,12 +74,20 @@ class Session(db.Model):
     def get_day_activities(self):
         return Activity.query.filter_by(template_id=self.template_id, day=self.current_day).order_by(Activity.start_time).all()
 
-def run_node_script(script, args=None):
-    cmd = ['node', '-e', script]
-    if args:
-        cmd.extend(args)
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.stdout.strip()
+def run_node_script(script):
+    result = subprocess.run(['node', '-e', script], capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error(f"Node.js script error: {result.stderr}")
+        raise RuntimeError(f"Node.js script failed: {result.stderr}")
+    
+    # Extract JSON from the output
+    json_match = re.search(r'\{.*\}', result.stdout, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(0)
+        return json_str
+    else:
+        logger.error(f"No JSON found in output: {result.stdout}")
+        raise ValueError("No JSON found in Node.js script output")
 
 @app.route('/')
 def dashboard():
@@ -156,26 +167,27 @@ def get_template(template_id):
 
 @app.route('/start_session', methods=['POST'])
 def start_session():
-    app.logger.info(f"Received start_session request: {request.form}")
+    logger.info(f"Received start_session request: {request.form}")
     template_id = request.form.get('template_id')
     session_name = request.form.get('session_name')
 
     if not template_id or not session_name:
-        app.logger.error("Missing template_id or session_name")
+        logger.error("Missing template_id or session_name")
         return jsonify({"success": False, "message": "Missing template_id or session_name"}), 400
 
     try:
         script = f"""
         const db = require('./server/database');
         db.createSession({template_id}, '{session_name}')
-          .then(id => console.log(id))
+          .then(id => console.log(JSON.stringify({{id: id}})))
           .catch(err => console.error(err));
         """
-        session_id = int(run_node_script(script))
-        app.logger.info(f"Created new session: {session_id}")
+        output = run_node_script(script)
+        session_id = json.loads(output)['id']
+        logger.info(f"Created new session: {session_id}")
         return jsonify({"success": True, "session_id": session_id})
     except Exception as e:
-        app.logger.error(f"Error creating session: {str(e)}")
+        logger.error(f"Error creating session: {str(e)}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/start_day/<int:session_id>', methods=['POST'])
@@ -284,66 +296,62 @@ def get_session_status(session_id):
 
 @app.route('/statistics')
 def statistics():
-    template_id = request.args.get('template_id', type=int)
+    return render_template('statistics.html')
+
+@app.route('/api/template/<int:template_id>')
+def get_template_api(template_id):
+    template = Template.query.get_or_404(template_id)
+    return jsonify({
+        'id': template.id,
+        'name': template.name,
+        'duration': template.duration
+    })
+
+@app.route('/api/statistics/<int:template_id>')
+def get_statistics_api(template_id):
+    day = request.args.get('day', default=None, type=int)
     
-    templates = Template.query.all()
+    logger.info(f"Fetching statistics for template_id: {template_id}, day: {day}")
     
-    if template_id:
-        template = Template.query.get_or_404(template_id)
-        
-        # Check if there's data for this template
-        check_data_script = f"""
-        const db = require('./server/database');
-        db.checkTemplateData({template_id}).then(count => console.log(JSON.stringify({{"count": count}})));
-        """
-        data_count = json.loads(run_node_script(check_data_script))['count']
+    check_data_script = f"""
+    const db = require('./server/database');
+    db.checkTemplateData({template_id}).then(count => console.log(JSON.stringify({{"count": count}})));
+    """
+    
+    try:
+        output = run_node_script(check_data_script)
+        data_count = json.loads(output)['count']
         
         if data_count == 0:
-            app.logger.warning(f"No completed activities found for template {template_id}")
-            stats = {
-                'template': template,
-                'templates': templates,
-                'error': 'No data available for this template'
-            }
-        else:
-            statistics_script = f"""
-            const db = require('./server/database');
-            db.getStatistics({template_id});
-            """
-            
-            try:
-                output = run_node_script(statistics_script)
-                app.logger.info(f"Raw statistics output: {output}")
-                statistics_data = json.loads(output)
-                
-                time_deviation_per_activity = statistics_data[0]
-                average_time_deviation = statistics_data[1]
-                cumulative_time_impact = statistics_data[2]
-                day_by_day_time_deviation = statistics_data[3]
-                
-                stats = {
-                    'template': template,
-                    'templates': templates,
-                    'time_deviation_per_activity': time_deviation_per_activity,
-                    'average_time_deviation': average_time_deviation,
-                    'cumulative_time_impact': cumulative_time_impact,
-                    'day_by_day_time_deviation': day_by_day_time_deviation
-                }
-            except json.JSONDecodeError as e:
-                app.logger.error(f"Error decoding JSON: {e}")
-                app.logger.error(f"Raw output: {output}")
-                stats = {
-                    'template': template,
-                    'templates': templates,
-                    'error': 'Error fetching statistics data'
-                }
-    else:
-        stats = {
-            'template': None,
-            'templates': templates
-        }
-    
-    return render_template('statistics.html', stats=stats)
+            logger.warning(f"No data available for template_id: {template_id}")
+            return jsonify({'error': 'No data available for this template'}), 404
+        
+        statistics_script = f"""
+        const db = require('./server/database');
+        db.getDetailedStatistics({template_id}, {json.dumps(day)})
+          .then(result => console.log(JSON.stringify(result)))
+          .catch(error => console.error(JSON.stringify({{"error": error.message}})));
+        """
+        
+        output = run_node_script(statistics_script)
+        
+        # Find the last valid JSON object in the output
+        json_objects = [json.loads(obj) for obj in output.strip().split('\n') if obj.strip()]
+        if not json_objects:
+            raise ValueError("No valid JSON found in the output")
+        
+        statistics_data = json_objects[-1]  # Take the last JSON object
+        
+        if 'error' in statistics_data:
+            raise ValueError(statistics_data['error'])
+        
+        return jsonify(statistics_data)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parsing error for template_id {template_id}: {str(e)}")
+        return jsonify({'error': 'Invalid JSON response from database'}), 500
+    except Exception as e:
+        logger.error(f"Error fetching statistics for template_id {template_id}: {str(e)}")
+        return jsonify({'error': 'Failed to fetch statistics'}), 500
 
 if __name__ == '__main__':
     with app.app_context():

@@ -5,9 +5,9 @@ const path = require('path');
 const dbPath = path.resolve(__dirname, '..', 'instance', 'ontrak.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    process.stderr.write(`Error connecting to the database: ${err.message}\n`);
+    console.error(`Error connecting to the database: ${err.message}`);
   } else {
-    process.stderr.write('Connected to the SQLite database.\n');
+    console.log('Connected to the SQLite database.');
     initDatabase();
   }
 });
@@ -53,7 +53,7 @@ function initDatabase() {
       FOREIGN KEY (current_activity_id) REFERENCES Activity(id)
     )`);
 
-    process.stderr.write('Database tables created or already exist.\n');
+    console.log('Database tables created or already exist.');
   });
 }
 
@@ -72,6 +72,15 @@ function getTemplates() {
     db.all('SELECT * FROM Template', (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
+    });
+  });
+}
+
+function getTemplateById(templateId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM Template WHERE id = ?', [templateId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
     });
   });
 }
@@ -126,88 +135,62 @@ function updateSessionActivity(sessionId, activityId) {
   });
 }
 
-// Time deviation analysis functions
-function getTimeDeviationPerActivity(templateId) {
+// Detailed statistics function
+function getDetailedStatistics(templateId, day) {
   return new Promise((resolve, reject) => {
-    db.all(`
+    let query = `
       SELECT 
         a.name,
         a.duration as planned_duration,
-        AVG(a.actual_duration) as avg_actual_duration,
-        AVG(a.actual_duration - a.duration) as avg_time_deviation
+        a.actual_duration,
+        a.day
       FROM Activity a
-      JOIN Session s ON a.template_id = s.template_id
       WHERE a.template_id = ? AND a.completed = 1
-      GROUP BY a.id
-      ORDER BY avg_time_deviation DESC
-    `, [templateId], (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
+    `;
+    
+    const params = [templateId];
+    if (day !== null) {
+      query += ' AND a.day = ?';
+      params.push(day);
+    }
+    
+    db.all(query, params, (err, activities) => {
+      if (err) {
+        console.error('Database query error:', err);
+        reject(err);
+      } else {
+        try {
+          const totalActivities = activities.length;
+          const timeDeviations = activities.map(a => (a.actual_duration || 0) - a.planned_duration);
+          const averageTimeDeviation = totalActivities > 0 ? timeDeviations.reduce((sum, dev) => sum + dev, 0) / totalActivities : 0;
+          const cumulativeTimeImpact = timeDeviations.reduce((sum, dev) => sum + dev, 0);
+          
+          const result = {
+            total_activities: totalActivities,
+            average_time_deviation: averageTimeDeviation,
+            cumulative_time_impact: cumulativeTimeImpact,
+            activities: activities.map(a => ({
+              name: a.name,
+              planned_duration: a.planned_duration,
+              actual_duration: a.actual_duration || 0
+            }))
+          };
+          
+          // Log only a summary of the statistics
+          console.log(JSON.stringify({
+            total_activities: result.total_activities,
+            average_time_deviation: result.average_time_deviation,
+            cumulative_time_impact: result.cumulative_time_impact,
+            activities_count: result.activities.length
+          }));
+          
+          resolve(result);
+        } catch (error) {
+          console.error('Error processing statistics:', error);
+          reject(error);
+        }
+      }
     });
-  });
-}
-
-function getAverageTimeDeviation(templateId) {
-  return new Promise((resolve, reject) => {
-    db.get(`
-      SELECT AVG(a.actual_duration - a.duration) as avg_time_deviation
-      FROM Activity a
-      JOIN Session s ON a.template_id = s.template_id
-      WHERE a.template_id = ? AND a.completed = 1
-    `, [templateId], (err, row) => {
-      if (err) reject(err);
-      else resolve(row ? row.avg_time_deviation : 0);
-    });
-  });
-}
-
-function getCumulativeTimeImpact(templateId) {
-  return new Promise((resolve, reject) => {
-    db.get(`
-      SELECT SUM(a.actual_duration - a.duration) as cumulative_time_impact
-      FROM Activity a
-      JOIN Session s ON a.template_id = s.template_id
-      WHERE a.template_id = ? AND a.completed = 1
-    `, [templateId], (err, row) => {
-      if (err) reject(err);
-      else resolve(row ? row.cumulative_time_impact : 0);
-    });
-  });
-}
-
-function getDayByDayTimeDeviation(templateId) {
-  return new Promise((resolve, reject) => {
-    db.all(`
-      SELECT 
-        a.day,
-        AVG(a.actual_duration - a.duration) as avg_time_deviation
-      FROM Activity a
-      JOIN Session s ON a.template_id = s.template_id
-      WHERE a.template_id = ? AND a.completed = 1
-      GROUP BY a.day
-      ORDER BY a.day
-    `, [templateId], (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-}
-
-// Consolidated statistics function
-function getStatistics(templateId) {
-  return Promise.all([
-    getTimeDeviationPerActivity(templateId),
-    getAverageTimeDeviation(templateId),
-    getCumulativeTimeImpact(templateId),
-    getDayByDayTimeDeviation(templateId)
-  ]).then(results => {
-    // Add debugging information
-    process.stderr.write(`Debug - Statistics results: ${JSON.stringify(results)}\n`);
-    process.stdout.write(JSON.stringify(results));
-    return results;
-  }).catch(err => {
-    process.stderr.write(JSON.stringify({ error: err.message }));
-    throw err;
   });
 }
 
@@ -230,10 +213,10 @@ function testDatabaseConnection() {
   return new Promise((resolve, reject) => {
     db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='Template'", (err, row) => {
       if (err) {
-        process.stderr.write(`Error testing database connection: ${err.message}\n`);
+        console.error(`Error testing database connection: ${err.message}`);
         reject(err);
       } else {
-        process.stderr.write(`Database connection test result: ${JSON.stringify(row)}\n`);
+        console.log(`Database connection test result: ${JSON.stringify(row)}`);
         resolve(row);
       }
     });
@@ -241,22 +224,19 @@ function testDatabaseConnection() {
 }
 
 // Log the actual database path being used
-process.stderr.write(`Database path: ${dbPath}\n`);
+console.log(`Database path: ${dbPath}`);
 
 // Export database operations
 module.exports = {
   createTemplate,
   getTemplates,
+  getTemplateById,
   createActivity,
   getActivitiesForTemplate,
   createSession,
   getSessions,
   updateSessionActivity,
-  getTimeDeviationPerActivity,
-  getAverageTimeDeviation,
-  getCumulativeTimeImpact,
-  getDayByDayTimeDeviation,
-  getStatistics,
+  getDetailedStatistics,
   checkTemplateData,
   testDatabaseConnection
 };
