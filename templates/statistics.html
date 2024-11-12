@@ -1,41 +1,141 @@
 {% extends "base.html" %}
-{% block title %}OnTrak Statistics{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
-    <h1 class="mb-4">Training Statistics</h1>
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Sessions</h5>
-                    <p class="card-text display-4">{{ stats.total_sessions }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Total Activities Completed</h5>
-                    <p class="card-text display-4">{{ stats.total_activities_completed }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Average Activity Duration</h5>
-                    <p class="card-text display-4">{{ stats.average_activity_duration }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Most Common Activity</h5>
-                    <p class="card-text display-4">{{ stats.most_common_activity }}</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="container mx-auto px-4 py-8">
+  <h1 class="text-3xl font-bold mb-6">Training Statistics</h1>
+
+  <form action="{{ url_for('statistics') }}" method="get" class="mb-6">
+      <label for="template_id" class="block text-sm font-medium text-gray-700">Select Template:</label>
+      <select name="template_id" id="template_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+          <option value="">All Templates</option>
+          {% for template in stats.templates %}
+          <option value="{{ template.id }}" {% if stats.template and stats.template.id == template.id %}selected{% endif %}>
+              {{ template.name }}
+          </option>
+          {% endfor %}
+      </select>
+      <button type="submit" class="mt-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Update Statistics
+      </button>
+  </form>
+
+  {% if stats.template %}
+      {% if stats.error %}
+          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+              <strong class="font-bold">Error:</strong>
+              <span class="block sm:inline">{{ stats.error }}</span>
+          </div>
+      {% elif not stats.time_deviation_per_activity %}
+          <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+              <strong class="font-bold">No Data:</strong>
+              <span class="block sm:inline">There is no data available for this template.</span>
+          </div>
+      {% else %}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                  <div class="px-4 py-5 sm:p-6">
+                      <h3 class="text-lg leading-6 font-medium text-gray-900">Average Time Deviation</h3>
+                      <div class="mt-2 text-3xl font-semibold text-gray-900">
+                          {{ stats.average_time_deviation|round(2) }} minutes
+                      </div>
+                  </div>
+              </div>
+
+              <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+                  <div class="px-4 py-5 sm:p-6">
+                      <h3 class="text-lg leading-6 font-medium text-gray-900">Cumulative Time Impact</h3>
+                      <div class="mt-2 text-3xl font-semibold text-gray-900">
+                          {{ stats.cumulative_time_impact|round(2) }} minutes
+                      </div>
+                  </div>
+              </div>
+          </div>
+
+          <div class="mt-8">
+              <h2 class="text-2xl font-bold mb-4">Time Deviation per Activity</h2>
+              <div class="bg-white p-4 rounded-lg shadow">
+                  <canvas id="timeDeviationChart"></canvas>
+              </div>
+          </div>
+
+          <div class="mt-8">
+              <h2 class="text-2xl font-bold mb-4">Day-by-Day Time Deviation</h2>
+              <div class="bg-white p-4 rounded-lg shadow">
+                  <canvas id="dayByDayDeviationChart"></canvas>
+              </div>
+          </div>
+
+          <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+          <script>
+              // Time Deviation per Activity Chart
+              const timeDeviationCtx = document.getElementById('timeDeviationChart').getContext('2d');
+              new Chart(timeDeviationCtx, {
+                  type: 'bar',
+                  data: {
+                      labels: {{ stats.time_deviation_per_activity|map(attribute='name')|list|tojson }},
+                      datasets: [{
+                          label: 'Time Deviation (minutes)',
+                          data: {{ stats.time_deviation_per_activity|map(attribute='avg_time_deviation')|list|tojson }},
+                          backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                          borderColor: 'rgba(75, 192, 192, 1)',
+                          borderWidth: 1
+                      }]
+                  },
+                  options: {
+                      scales: {
+                          y: {
+                              beginAtZero: true
+                          }
+                      },
+                      responsive: true,
+                      plugins: {
+                          legend: {
+                              position: 'top',
+                          },
+                          title: {
+                              display: true,
+                              text: 'Time Deviation per Activity'
+                          }
+                      }
+                  }
+              });
+
+              // Day-by-Day Time Deviation Chart
+              const dayByDayCtx = document.getElementById('dayByDayDeviationChart').getContext('2d');
+              new Chart(dayByDayCtx, {
+                  type: 'line',
+                  data: {
+                      labels: {{ stats.day_by_day_time_deviation|map(attribute='day')|list|tojson }},
+                      datasets: [{
+                          label: 'Average Time Deviation (minutes)',
+                          data: {{ stats.day_by_day_time_deviation|map(attribute='avg_time_deviation')|list|tojson }},
+                          fill: false,
+                          borderColor: 'rgb(75, 192, 192)',
+                          tension: 0.1
+                      }]
+                  },
+                  options: {
+                      scales: {
+                          y: {
+                              beginAtZero: true
+                          }
+                      },
+                      responsive: true,
+                      plugins: {
+                          legend: {
+                              position: 'top',
+                          },
+                          title: {
+                              display: true,
+                              text: 'Day-by-Day Time Deviation'
+                          }
+                      }
+                  }
+              });
+          </script>
+      {% endif %}
+  {% else %}
+      <p class="text-lg text-gray-700">Please select a template to view statistics.</p>
+  {% endif %}
 </div>
 {% endblock %}

@@ -2,12 +2,12 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // Database connection
-const dbPath = path.resolve(__dirname, '..', 'ontrak.db');
+const dbPath = path.resolve(__dirname, '..', 'instance', 'ontrak.db');
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
-    console.error('Error connecting to the database:', err.message);
+    process.stderr.write(`Error connecting to the database: ${err.message}\n`);
   } else {
-    console.log('Connected to the SQLite database.');
+    process.stderr.write('Connected to the SQLite database.\n');
     initDatabase();
   }
 });
@@ -47,11 +47,13 @@ function initDatabase() {
       current_day INTEGER DEFAULT 1,
       day_started BOOLEAN DEFAULT FALSE,
       current_activity_id INTEGER,
+      start_date DATE DEFAULT CURRENT_DATE,
+      end_date DATE,
       FOREIGN KEY (template_id) REFERENCES Template(id),
       FOREIGN KEY (current_activity_id) REFERENCES Activity(id)
     )`);
 
-    console.log('Database tables created or already exist.');
+    process.stderr.write('Database tables created or already exist.\n');
   });
 }
 
@@ -59,11 +61,8 @@ function initDatabase() {
 function createTemplate(name, description, duration) {
   return new Promise((resolve, reject) => {
     db.run('INSERT INTO Template (name, description, duration) VALUES (?, ?, ?)', [name, description, duration], function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(this.lastID);
-      }
+      if (err) reject(err);
+      else resolve(this.lastID);
     });
   });
 }
@@ -71,11 +70,8 @@ function createTemplate(name, description, duration) {
 function getTemplates() {
   return new Promise((resolve, reject) => {
     db.all('SELECT * FROM Template', (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows);
-      }
+      if (err) reject(err);
+      else resolve(rows);
     });
   });
 }
@@ -86,11 +82,8 @@ function createActivity(templateId, day, name, description, startTime, duration)
     db.run('INSERT INTO Activity (template_id, day, name, description, start_time, duration) VALUES (?, ?, ?, ?, ?, ?)',
       [templateId, day, name, description, startTime, duration],
       function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(this.lastID);
-        }
+        if (err) reject(err);
+        else resolve(this.lastID);
       }
     );
   });
@@ -99,11 +92,8 @@ function createActivity(templateId, day, name, description, startTime, duration)
 function getActivitiesForTemplate(templateId) {
   return new Promise((resolve, reject) => {
     db.all('SELECT * FROM Activity WHERE template_id = ? ORDER BY day, start_time', [templateId], (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows);
-      }
+      if (err) reject(err);
+      else resolve(rows);
     });
   });
 }
@@ -112,11 +102,8 @@ function getActivitiesForTemplate(templateId) {
 function createSession(templateId, name) {
   return new Promise((resolve, reject) => {
     db.run('INSERT INTO Session (template_id, name) VALUES (?, ?)', [templateId, name], function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(this.lastID);
-      }
+      if (err) reject(err);
+      else resolve(this.lastID);
     });
   });
 }
@@ -124,11 +111,8 @@ function createSession(templateId, name) {
 function getSessions() {
   return new Promise((resolve, reject) => {
     db.all('SELECT * FROM Session', (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows);
-      }
+      if (err) reject(err);
+      else resolve(rows);
     });
   });
 }
@@ -136,23 +120,143 @@ function getSessions() {
 function updateSessionActivity(sessionId, activityId) {
   return new Promise((resolve, reject) => {
     db.run('UPDATE Session SET current_activity_id = ? WHERE id = ?', [activityId, sessionId], function(err) {
+      if (err) reject(err);
+      else resolve(this.changes);
+    });
+  });
+}
+
+// Time deviation analysis functions
+function getTimeDeviationPerActivity(templateId) {
+  return new Promise((resolve, reject) => {
+    db.all(`
+      SELECT 
+        a.name,
+        a.duration as planned_duration,
+        AVG(a.actual_duration) as avg_actual_duration,
+        AVG(a.actual_duration - a.duration) as avg_time_deviation
+      FROM Activity a
+      JOIN Session s ON a.template_id = s.template_id
+      WHERE a.template_id = ? AND a.completed = 1
+      GROUP BY a.id
+      ORDER BY avg_time_deviation DESC
+    `, [templateId], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
+function getAverageTimeDeviation(templateId) {
+  return new Promise((resolve, reject) => {
+    db.get(`
+      SELECT AVG(a.actual_duration - a.duration) as avg_time_deviation
+      FROM Activity a
+      JOIN Session s ON a.template_id = s.template_id
+      WHERE a.template_id = ? AND a.completed = 1
+    `, [templateId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row ? row.avg_time_deviation : 0);
+    });
+  });
+}
+
+function getCumulativeTimeImpact(templateId) {
+  return new Promise((resolve, reject) => {
+    db.get(`
+      SELECT SUM(a.actual_duration - a.duration) as cumulative_time_impact
+      FROM Activity a
+      JOIN Session s ON a.template_id = s.template_id
+      WHERE a.template_id = ? AND a.completed = 1
+    `, [templateId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row ? row.cumulative_time_impact : 0);
+    });
+  });
+}
+
+function getDayByDayTimeDeviation(templateId) {
+  return new Promise((resolve, reject) => {
+    db.all(`
+      SELECT 
+        a.day,
+        AVG(a.actual_duration - a.duration) as avg_time_deviation
+      FROM Activity a
+      JOIN Session s ON a.template_id = s.template_id
+      WHERE a.template_id = ? AND a.completed = 1
+      GROUP BY a.day
+      ORDER BY a.day
+    `, [templateId], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+}
+
+// Consolidated statistics function
+function getStatistics(templateId) {
+  return Promise.all([
+    getTimeDeviationPerActivity(templateId),
+    getAverageTimeDeviation(templateId),
+    getCumulativeTimeImpact(templateId),
+    getDayByDayTimeDeviation(templateId)
+  ]).then(results => {
+    // Add debugging information
+    process.stderr.write(`Debug - Statistics results: ${JSON.stringify(results)}\n`);
+    process.stdout.write(JSON.stringify(results));
+    return results;
+  }).catch(err => {
+    process.stderr.write(JSON.stringify({ error: err.message }));
+    throw err;
+  });
+}
+
+// Check for data in a template
+function checkTemplateData(templateId) {
+  return new Promise((resolve, reject) => {
+    db.get(`
+      SELECT COUNT(*) as count
+      FROM Activity
+      WHERE template_id = ? AND completed = 1
+    `, [templateId], (err, row) => {
+      if (err) reject(err);
+      else resolve(row.count);
+    });
+  });
+}
+
+// Test database connection
+function testDatabaseConnection() {
+  return new Promise((resolve, reject) => {
+    db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='Template'", (err, row) => {
       if (err) {
+        process.stderr.write(`Error testing database connection: ${err.message}\n`);
         reject(err);
       } else {
-        resolve(this.changes);
+        process.stderr.write(`Database connection test result: ${JSON.stringify(row)}\n`);
+        resolve(row);
       }
     });
   });
 }
 
+// Log the actual database path being used
+process.stderr.write(`Database path: ${dbPath}\n`);
+
 // Export database operations
 module.exports = {
-  db,
   createTemplate,
   getTemplates,
   createActivity,
   getActivitiesForTemplate,
   createSession,
   getSessions,
-  updateSessionActivity
+  updateSessionActivity,
+  getTimeDeviationPerActivity,
+  getAverageTimeDeviation,
+  getCumulativeTimeImpact,
+  getDayByDayTimeDeviation,
+  getStatistics,
+  checkTemplateData,
+  testDatabaseConnection
 };

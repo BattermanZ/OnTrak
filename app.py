@@ -284,51 +284,64 @@ def get_session_status(session_id):
 
 @app.route('/statistics')
 def statistics():
-    # Get total sessions
-    total_sessions = Session.query.count()
+    template_id = request.args.get('template_id', type=int)
     
-    # Get total completed activities
-    total_activities_completed = Activity.query.filter_by(completed=True).count()
+    templates = Template.query.all()
     
-    # Calculate average duration for completed activities
-    avg_duration = db.session.query(
-        db.func.avg(Activity.actual_duration)
-    ).filter(
-        Activity.completed == True,
-        Activity.actual_duration.isnot(None)
-    ).scalar()
-    avg_duration = round(avg_duration) if avg_duration else 0
-    
-    # Find most common activity
-    most_common = db.session.query(
-        Activity.name,
-        db.func.count(Activity.id).label('count')
-    ).filter(
-        Activity.completed == True
-    ).group_by(
-        Activity.name
-    ).order_by(
-        db.desc('count')
-    ).first()
-    
-    most_common_activity = most_common.name if most_common else "N/A"
-    most_common_count = most_common[1] if most_common else 0
-
-    stats = {
-        'total_sessions': total_sessions,
-        'total_activities_completed': total_activities_completed,
-        'average_activity_duration': f"{avg_duration} minutes",
-        'most_common_activity': f"{most_common_activity} (completed {most_common_count} times)"
-    }
-    
-    return render_template('statistics.html', stats=stats)
-
-    stats = {
-        'total_sessions': total_sessions,
-        'total_activities_completed': total_activities_completed,
-        'average_activity_duration': f"{avg_duration} minutes",
-        'most_common_activity': f"{most_common_activity} (completed {most_common_count} times)"
-    }
+    if template_id:
+        template = Template.query.get_or_404(template_id)
+        
+        # Check if there's data for this template
+        check_data_script = f"""
+        const db = require('./server/database');
+        db.checkTemplateData({template_id}).then(count => console.log(JSON.stringify({{"count": count}})));
+        """
+        data_count = json.loads(run_node_script(check_data_script))['count']
+        
+        if data_count == 0:
+            app.logger.warning(f"No completed activities found for template {template_id}")
+            stats = {
+                'template': template,
+                'templates': templates,
+                'error': 'No data available for this template'
+            }
+        else:
+            statistics_script = f"""
+            const db = require('./server/database');
+            db.getStatistics({template_id});
+            """
+            
+            try:
+                output = run_node_script(statistics_script)
+                app.logger.info(f"Raw statistics output: {output}")
+                statistics_data = json.loads(output)
+                
+                time_deviation_per_activity = statistics_data[0]
+                average_time_deviation = statistics_data[1]
+                cumulative_time_impact = statistics_data[2]
+                day_by_day_time_deviation = statistics_data[3]
+                
+                stats = {
+                    'template': template,
+                    'templates': templates,
+                    'time_deviation_per_activity': time_deviation_per_activity,
+                    'average_time_deviation': average_time_deviation,
+                    'cumulative_time_impact': cumulative_time_impact,
+                    'day_by_day_time_deviation': day_by_day_time_deviation
+                }
+            except json.JSONDecodeError as e:
+                app.logger.error(f"Error decoding JSON: {e}")
+                app.logger.error(f"Raw output: {output}")
+                stats = {
+                    'template': template,
+                    'templates': templates,
+                    'error': 'Error fetching statistics data'
+                }
+    else:
+        stats = {
+            'template': None,
+            'templates': templates
+        }
     
     return render_template('statistics.html', stats=stats)
 
