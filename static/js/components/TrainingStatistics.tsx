@@ -1,12 +1,13 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import React, { useState, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, Cell } from 'recharts';
 
 interface Activity {
   name: string;
   planned_duration: number;
   actual_duration: number;
+  day: number;
 }
 
 interface Statistics {
@@ -22,28 +23,35 @@ interface Template {
   duration: number;
 }
 
-interface AveragedActivity {
+interface ActivityDeviation {
   name: string;
-  planned_duration: number;
-  average_actual_duration: number;
+  average_deviation: number;
+}
+
+interface DayDeviation {
+  name: string;
+  day: number;
+  average_deviation: number;
 }
 
 const CHART_WIDTH = 1000;
 const MIN_CHART_HEIGHT = 300;
 const MAX_CHART_HEIGHT = 1200;
-const PIXELS_PER_BAR = 100; // Increased from 40 to 100
+const PIXELS_PER_BAR = 50;
 const MAX_LABEL_WIDTH = 200;
-const CHAR_WIDTH = 6; // Approximate width of a character in pixels
+const CHAR_WIDTH = 6;
 
 export default function TrainingStatistics() {
   const [selectedDay, setSelectedDay] = useState<string>('all');
   const [stats, setStats] = useState<Statistics | null>(null);
-  const [averagedActivities, setAveragedActivities] = useState<AveragedActivity[]>([]);
+  const [activityDeviations, setActivityDeviations] = useState<ActivityDeviation[]>([]);
+  const [dayDeviations, setDayDeviations] = useState<DayDeviation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [template, setTemplate] = useState<Template | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [chartHeight, setChartHeight] = useState<number>(MIN_CHART_HEIGHT);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [activityChartHeight, setActivityChartHeight] = useState<number>(MIN_CHART_HEIGHT);
+  const [dayChartHeight, setDayChartHeight] = useState<number>(MIN_CHART_HEIGHT);
+  const [maxDeviation, setMaxDeviation] = useState<number>(0);
 
   useEffect(() => {
     console.log('Component mounted or updated');
@@ -82,7 +90,8 @@ export default function TrainingStatistics() {
             throw new Error(data.error);
           }
           setStats(data);
-          calculateAverageActualDurations(data.activities);
+          calculateActivityDeviations(data.activities);
+          calculateDayDeviations(data.activities);
           setError(null);
           setLoading(false);
         })
@@ -95,29 +104,68 @@ export default function TrainingStatistics() {
     }
   }, [selectedDay, template]);
 
-  const calculateAverageActualDurations = (activities: Activity[]) => {
-    const activityMap = new Map<string, { total: number; count: number; planned: number }>();
-
+  const calculateActivityDeviations = (activities: Activity[]) => {
+    const deviationMap = new Map<string, number[]>();
+    
     activities.forEach(activity => {
-      if (!activityMap.has(activity.name)) {
-        activityMap.set(activity.name, { total: 0, count: 0, planned: activity.planned_duration });
+      const deviation = activity.actual_duration - activity.planned_duration;
+      if (!deviationMap.has(activity.name)) {
+        deviationMap.set(activity.name, []);
       }
-      const current = activityMap.get(activity.name)!;
-      current.total += activity.actual_duration;
-      current.count += 1;
+      deviationMap.get(activity.name)!.push(deviation);
     });
 
-    const averaged: AveragedActivity[] = Array.from(activityMap.entries()).map(([name, data]) => ({
-      name,
-      planned_duration: data.planned,
-      average_actual_duration: data.total / data.count
-    }));
+    const deviations: ActivityDeviation[] = Array.from(deviationMap.entries()).map(([name, deviations]) => {
+      const average = deviations.reduce((sum, val) => sum + val, 0) / deviations.length;
+      return {
+        name,
+        average_deviation: average
+      };
+    });
 
-    setAveragedActivities(averaged);
+    setActivityDeviations(deviations);
 
-    // Calculate and set the chart height based on the number of activities
-    const calculatedHeight = Math.min(Math.max(averaged.length * PIXELS_PER_BAR, MIN_CHART_HEIGHT), MAX_CHART_HEIGHT);
-    setChartHeight(calculatedHeight);
+    const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
+    setMaxDeviation(prevMax => Math.max(prevMax, maxDev));
+
+    const calculatedHeight = Math.min(Math.max(deviations.length * PIXELS_PER_BAR, MIN_CHART_HEIGHT), MAX_CHART_HEIGHT);
+    setActivityChartHeight(calculatedHeight);
+  };
+
+  const calculateDayDeviations = (activities: Activity[]) => {
+    if (!template) return;
+
+    const dayMap = new Map<number, number[]>();
+    
+    for (let day = 1; day <= template.duration; day++) {
+      dayMap.set(day, []);
+    }
+    
+    activities.forEach(activity => {
+      const deviation = activity.actual_duration - activity.planned_duration;
+      dayMap.get(activity.day)?.push(deviation);
+    });
+
+    const deviations: DayDeviation[] = Array.from(dayMap.entries())
+      .sort(([dayA], [dayB]) => dayA - dayB)
+      .map(([day, deviations]) => ({
+        name: `Day ${day}`,
+        day,
+        average_deviation: deviations.length > 0 
+          ? deviations.reduce((sum, val) => sum + val, 0) / deviations.length 
+          : 0
+      }));
+
+    setDayDeviations(deviations);
+
+    const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
+    setMaxDeviation(prevMax => Math.max(prevMax, maxDev));
+
+    const calculatedHeight = Math.min(
+      Math.max(template.duration * PIXELS_PER_BAR, MIN_CHART_HEIGHT),
+      MAX_CHART_HEIGHT
+    );
+    setDayChartHeight(calculatedHeight);
   };
 
   const wrapText = (text: string, maxWidth: number) => {
@@ -160,6 +208,23 @@ export default function TrainingStatistics() {
     );
   };
 
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const deviation = data.average_deviation;
+      const formattedDeviation = Math.abs(deviation).toFixed(2);
+      const deviationType = deviation > 0 ? 'longer' : 'shorter';
+      
+      return (
+        <div className="bg-white p-2 border border-gray-300 rounded shadow">
+          <p className="font-bold">{data.name}</p>
+          <p>{`${formattedDeviation} minutes ${deviationType} than planned`}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <div className="flex h-[200px] items-center justify-center">
@@ -185,7 +250,6 @@ export default function TrainingStatistics() {
 
   return (
     <div className="max-w-[1200px] mx-auto p-8">
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
       <h1 className="text-3xl font-bold mb-8 text-blue-600">Training Statistics</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -231,23 +295,23 @@ export default function TrainingStatistics() {
         </select>
       </div>
 
-      {averagedActivities.length === 0 ? (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+      {dayDeviations.length === 0 ? (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-6" role="alert">
           <strong className="font-bold">No Data:</strong>
-          <span className="block sm:inline"> There are no completed activities for the selected period.</span>
+          <span className="block sm:inline"> There are no completed days for the selected period.</span>
         </div>
       ) : (
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold mb-2 text-gray-800">Activity Durations</h2>
+        <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
+          <h2 className="text-xl font-bold mb-2 text-gray-800">Day Average Deviation</h2>
           <p className="text-gray-600 text-sm mb-6">
-            Planned vs Average Actual Duration for each activity
+            Average deviation from planned duration for each day
           </p>
-          <div className={`h-[${chartHeight}px] w-full overflow-x-auto`}>
+          <div className={`h-[${dayChartHeight}px] w-full overflow-x-auto`}>
             <BarChart
               width={CHART_WIDTH}
-              height={chartHeight}
+              height={dayChartHeight}
               layout="vertical"
-              data={averagedActivities}
+              data={dayDeviations}
               margin={{
                 top: 5,
                 right: 30,
@@ -256,7 +320,62 @@ export default function TrainingStatistics() {
               }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" unit=" min" />
+              <XAxis 
+                type="number" 
+                domain={[-maxDeviation, maxDeviation]} 
+                tickFormatter={(value) => `${Math.round(value)} min`}
+              />
+              <YAxis 
+                dataKey="name" 
+                type="category"
+                width={MAX_LABEL_WIDTH}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <ReferenceLine x={0} stroke="#000" />
+              <Bar dataKey="average_deviation" name="Average Deviation">
+                {dayDeviations.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={entry.average_deviation > 0 ? "#ef4444" : "#22c55e"} 
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </div>
+        </div>
+      )}
+
+      {activityDeviations.length === 0 ? (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">No Data:</strong>
+          <span className="block sm:inline"> There are no completed activities for the selected period.</span>
+        </div>
+      ) : (
+        <div className="bg-white p-6 rounded-lg shadow-sm">
+          <h2 className="text-xl font-bold mb-2 text-gray-800">Activity Duration Deviation</h2>
+          <p className="text-gray-600 text-sm mb-6">
+            Average deviation from planned duration for each activity
+          </p>
+          <div className={`h-[${activityChartHeight}px] w-full overflow-x-auto`}>
+            <BarChart
+              width={CHART_WIDTH}
+              height={activityChartHeight}
+              layout="vertical"
+              data={activityDeviations}
+              margin={{
+                top: 5,
+                right: 30,
+                left: 5,
+                bottom: 5,
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                type="number" 
+                domain={[-maxDeviation, maxDeviation]} 
+                tickFormatter={(value) => `${Math.round(value)} min`}
+              />
               <YAxis 
                 dataKey="name" 
                 type="category" 
@@ -264,13 +383,14 @@ export default function TrainingStatistics() {
                 tick={<CustomYAxisTick />}
                 dx={-10}
               />
-              <Tooltip 
-                formatter={(value) => [`${value.toFixed(2)} min`, '']}
-                labelStyle={{ fontWeight: 'bold' }}
-              />
+              <Tooltip content={<CustomTooltip />} />
               <Legend />
-              <Bar dataKey="planned_duration" name="Planned Duration" fill="#8884d8" />
-              <Bar dataKey="average_actual_duration" name="Average Actual Duration" fill="#82ca9d" />
+              <ReferenceLine x={0} stroke="#000" />
+              <Bar dataKey="average_deviation" name="Average Deviation">
+                {activityDeviations.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.average_deviation > 0 ? "#ef4444" : "#22c55e"} />
+                ))}
+              </Bar>
             </BarChart>
           </div>
         </div>
