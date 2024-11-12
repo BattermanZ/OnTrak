@@ -22,22 +22,28 @@ interface Template {
   duration: number;
 }
 
+interface AveragedActivity {
+  name: string;
+  planned_duration: number;
+  average_actual_duration: number;
+}
+
+const CHART_WIDTH = 1000;
+const MIN_CHART_HEIGHT = 300;
+const MAX_CHART_HEIGHT = 1200;
+const PIXELS_PER_BAR = 100; // Increased from 40 to 100
+const MAX_LABEL_WIDTH = 200;
+const CHAR_WIDTH = 6; // Approximate width of a character in pixels
+
 export default function TrainingStatistics() {
   const [selectedDay, setSelectedDay] = useState<string>('all');
   const [stats, setStats] = useState<Statistics | null>(null);
+  const [averagedActivities, setAveragedActivities] = useState<AveragedActivity[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [template, setTemplate] = useState<Template | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const renderCount = useRef(0);
-
-  // Hardcoded data for the graph
-  const hardcodedActivities: Activity[] = [
-    { name: "Warm-up", planned_duration: 15, actual_duration: 20 },
-    { name: "Stretching", planned_duration: 10, actual_duration: 12 },
-    { name: "Cardio", planned_duration: 30, actual_duration: 35 },
-    { name: "Strength Training", planned_duration: 45, actual_duration: 40 },
-    { name: "Cool-down", planned_duration: 10, actual_duration: 8 },
-  ];
+  const [chartHeight, setChartHeight] = useState<number>(MIN_CHART_HEIGHT);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     console.log('Component mounted or updated');
@@ -75,10 +81,8 @@ export default function TrainingStatistics() {
           if (data.error) {
             throw new Error(data.error);
           }
-          setStats({
-            ...data,
-            activities: hardcodedActivities
-          });
+          setStats(data);
+          calculateAverageActualDurations(data.activities);
           setError(null);
           setLoading(false);
         })
@@ -91,11 +95,70 @@ export default function TrainingStatistics() {
     }
   }, [selectedDay, template]);
 
-  useEffect(() => {
-    console.log('Stats updated:', stats);
-  }, [stats]);
+  const calculateAverageActualDurations = (activities: Activity[]) => {
+    const activityMap = new Map<string, { total: number; count: number; planned: number }>();
 
-  console.log('Render count:', ++renderCount.current);
+    activities.forEach(activity => {
+      if (!activityMap.has(activity.name)) {
+        activityMap.set(activity.name, { total: 0, count: 0, planned: activity.planned_duration });
+      }
+      const current = activityMap.get(activity.name)!;
+      current.total += activity.actual_duration;
+      current.count += 1;
+    });
+
+    const averaged: AveragedActivity[] = Array.from(activityMap.entries()).map(([name, data]) => ({
+      name,
+      planned_duration: data.planned,
+      average_actual_duration: data.total / data.count
+    }));
+
+    setAveragedActivities(averaged);
+
+    // Calculate and set the chart height based on the number of activities
+    const calculatedHeight = Math.min(Math.max(averaged.length * PIXELS_PER_BAR, MIN_CHART_HEIGHT), MAX_CHART_HEIGHT);
+    setChartHeight(calculatedHeight);
+  };
+
+  const wrapText = (text: string, maxWidth: number) => {
+    if (text.length * CHAR_WIDTH <= maxWidth) return text;
+    const words = text.split(' ');
+    let line = '';
+    let result = '';
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + ' ';
+      if (testLine.length * CHAR_WIDTH > maxWidth) {
+        result += line.trim() + '\n';
+        line = words[i] + ' ';
+      } else {
+        line = testLine;
+      }
+    }
+    result += line.trim();
+    return result;
+  };
+
+  const CustomYAxisTick = ({ x, y, payload }: any) => {
+    const wrappedText = wrapText(payload.value, MAX_LABEL_WIDTH);
+    const lines = wrappedText.split('\n');
+    return (
+      <g transform={`translate(${x},${y})`}>
+        {lines.map((line, index) => (
+          <text
+            key={index}
+            x={0}
+            y={index * 12}
+            dy={-6 * (lines.length - 1) + 12}
+            textAnchor="end"
+            fill="#666"
+            fontSize={12}
+          >
+            {line}
+          </text>
+        ))}
+      </g>
+    );
+  };
 
   if (loading) {
     return (
@@ -122,6 +185,7 @@ export default function TrainingStatistics() {
 
   return (
     <div className="max-w-[1200px] mx-auto p-8">
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
       <h1 className="text-3xl font-bold mb-8 text-blue-600">Training Statistics</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -167,7 +231,7 @@ export default function TrainingStatistics() {
         </select>
       </div>
 
-      {stats.activities.length === 0 ? (
+      {averagedActivities.length === 0 ? (
         <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
           <strong className="font-bold">No Data:</strong>
           <span className="block sm:inline"> There are no completed activities for the selected period.</span>
@@ -176,27 +240,37 @@ export default function TrainingStatistics() {
         <div className="bg-white p-6 rounded-lg shadow-sm">
           <h2 className="text-xl font-bold mb-2 text-gray-800">Activity Durations</h2>
           <p className="text-gray-600 text-sm mb-6">
-            Planned vs Actual Duration for each activity
+            Planned vs Average Actual Duration for each activity
           </p>
-          <div className="h-[600px] w-full border-2 border-red-500">
+          <div className={`h-[${chartHeight}px] w-full overflow-x-auto`}>
             <BarChart
-              width={1000}
-              height={500}
-              data={stats.activities}
+              width={CHART_WIDTH}
+              height={chartHeight}
+              layout="vertical"
+              data={averagedActivities}
               margin={{
                 top: 5,
                 right: 30,
-                left: 20,
+                left: 5,
                 bottom: 5,
               }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
+              <XAxis type="number" unit=" min" />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                width={MAX_LABEL_WIDTH} 
+                tick={<CustomYAxisTick />}
+                dx={-10}
+              />
+              <Tooltip 
+                formatter={(value) => [`${value.toFixed(2)} min`, '']}
+                labelStyle={{ fontWeight: 'bold' }}
+              />
               <Legend />
               <Bar dataKey="planned_duration" name="Planned Duration" fill="#8884d8" />
-              <Bar dataKey="actual_duration" name="Actual Duration" fill="#82ca9d" />
+              <Bar dataKey="average_actual_duration" name="Average Actual Duration" fill="#82ca9d" />
             </BarChart>
           </div>
         </div>
