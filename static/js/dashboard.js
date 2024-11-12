@@ -6,7 +6,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const currentActivityProgress = document.getElementById('current-activity-progress');
     const nextActivityName = document.getElementById('next-activity-name');
     const nextActivityTime = document.getElementById('next-activity-time');
-    const skipActivityBtn = document.getElementById('skip-activity');
+    const moveToNextActivityBtn = document.getElementById('move-to-next-activity');
+    const closeDayBtn = document.getElementById('close-day');
+    const undoMoveBtn = document.getElementById('undo-move');
     const dayActivitiesList = document.getElementById('day-activities-list');
 
     let currentSessionId = null;
@@ -48,9 +50,25 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    skipActivityBtn.addEventListener('click', function() {
+    moveToNextActivityBtn.addEventListener('click', function() {
         if (currentSessionId) {
-            skipActivity(currentSessionId);
+            moveToNextActivity(currentSessionId);
+        } else {
+            alert('No active session selected');
+        }
+    });
+
+    closeDayBtn.addEventListener('click', function() {
+        if (currentSessionId) {
+            endDay(currentSessionId);
+        } else {
+            alert('No active session selected');
+        }
+    });
+
+    undoMoveBtn.addEventListener('click', function() {
+        if (currentSessionId) {
+            undoMove(currentSessionId);
         } else {
             alert('No active session selected');
         }
@@ -73,9 +91,13 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.next_activity) {
                 nextActivityName.textContent = data.next_activity.name;
                 nextActivityTime.textContent = `${data.next_activity.start_time} - ${data.next_activity.duration} minutes`;
+                moveToNextActivityBtn.style.display = 'inline-block';
+                closeDayBtn.style.display = 'none';
             } else {
                 nextActivityName.textContent = 'No next activity';
                 nextActivityTime.textContent = '';
+                moveToNextActivityBtn.style.display = 'none';
+                closeDayBtn.style.display = 'inline-block';
             }
 
             updateDaySchedule(data.day_activities);
@@ -114,7 +136,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         currentActivityProgress.style.width = `${progressPercentage}%`;
         currentActivityProgress.textContent = progressText;
-        currentActivityProgress.setAttribute('aria-valuenow', progressPercentage);
+        current
+
+ActivityProgress.setAttribute('aria-valuenow', progressPercentage);
     }
 
     function updateDaySchedule(activities) {
@@ -156,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 alert('Day started successfully!');
-                location.reload();
+                updateSessionDetails(sessionId);
             } else {
                 alert(data.message);
             }
@@ -176,12 +200,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function skipActivity(sessionId) {
-        fetch(`/skip_activity/${sessionId}`, { method: 'POST' })
+    function moveToNextActivity(sessionId) {
+        fetch(`/move_to_next_activity/${sessionId}`, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Activity skipped successfully!');
+                alert('Moved to next activity successfully!');
+                updateSessionDetails(sessionId);
+            } else {
+                alert(data.message);
+            }
+        });
+    }
+
+    function undoMove(sessionId) {
+        fetch(`/undo_move/${sessionId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Undo successful!');
                 updateSessionDetails(sessionId);
             } else {
                 alert(data.message);
