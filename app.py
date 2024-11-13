@@ -377,6 +377,19 @@ def get_all_templates():
         } for template in templates
     ])
 
+@app.route('/api/sessions')
+def get_all_sessions():
+    sessions = Session.query.all()
+    return jsonify([
+        {
+            'id': session.id,
+            'name': session.name,
+            'template_id': session.template_id,
+            'current_day': session.current_day,
+            'day_started': session.day_started
+        } for session in sessions
+    ])
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
