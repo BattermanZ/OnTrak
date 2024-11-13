@@ -345,6 +345,16 @@ def get_statistics_api(template_id):
         if 'error' in statistics_data:
             raise ValueError(statistics_data['error'])
         
+        # Count the number of sessions for this template
+        number_of_sessions = Session.query.filter_by(template_id=template_id).count()
+        
+        # Add number_of_sessions to the statistics data
+        statistics_data['number_of_sessions'] = number_of_sessions
+        
+        # Remove average_time_deviation and cumulative_time_impact if they exist
+        statistics_data.pop('average_time_deviation', None)
+        statistics_data.pop('cumulative_time_impact', None)
+        
         return jsonify(statistics_data)
     except json.JSONDecodeError as e:
         logger.error(f"JSON parsing error for template_id {template_id}: {str(e)}")
@@ -352,6 +362,17 @@ def get_statistics_api(template_id):
     except Exception as e:
         logger.error(f"Error fetching statistics for template_id {template_id}: {str(e)}")
         return jsonify({'error': 'Failed to fetch statistics'}), 500
+
+@app.route('/api/templates')
+def get_all_templates():
+    templates = Template.query.all()
+    return jsonify([
+        {
+            'id': template.id,
+            'name': template.name,
+            'duration': template.duration
+        } for template in templates
+    ])
 
 if __name__ == '__main__':
     with app.app_context():

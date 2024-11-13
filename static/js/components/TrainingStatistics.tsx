@@ -12,8 +12,7 @@ interface Activity {
 
 interface Statistics {
   total_activities: number;
-  average_time_deviation: number;
-  cumulative_time_impact: number;
+  number_of_sessions: number;
   activities: Activity[];
 }
 
@@ -39,10 +38,11 @@ const MIN_CHART_HEIGHT = 300;
 const MAX_CHART_HEIGHT = 1200;
 const PIXELS_PER_BAR = 50;
 const MAX_LABEL_WIDTH = 200;
-const CHAR_WIDTH = 6;
 
 export default function TrainingStatistics() {
   const [selectedDay, setSelectedDay] = useState<string>('all');
+  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [stats, setStats] = useState<Statistics | null>(null);
   const [activityDeviations, setActivityDeviations] = useState<ActivityDeviation[]>([]);
   const [dayDeviations, setDayDeviations] = useState<DayDeviation[]>([]);
@@ -51,34 +51,55 @@ export default function TrainingStatistics() {
   const [loading, setLoading] = useState<boolean>(true);
   const [activityChartHeight, setActivityChartHeight] = useState<number>(MIN_CHART_HEIGHT);
   const [dayChartHeight, setDayChartHeight] = useState<number>(MIN_CHART_HEIGHT);
-  const [maxDeviation, setMaxDeviation] = useState<number>(0);
+  const [activityMaxDeviation, setActivityMaxDeviation] = useState<number>(0);
+  const [dayMaxDeviation, setDayMaxDeviation] = useState<number>(0);
 
   useEffect(() => {
-    console.log('Component mounted or updated');
-    setLoading(true);
-    fetch('/api/template/1')
+    fetch('/api/templates')
       .then(response => {
         if (!response.ok) {
-          throw new Error('Failed to fetch template details');
+          throw new Error('Failed to fetch templates');
         }
         return response.json();
       })
       .then(data => {
-        setTemplate(data);
-        setLoading(false);
+        setTemplates(data);
+        if (data.length > 0) {
+          setSelectedTemplate(data[0].id);
+        }
       })
       .catch(err => {
-        console.error('Error fetching template:', err);
-        setError('Failed to load template details');
-        setLoading(false);
+        console.error('Error fetching templates:', err);
+        setError('Failed to load templates: ' + err.message);
       });
   }, []);
 
   useEffect(() => {
-    if (template) {
-      console.log('Fetching statistics');
+    if (selectedTemplate) {
       setLoading(true);
-      fetch(`/api/statistics/${template.id}${selectedDay !== 'all' ? `?day=${selectedDay}` : ''}`)
+      fetch(`/api/template/${selectedTemplate}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch template details');
+          }
+          return response.json();
+        })
+        .then(data => {
+          setTemplate(data);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error('Error fetching template:', err);
+          setError('Failed to load template details: ' + err.message);
+          setLoading(false);
+        });
+    }
+  }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (selectedTemplate) {
+      setLoading(true);
+      fetch(`/api/statistics/${selectedTemplate}${selectedDay !== 'all' ? `?day=${selectedDay}` : ''}`)
         .then(response => {
           if (!response.ok) {
             throw new Error('Network response was not ok');
@@ -90,8 +111,12 @@ export default function TrainingStatistics() {
             throw new Error(data.error);
           }
           setStats(data);
-          calculateActivityDeviations(data.activities);
-          calculateDayDeviations(data.activities);
+          if (Array.isArray(data.activities)) {
+            calculateActivityDeviations(data.activities);
+            calculateDayDeviations(data.activities);
+          } else {
+            throw new Error('Activities data is not an array');
+          }
           setError(null);
           setLoading(false);
         })
@@ -102,110 +127,95 @@ export default function TrainingStatistics() {
           setLoading(false);
         });
     }
-  }, [selectedDay, template]);
+  }, [selectedDay, selectedTemplate]);
 
   const calculateActivityDeviations = (activities: Activity[]) => {
-    const deviationMap = new Map<string, number[]>();
-    
-    activities.forEach(activity => {
-      const deviation = activity.actual_duration - activity.planned_duration;
-      if (!deviationMap.has(activity.name)) {
-        deviationMap.set(activity.name, []);
-      }
-      deviationMap.get(activity.name)!.push(deviation);
-    });
+    try {
+      const deviationMap = new Map<string, number[]>();
+      
+      activities.forEach(activity => {
+        if (typeof activity.actual_duration === 'number' && typeof activity.planned_duration === 'number') {
+          const deviation = activity.actual_duration - activity.planned_duration;
+          if (!deviationMap.has(activity.name)) {
+            deviationMap.set(activity.name, []);
+          }
+          deviationMap.get(activity.name)!.push(deviation);
+        } else {
+          console.warn('Invalid activity data:', activity);
+        }
+      });
 
-    const deviations: ActivityDeviation[] = Array.from(deviationMap.entries()).map(([name, deviations]) => {
-      const average = deviations.reduce((sum, val) => sum + val, 0) / deviations.length;
-      return {
-        name,
-        average_deviation: average
-      };
-    });
+      const deviations: ActivityDeviation[] = Array.from(deviationMap.entries()).map(([name, deviations]) => {
+        const average = deviations.reduce((sum, val) => sum + val, 0) / deviations.length;
+        return {
+          name,
+          average_deviation: average
+        };
+      });
 
-    setActivityDeviations(deviations);
+      setActivityDeviations(deviations);
 
-    const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
-    setMaxDeviation(prevMax => Math.max(prevMax, maxDev));
+      const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
+      setActivityMaxDeviation(maxDev);
 
-    const calculatedHeight = Math.min(Math.max(deviations.length * PIXELS_PER_BAR, MIN_CHART_HEIGHT), MAX_CHART_HEIGHT);
-    setActivityChartHeight(calculatedHeight);
+      const calculatedHeight = Math.min(Math.max(deviations.length * PIXELS_PER_BAR, MIN_CHART_HEIGHT), MAX_CHART_HEIGHT);
+      setActivityChartHeight(calculatedHeight);
+    } catch (err) {
+      console.error('Error calculating activity deviations:', err);
+      setError('Error calculating activity deviations: ' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const calculateDayDeviations = (activities: Activity[]) => {
     if (!template) return;
 
-    const dayMap = new Map<number, number[]>();
-    
-    for (let day = 1; day <= template.duration; day++) {
-      dayMap.set(day, []);
-    }
-    
-    activities.forEach(activity => {
-      const deviation = activity.actual_duration - activity.planned_duration;
-      dayMap.get(activity.day)?.push(deviation);
-    });
-
-    const deviations: DayDeviation[] = Array.from(dayMap.entries())
-      .sort(([dayA], [dayB]) => dayA - dayB)
-      .map(([day, deviations]) => ({
-        name: `Day ${day}`,
-        day,
-        average_deviation: deviations.length > 0 
-          ? deviations.reduce((sum, val) => sum + val, 0) / deviations.length 
-          : 0
-      }));
-
-    setDayDeviations(deviations);
-
-    const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
-    setMaxDeviation(prevMax => Math.max(prevMax, maxDev));
-
-    const calculatedHeight = Math.min(
-      Math.max(template.duration * PIXELS_PER_BAR, MIN_CHART_HEIGHT),
-      MAX_CHART_HEIGHT
-    );
-    setDayChartHeight(calculatedHeight);
-  };
-
-  const wrapText = (text: string, maxWidth: number) => {
-    if (text.length * CHAR_WIDTH <= maxWidth) return text;
-    const words = text.split(' ');
-    let line = '';
-    let result = '';
-    for (let i = 0; i < words.length; i++) {
-      const testLine = line + words[i] + ' ';
-      if (testLine.length * CHAR_WIDTH > maxWidth) {
-        result += line.trim() + '\n';
-        line = words[i] + ' ';
-      } else {
-        line = testLine;
+    try {
+      const dayActivities = new Map<number, Activity[]>();
+      
+      for (let day = 1; day <= template.duration; day++) {
+        dayActivities.set(day, []);
       }
-    }
-    result += line.trim();
-    return result;
-  };
+      
+      activities.forEach(activity => {
+        if (typeof activity.day === 'number') {
+          const dayGroup = dayActivities.get(activity.day);
+          if (dayGroup) {
+            dayGroup.push(activity);
+          }
+        }
+      });
 
-  const CustomYAxisTick = ({ x, y, payload }: any) => {
-    const wrappedText = wrapText(payload.value, MAX_LABEL_WIDTH);
-    const lines = wrappedText.split('\n');
-    return (
-      <g transform={`translate(${x},${y})`}>
-        {lines.map((line, index) => (
-          <text
-            key={index}
-            x={0}
-            y={index * 12}
-            dy={-6 * (lines.length - 1) + 12}
-            textAnchor="end"
-            fill="#666"
-            fontSize={12}
-          >
-            {line}
-          </text>
-        ))}
-      </g>
-    );
+      const deviations: DayDeviation[] = Array.from(dayActivities.entries())
+        .sort(([dayA], [dayB]) => dayA - dayB)
+        .map(([day, dayActivities]) => {
+          const totalPlanned = dayActivities.reduce((sum, activity) => 
+            sum + (activity.planned_duration || 0), 0);
+          const totalActual = dayActivities.reduce((sum, activity) => 
+            sum + (activity.actual_duration || 0), 0);
+          
+          const deviation = totalActual - totalPlanned;
+          
+          return {
+            name: `Day ${day}`,
+            day,
+            average_deviation: deviation
+          };
+        });
+
+      setDayDeviations(deviations);
+
+      const maxDev = Math.max(...deviations.map(d => Math.abs(d.average_deviation)));
+      setDayMaxDeviation(maxDev || 1);
+
+      const calculatedHeight = Math.min(
+        Math.max(template.duration * PIXELS_PER_BAR, MIN_CHART_HEIGHT),
+        MAX_CHART_HEIGHT
+      );
+      setDayChartHeight(calculatedHeight);
+    } catch (err) {
+      console.error('Error calculating day deviations:', err);
+      setError('Error calculating day deviations: ' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -252,7 +262,25 @@ export default function TrainingStatistics() {
     <div className="max-w-[1200px] mx-auto p-8">
       <h1 className="text-3xl font-bold mb-8 text-blue-600">Training Statistics</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="mb-6">
+        <label htmlFor="template-select" className="block text-sm font-medium mb-2 text-gray-700">
+          Select Training Template
+        </label>
+        <select
+          id="template-select"
+          className="w-full md:w-64 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={selectedTemplate || ''}
+          onChange={(e) => setSelectedTemplate(Number(e.target.value))}
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow-sm">
           <h2 className="text-xl font-bold text-gray-800">Total Activities</h2>
           <p className="text-gray-600 text-sm">Number of training activities</p>
@@ -260,19 +288,9 @@ export default function TrainingStatistics() {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold text-gray-800">Average Time Deviation</h2>
-          <p className="text-gray-600 text-sm">Average time difference from plan</p>
-          <p className="text-4xl font-bold mt-2 text-blue-600">
-            {stats.average_time_deviation.toFixed(2)} min
-          </p>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold text-gray-800">Cumulative Time Impact</h2>
-          <p className="text-gray-600 text-sm">Total time difference from plan</p>
-          <p className="text-4xl font-bold mt-2 text-blue-600">
-            {stats.cumulative_time_impact.toFixed(0)} min
-          </p>
+          <h2 className="text-xl font-bold text-gray-800">Number of Sessions</h2>
+          <p className="text-gray-600 text-sm">Total completed training sessions</p>
+          <p className="text-4xl font-bold mt-2 text-blue-600">{stats.number_of_sessions}</p>
         </div>
       </div>
 
@@ -322,7 +340,7 @@ export default function TrainingStatistics() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 type="number" 
-                domain={[-maxDeviation, maxDeviation]} 
+                domain={[-dayMaxDeviation, dayMaxDeviation]} 
                 tickFormatter={(value) => `${Math.round(value)} min`}
               />
               <YAxis 
@@ -336,8 +354,8 @@ export default function TrainingStatistics() {
               <Bar dataKey="average_deviation" name="Average Deviation">
                 {dayDeviations.map((entry, index) => (
                   <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.average_deviation > 0 ? "#ef4444" : "#22c55e"} 
+                    key={`cell-${index}`}
+                    fill={entry.average_deviation > 0 ? "#ef4444" : "#22c55e"}
                   />
                 ))}
               </Bar>
@@ -373,15 +391,13 @@ export default function TrainingStatistics() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 type="number" 
-                domain={[-maxDeviation, maxDeviation]} 
+                domain={[-activityMaxDeviation, activityMaxDeviation]}
                 tickFormatter={(value) => `${Math.round(value)} min`}
               />
               <YAxis 
                 dataKey="name" 
                 type="category" 
                 width={MAX_LABEL_WIDTH} 
-                tick={<CustomYAxisTick />}
-                dx={-10}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
