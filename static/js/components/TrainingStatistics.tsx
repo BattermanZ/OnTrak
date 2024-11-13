@@ -238,7 +238,7 @@ export default function TrainingStatistics() {
   if (loading) {
     return (
       <div className="flex h-[200px] items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <div className="loading-spinner"></div>
       </div>
     );
   }
@@ -246,9 +246,8 @@ export default function TrainingStatistics() {
   if (error) {
     return (
       <div className="max-w-[1200px] mx-auto p-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error:</strong>
-          <span className="block sm:inline"> {error}</span>
+        <div className="alert alert-danger" role="alert">
+          <strong>Error:</strong> {error}
         </div>
       </div>
     );
@@ -259,16 +258,16 @@ export default function TrainingStatistics() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-8 text-blue-600">Training Statistics</h1>
+    <div className="training-statistics">
+      <h1 className="text-3xl font-bold mb-8">Training Statistics</h1>
 
       <div className="mb-6">
-        <label htmlFor="template-select" className="block text-sm font-medium mb-2 text-gray-700">
+        <label htmlFor="template-select" className="block text-sm font-medium mb-2">
           Select Training Template
         </label>
         <select
           id="template-select"
-          className="w-full md:w-64 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="select-input"
           value={selectedTemplate || ''}
           onChange={(e) => setSelectedTemplate(Number(e.target.value))}
         >
@@ -280,27 +279,27 @@ export default function TrainingStatistics() {
         </select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold text-gray-800">Total Activities</h2>
-          <p className="text-gray-600 text-sm">Number of training activities</p>
-          <p className="text-4xl font-bold mt-2 text-blue-600">{stats.total_activities}</p>
+      <div className="summary-cards">
+        <div className="summary-card">
+          <h2>Total Activities</h2>
+          <p>Number of training activities</p>
+          <p>{stats.total_activities}</p>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold text-gray-800">Number of Sessions</h2>
-          <p className="text-gray-600 text-sm">Total completed training sessions</p>
-          <p className="text-4xl font-bold mt-2 text-blue-600">{stats.number_of_sessions}</p>
+        <div className="summary-card">
+          <h2>Number of Sessions</h2>
+          <p>Total completed training sessions</p>
+          <p>{stats.number_of_sessions}</p>
         </div>
       </div>
 
       <div className="mb-6">
-        <label htmlFor="day-select" className="block text-sm font-medium mb-2 text-gray-700">
+        <label htmlFor="day-select" className="block text-sm font-medium mb-2">
           Select Day
         </label>
         <select
           id="day-select"
-          className="w-full md:w-48 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="select-input"
           value={selectedDay}
           onChange={(e) => setSelectedDay(e.target.value)}
         >
@@ -314,14 +313,13 @@ export default function TrainingStatistics() {
       </div>
 
       {dayDeviations.length === 0 ? (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-6" role="alert">
-          <strong className="font-bold">No Data:</strong>
-          <span className="block sm:inline"> There are no completed days for the selected period.</span>
+        <div className="alert alert-warning" role="alert">
+          <strong>No Data:</strong> There are no completed days for the selected period.
         </div>
       ) : (
-        <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
-          <h2 className="text-xl font-bold mb-2 text-gray-800">Day Average Deviation</h2>
-          <p className="text-gray-600 text-sm mb-6">
+        <div className="chart-container">
+          <h2>Day Average Deviation</h2>
+          <p>
             Average deviation from planned duration for each day
           </p>
           <div className={`h-[${dayChartHeight}px] w-full overflow-x-auto`}>
@@ -365,14 +363,13 @@ export default function TrainingStatistics() {
       )}
 
       {activityDeviations.length === 0 ? (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">No Data:</strong>
-          <span className="block sm:inline"> There are no completed activities for the selected period.</span>
+        <div className="alert alert-warning" role="alert">
+          <strong>No Data:</strong> There are no completed activities for the selected period.
         </div>
       ) : (
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-bold mb-2 text-gray-800">Activity Duration Deviation</h2>
-          <p className="text-gray-600 text-sm mb-6">
+        <div className="chart-container">
+          <h2>Activity Duration Deviation</h2>
+          <p>
             Average deviation from planned duration for each activity
           </p>
           <div className={`h-[${activityChartHeight}px] w-full overflow-x-auto`}>

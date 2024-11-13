@@ -359,6 +359,9 @@ def get_statistics_api(template_id):
     except json.JSONDecodeError as e:
         logger.error(f"JSON parsing error for template_id {template_id}: {str(e)}")
         return jsonify({'error': 'Invalid JSON response from database'}), 500
+    except ValueError as e:
+        logger.error(f"Value error for template_id {template_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.error(f"Error fetching statistics for template_id {template_id}: {str(e)}")
         return jsonify({'error': 'Failed to fetch statistics'}), 500
