@@ -75,6 +75,38 @@ router.get('/',
   }
 );
 
+// Get current schedule
+router.get('/current',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    try {
+      const now = new Date();
+      const query = {
+        startDate: { $lte: now },
+        endDate: { $gte: now },
+        status: 'active'
+      };
+      
+      if (req.user.role === 'trainer') {
+        query.trainer = req.user._id;
+      }
+
+      const schedule = await Schedule.findOne(query)
+        .populate('trainer', 'firstName lastName email')
+        .populate('createdBy', 'firstName lastName')
+        .sort({ startDate: -1 });
+
+      if (!schedule) {
+        return res.json(null);
+      }
+
+      res.json(schedule);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // Get schedule by ID
 router.get('/:id',
   passport.authenticate('jwt', { session: false }),

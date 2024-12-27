@@ -39,18 +39,27 @@ const templateSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
-  userId: {
+  createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
+  category: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  tags: [{
+    type: String,
+    trim: true
+  }],
   activities: [activitySchema]
 }, {
   timestamps: true
 });
 
 // Add index for faster queries
-templateSchema.index({ userId: 1, createdAt: -1 });
+templateSchema.index({ createdBy: 1, createdAt: -1 });
 
 const Template = mongoose.model('Template', templateSchema);
 

@@ -30,7 +30,9 @@ const createTemplate = async (req, res) => {
     const template = new Template({
       name: req.body.name,
       days: req.body.days,
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      category: req.body.category || '',
+      tags: req.body.tags || []
     });
     const newTemplate = await template.save();
     res.status(201).json(newTemplate);

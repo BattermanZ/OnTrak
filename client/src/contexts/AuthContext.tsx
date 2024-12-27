@@ -52,9 +52,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await auth.login({ email, password });
-    localStorage.setItem('token', response.data.token);
-    setUser(response.data.user as User);
+    try {
+      const response = await auth.login({ email, password });
+      localStorage.setItem('token', response.data.token);
+      setUser(response.data.user as User);
+    } catch (error) {
+      localStorage.removeItem('token');
+      setUser(null);
+      throw error;
+    }
   };
 
   const register = async (email: string, password: string, firstName: string, lastName: string) => {

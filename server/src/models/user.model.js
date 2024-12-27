@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema({
     enum: ['admin', 'trainer'],
     default: 'trainer'
   },
+  active: {
+    type: Boolean,
+    default: true
+  },
   lastLogin: {
     type: Date
   }

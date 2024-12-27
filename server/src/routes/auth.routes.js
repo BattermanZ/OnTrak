@@ -41,7 +41,6 @@ router.post('/register', validateRegistration, async (req, res, next) => {
       firstName,
       lastName,
       role: 'admin', // First user is admin
-      active: true
     });
 
     console.log('Creating new user:', { email, firstName, lastName, role: user.role });
@@ -67,17 +66,32 @@ router.post('/register', validateRegistration, async (req, res, next) => {
 });
 
 // Login
-router.post('/login', passport.authenticate('local', { session: false }), (req, res) => {
-  const token = jwt.sign(
-    { id: req.user._id },
-    process.env.JWT_SECRET || 'your-secret-key',
-    { expiresIn: '1d' }
-  );
+router.post('/login', (req, res, next) => {
+  console.log('Login attempt received:', { email: req.body.email });
+  
+  passport.authenticate('local', { session: false }, (err, user, info) => {
+    if (err) {
+      console.error('Login authentication error:', err);
+      return next(err);
+    }
+    
+    if (!user) {
+      console.log('Login failed:', info?.message);
+      return res.status(401).json({ message: info?.message || 'Invalid email or password' });
+    }
 
-  res.json({
-    token,
-    user: req.user.toJSON()
-  });
+    console.log('Login successful for user:', user.email);
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '1d' }
+    );
+
+    res.json({
+      token,
+      user: user.toJSON()
+    });
+  })(req, res, next);
 });
 
 // Get current user

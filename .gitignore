@@ -6,6 +6,7 @@ node_modules/
 database/data/
 database/logs/
 *.log
+database/mongod.pid
 
 # Build
 /build

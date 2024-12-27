@@ -24,10 +24,18 @@ const Login: React.FC = () => {
     try {
       setError('');
       setLoading(true);
+      console.log('Attempting login with email:', email);
       await login(email, password);
+      console.log('Login successful, navigating to home');
       navigate('/');
-    } catch (err) {
-      setError('Failed to sign in');
+    } catch (err: any) {
+      console.error('Login error details:', {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        message: err.message
+      });
+      setError(err.response?.data?.message || err.message || 'Failed to sign in');
     } finally {
       setLoading(false);
     }
