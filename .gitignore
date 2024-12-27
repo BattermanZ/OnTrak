@@ -1,39 +1,50 @@
-# Ignore Python virtual environment
-venv/
+# Dependencies
 node_modules/
-dist/
+/.pnp
+.pnp.js
 
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Ignore environment variables
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Ignore logs
+# Logs
 logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Ignore database
-database/
-*.db
-instance/
+# Production build
+/client/build
+/dist
 
-# Ignore database
-*.sqlite3
+# Testing
+/coverage
 
-# Ignore Docker image layers
-.Dockerfile.swp
-
-# Ignore local config files
-.DS_Store
-
-# Ignore Pytest cache
-.pytest_cache/
-
-# Ignore other unwanted files
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# ignore docker image
-*.tar
+# OS
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# Debug
+debug/
+.debug/
+
+# Misc
+.DS_Store
+Thumbs.db
