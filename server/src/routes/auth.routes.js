@@ -11,23 +11,26 @@ const validateRegistration = [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('firstName').trim().notEmpty(),
-  body('lastName').trim().notEmpty(),
-  body('role').optional().isIn(['admin', 'trainer'])
+  body('lastName').trim().notEmpty()
 ];
 
 // Register new user
 router.post('/register', validateRegistration, async (req, res, next) => {
   try {
+    console.log('Registration request body:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, firstName, lastName, role } = req.body;
+    const { email, password, firstName, lastName } = req.body;
 
     // Check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      console.log('User already exists:', email);
       return res.status(400).json({ message: 'Email already registered' });
     }
 
@@ -37,16 +40,28 @@ router.post('/register', validateRegistration, async (req, res, next) => {
       password,
       firstName,
       lastName,
-      role: role || 'trainer'
+      role: 'admin', // First user is admin
+      active: true
     });
 
+    console.log('Creating new user:', { email, firstName, lastName, role: user.role });
+
     await user.save();
+    console.log('User saved successfully');
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '1d' }
+    );
 
     res.status(201).json({
-      message: 'User registered successfully',
+      token,
       user: user.toJSON()
     });
   } catch (error) {
+    console.error('Registration error:', error);
     next(error);
   }
 });
@@ -60,7 +75,6 @@ router.post('/login', passport.authenticate('local', { session: false }), (req, 
   );
 
   res.json({
-    message: 'Login successful',
     token,
     user: req.user.toJSON()
   });

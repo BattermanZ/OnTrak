@@ -7,12 +7,15 @@ const { Server } = require('socket.io');
 const winston = require('winston');
 require('dotenv').config();
 
-// Import routes (to be created)
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const scheduleRoutes = require('./routes/schedule.routes');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
+
+// Import passport config
+require('./config/passport');
 
 // Initialize Express app
 const app = express();
@@ -26,14 +29,14 @@ const io = new Server(httpServer, {
 
 // Logger configuration
 const logger = winston.createLogger({
-  level: 'info',
+  level: process.env.LOG_LEVEL || 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
   transports: [
-    new winston.transports.File({ filename: '../logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: '../logs/combined.log' })
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' })
   ]
 });
 
@@ -48,6 +51,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
+
+// Make io available in routes
+app.set('io', io);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -75,7 +81,7 @@ module.exports = { app, httpServer };
 
 // Start server if not being tested
 if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 5000;
+  const PORT = process.env.PORT || 3456;
   httpServer.listen(PORT, () => {
     logger.info(`Server is running on port ${PORT}`);
   });

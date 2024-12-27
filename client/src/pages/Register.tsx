@@ -36,6 +36,7 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form data:', formData); // Debug log
 
     if (formData.password !== formData.confirmPassword) {
       return setError('Passwords do not match');
@@ -52,6 +53,7 @@ const Register = () => {
       });
       navigate('/');
     } catch (err) {
+      console.error('Registration error:', err); // Debug log
       setError(err instanceof Error ? err.message : 'Failed to create account');
     } finally {
       setLoading(false);
