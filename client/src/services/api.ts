@@ -1,63 +1,38 @@
 import axios from 'axios';
+import type { User, Schedule, Activity, Template } from '../types';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3456';
-
-// Types
-export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'admin' | 'user';
-  isActive: boolean;
-  lastLogin: string | null;
-}
-
-export interface Template {
-  id: string;
-  name: string;
-  days: number;
-  activities: Activity[];
-}
-
-export interface Activity {
-  id: string;
-  name: string;
-  startTime: string;
-  duration: number;
-  description: string;
-  day: number;
-}
-
-export interface Schedule {
-  id: string;
-  name: string;
-  description: string;
-  startTime: string;
-  duration: number;
-  day: number;
-  activities: Activity[];
-  currentActivity: Activity | null;
-  previousActivity: Activity | null;
-  nextActivity: Activity | null;
-}
-
-// Axios instance with auth header
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3456/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Add request interceptor to attach JWT token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
+
+// Add response interceptor to handle errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Auth service
 export const auth = {
@@ -73,28 +48,44 @@ export const auth = {
 export const templates = {
   getAll: () => api.get<Template[]>('/templates'),
   getById: (id: string) => api.get<Template>(`/templates/${id}`),
-  create: (data: { name: string; days: number }) =>
+  create: (data: { name: string; days: number }) => 
     api.post<Template>('/templates', data),
+  addActivity: (templateId: string, activity: Omit<Activity, '_id'>) =>
+    api.post<Activity>(`/templates/${templateId}/activities`, activity),
   update: (id: string, data: Partial<Template>) =>
     api.put<Template>(`/templates/${id}`, data),
   delete: (id: string) => api.delete(`/templates/${id}`),
-  addActivity: (templateId: string, data: Omit<Activity, 'id'>) =>
-    api.post<Activity>(`/templates/${templateId}/activities`, data),
-  updateActivity: (templateId: string, activityId: string, data: Partial<Activity>) =>
-    api.put<Activity>(`/templates/${templateId}/activities/${activityId}`, data),
-  deleteActivity: (templateId: string, activityId: string) =>
+  duplicate: (id: string) => 
+    api.post(`/templates/${id}/duplicate`),
+  updateActivity: (templateId: string, activityId: string, activity: Partial<Activity>) => 
+    api.put(`/templates/${templateId}/activities/${activityId}`, activity),
+  deleteActivity: (templateId: string, activityId: string) => 
     api.delete(`/templates/${templateId}/activities/${activityId}`),
+  addBatchActivities: (templateId: string, activities: Omit<Activity, '_id'>[]) => 
+    api.post(`/templates/${templateId}/activities/batch`, activities),
+  getCategories: () => 
+    api.get('/templates/categories'),
+  getTags: () => 
+    api.get('/templates/tags'),
+  search: (query: string, filters: { category?: string; tags?: string[] }) => 
+    api.get('/templates/search', { params: { query, ...filters } }),
+  checkConflicts: (templateId: string) => 
+    api.get(`/templates/${templateId}/conflicts`),
+  exportPDF: (templateId: string) => 
+    api.get(`/templates/${templateId}/export-pdf`, { responseType: 'blob' }),
 };
 
 // Schedules service
 export const schedules = {
   getAll: () => api.get<Schedule[]>('/schedules'),
   getById: (id: string) => api.get<Schedule>(`/schedules/${id}`),
-  create: (data: Omit<Schedule, 'id'>) => api.post<Schedule>('/schedules', data),
+  create: (data: { templateId: string; startDate: string }) => 
+    api.post<Schedule>('/schedules', data),
   update: (id: string, data: Partial<Schedule>) =>
     api.put<Schedule>(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
   getCurrentSchedule: () => api.get<Schedule>('/schedules/current'),
 };
 
-export default api; 
+export { api };
+export type { User, Schedule, Activity, Template }; 

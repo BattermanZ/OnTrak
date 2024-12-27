@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
-  Container,
   Box,
-  Typography,
-  TextField,
   Button,
-  Link,
-  Paper,
+  TextField,
+  Typography,
+  Container,
   Alert,
+  Paper
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 
-const Login = () => {
+const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -28,7 +27,7 @@ const Login = () => {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to login');
+      setError('Failed to sign in');
     } finally {
       setLoading(false);
     }
@@ -44,27 +43,12 @@ const Login = () => {
           alignItems: 'center',
         }}
       >
-        <Paper
-          elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            width: '100%',
-          }}
-        >
-          <Typography component="h1" variant="h5">
-            Sign in
+        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Sign In
           </Typography>
-
-          {error && (
-            <Alert severity="error" sx={{ mt: 2, width: '100%' }}>
-              {error}
-            </Alert>
-          )}
-
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
             <TextField
               margin="normal"
               required
@@ -96,11 +80,13 @@ const Login = () => {
               sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              Sign In
             </Button>
             <Box sx={{ textAlign: 'center' }}>
-              <Link component={RouterLink} to="/register" variant="body2">
-                {"Don't have an account? Sign Up"}
+              <Link to="/register" style={{ textDecoration: 'none' }}>
+                <Typography color="primary">
+                  Don't have an account? Sign Up
+                </Typography>
               </Link>
             </Box>
           </Box>

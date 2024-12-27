@@ -11,8 +11,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
-    minlength: 6
+    required: true
   },
   firstName: {
     type: String,
@@ -26,12 +25,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'trainer', 'trainee'],
-    default: 'trainee'
-  },
-  active: {
-    type: Boolean,
-    default: true
+    enum: ['admin', 'trainer'],
+    default: 'trainer'
   },
   lastLogin: {
     type: Date
@@ -42,23 +37,19 @@ const userSchema = new mongoose.Schema({
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+  const user = this;
+  if (user.isModified('password')) {
+    user.password = await bcrypt.hash(user.password, 10);
   }
+  next();
 });
 
-// Method to compare password
+// Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Method to return user data without sensitive information
+// Remove password when converting to JSON
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.password;

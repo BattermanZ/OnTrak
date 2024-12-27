@@ -1,42 +1,57 @@
-export type UserRole = 'admin' | 'trainer' | 'trainee';
-
 export interface User {
   _id: string;
+  email: string;
   firstName: string;
   lastName: string;
-  email: string;
-  role: UserRole;
-  active: boolean;
-  lastLogin?: Date;
-  password?: string;
+  role: 'admin' | 'trainer';
+  lastLogin?: string;
 }
 
-export interface Session {
+export interface Activity {
   _id: string;
-  title: string;
-  date: Date;
+  name: string;
   startTime: string;
-  endTime: string;
-  status: 'pending' | 'completed' | 'cancelled';
-  notes?: string;
+  duration: number;
+  description?: string;
+  day: number;
+}
+
+export interface Template {
+  _id: string;
+  name: string;
+  days: number;
+  activities: Activity[];
+  userId: string;
+  category: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Schedule {
   _id: string;
-  title: string;
-  description: string;
-  trainer: User;
-  startDate: Date;
-  endDate: Date;
-  sessions: Session[];
-  status: 'active' | 'completed' | 'cancelled';
-  progress: number;
-  createdBy: User;
+  name: string;
+  days: number;
+  userId: string;
+  activities: Activity[];
+  currentActivity: Activity | null;
+  previousActivity: Activity | null;
+  nextActivity: Activity | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface AuthResponse {
-  token: string;
-  user: User;
+// For undo/redo functionality
+export interface TemplateHistoryAction {
+  type: 'CREATE' | 'UPDATE' | 'DELETE' | 'ADD_ACTIVITY' | 'UPDATE_ACTIVITY' | 'DELETE_ACTIVITY';
+  templateId: string;
+  data: any;
+  timestamp: number;
+}
+
+export interface ActivityConflict {
+  activity1: Activity;
+  activity2: Activity;
+  type: 'OVERLAP' | 'NO_BREAK';
+  day: number;
 } 

@@ -1,88 +1,56 @@
 const express = require('express');
-const cors = require('cors');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const passport = require('passport');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
-const winston = require('winston');
+const winston = require('./config/winston');
+const path = require('path');
+
 require('dotenv').config();
-
-// Import routes
-const authRoutes = require('./routes/auth.routes');
-const scheduleRoutes = require('./routes/schedule.routes');
-
-// Import middleware
-const errorHandler = require('./middleware/errorHandler');
-
-// Import passport config
 require('./config/passport');
 
-// Initialize Express app
 const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
   cors: {
     origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
-
-// Logger configuration
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
-  ]
-});
-
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()
-  }));
-}
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 
-// Make io available in routes
-app.set('io', io);
+// MongoDB Connection
+const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ontrak';
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/schedules', scheduleRoutes);
+mongoose.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => {
+  winston.info('Connected to MongoDB');
+}).catch((error) => {
+  winston.error('MongoDB connection error:', error);
+  process.exit(1);
+});
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  logger.info('New client connected');
+  winston.info('New client connected');
   
   socket.on('disconnect', () => {
-    logger.info('Client disconnected');
+    winston.info('Client disconnected');
   });
 });
 
-// Error handling
-app.use(errorHandler);
+// Routes
+app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
+app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ontrak')
-  .then(() => logger.info('Connected to MongoDB'))
-  .catch((err) => logger.error('MongoDB connection error:', err));
-
-// Export for testing purposes
-module.exports = { app, httpServer };
-
-// Start server if not being tested
-if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 3456;
-  httpServer.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
-  });
-} 
+const PORT = process.env.PORT || 3456;
+server.listen(PORT, () => {
+  winston.info(`Server is running on port ${PORT}`);
+}); 

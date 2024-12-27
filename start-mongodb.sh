@@ -1,11 +1,8 @@
 #!/bin/bash
 
-# Get the absolute path of the script directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Create necessary directories if they don't exist
+mkdir -p database/data
+mkdir -p logs
 
-# Create data and logs directories if they don't exist
-mkdir -p "$DIR/database/data"
-mkdir -p "$DIR/database/logs"
-
-# Start MongoDB with the configuration file
-mongod --config "$DIR/database/mongod.conf" 
+# Start MongoDB with the specified data directory
+mongod --dbpath database/data --logpath logs/mongodb.log 

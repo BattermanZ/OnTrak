@@ -11,16 +11,9 @@ import {
 import { Link as RouterLink } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useSocket } from '../hooks/useSocket';
-import { schedules, type Schedule } from '../services/api';
+import { schedules } from '../services/api';
+import type { Schedule, Activity } from '../types';
 import { useQuery } from 'react-query';
-
-interface Activity {
-  id: string;
-  name: string;
-  startTime: string;
-  duration: number;
-  description: string;
-}
 
 const Dashboard = () => {
   const socket = useSocket();
@@ -46,6 +39,28 @@ const Dashboard = () => {
       }
     };
   }, [socket]);
+
+  useEffect(() => {
+    if (schedule?.currentActivity) {
+      setCurrentActivity(schedule.currentActivity);
+      const endTime = new Date(schedule.currentActivity.startTime).getTime() + 
+        schedule.currentActivity.duration * 60000;
+      const updateTimeRemaining = () => {
+        const now = new Date().getTime();
+        const remaining = endTime - now;
+        if (remaining > 0) {
+          setTimeRemaining(remaining);
+        } else {
+          setTimeRemaining(0);
+        }
+      };
+      
+      updateTimeRemaining();
+      const interval = setInterval(updateTimeRemaining, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [schedule?.currentActivity]);
 
   if (isLoading) {
     return (
@@ -213,7 +228,7 @@ const Dashboard = () => {
           </Typography>
           <Grid container spacing={2}>
             {schedule?.activities?.map((activity) => (
-              <Grid item xs={12} key={activity.id}>
+              <Grid item xs={12} key={activity._id}>
                 <Paper
                   sx={{
                     p: 2,

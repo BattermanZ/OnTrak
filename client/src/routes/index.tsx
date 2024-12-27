@@ -1,10 +1,10 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Dashboard from '../pages/Dashboard';
-import Setup from '../pages/Setup';
+import { Setup } from '../pages/Setup';
 import Profile from '../pages/Profile';
 
 interface ProtectedRouteProps {

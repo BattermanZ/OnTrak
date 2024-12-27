@@ -1,30 +1,34 @@
 import { useEffect, useRef } from 'react';
 import io, { Socket } from 'socket.io-client';
-import { useAuth } from '../contexts/AuthContext';
-
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3456';
 
 export const useSocket = () => {
-  const { user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (user) {
-      const token = localStorage.getItem('token');
-      socketRef.current = io(SOCKET_URL, {
+    const token = localStorage.getItem('token');
+    if (token && !socketRef.current) {
+      socketRef.current = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:3456', {
         auth: {
           token,
         },
       });
 
-      return () => {
-        if (socketRef.current) {
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
-      };
+      socketRef.current.on('connect', () => {
+        console.log('Socket connected');
+      });
+
+      socketRef.current.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
     }
-  }, [user]);
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
 
   return socketRef.current;
 };
