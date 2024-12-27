@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Dashboard from '../pages/Dashboard';
-import Schedule from '../pages/Schedule';
+import Setup from '../pages/Setup';
 import Profile from '../pages/Profile';
 
 interface ProtectedRouteProps {
@@ -39,10 +39,10 @@ const AppRoutes = () => {
         }
       />
       <Route
-        path="/schedule/:id"
+        path="/setup"
         element={
           <ProtectedRoute>
-            <Schedule />
+            <Setup />
           </ProtectedRoute>
         }
       />

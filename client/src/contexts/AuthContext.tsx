@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types';
 import { auth } from '../services/api';
+import type { User } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -11,7 +11,7 @@ interface AuthContextType {
   updateProfile: (userData: Partial<User>) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -29,7 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const token = localStorage.getItem('token');
     if (token) {
       auth.getCurrentUser()
-        .then(user => setUser(user))
+        .then(response => setUser(response.data))
         .catch(() => {
           localStorage.removeItem('token');
           setUser(null);
@@ -41,13 +41,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    const { token, user } = await auth.login(email, password);
+    const response = await auth.login({ email, password });
+    const { token, user } = response.data;
     localStorage.setItem('token', token);
     setUser(user);
   };
 
   const register = async (userData: Partial<User> & { password: string }) => {
-    const { token, user } = await auth.register(userData);
+    const response = await auth.register(userData);
+    const { token, user } = response.data;
     localStorage.setItem('token', token);
     setUser(user);
   };
@@ -58,8 +60,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (userData: Partial<User>) => {
-    const updatedUser = await auth.updateProfile(userData);
-    setUser(updatedUser);
+    const response = await auth.updateProfile(userData);
+    setUser(response.data);
   };
 
   const value = {
@@ -71,11 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateProfile,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export default AuthProvider; 
