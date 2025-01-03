@@ -1,138 +1,90 @@
 from pymongo import MongoClient
-from datetime import datetime
-from bson import ObjectId
+from datetime import datetime, timedelta
 import random
-import sys
+from bson import ObjectId
 
 # Connect to MongoDB
 client = MongoClient('mongodb://localhost:27017/')
-db = client['ontrak']
+db = client.ontrak
 
-# First, find a valid user
-user = db.users.find_one()
-if not user:
-    print("Error: No users found in the database. Please create a user first.")
-    sys.exit(1)
-
-print(f"Using user: {user.get('email', 'unknown email')}")
-
-# Sample activities for variety
-ACTIVITIES = [
-    {
-        'name': 'Team Stand-up',
-        'descriptions': [
-            'Daily team sync to discuss progress and blockers',
-            'Morning catch-up with the development team',
-            'Quick sync with the team to plan the day'
-        ]
-    },
-    {
-        'name': 'Client Meeting',
-        'descriptions': [
-            'Review project progress with the client',
-            'Demo new features and gather feedback',
-            'Discuss project timeline and deliverables'
-        ]
-    },
-    {
-        'name': 'Code Review',
-        'descriptions': [
-            'Review pull requests from team members',
-            'Code quality assessment and feedback',
-            'Pair programming session with junior developers'
-        ]
-    },
-    {
-        'name': 'Design Workshop',
-        'descriptions': [
-            'Brainstorming session for new features',
-            'UI/UX review with the design team',
-            'Product design iteration and feedback'
-        ]
-    },
-    {
-        'name': 'Technical Planning',
-        'descriptions': [
-            'Architecture discussion for upcoming features',
-            'System design review and optimization',
-            'Sprint planning and task breakdown'
-        ]
-    },
-    {
-        'name': 'Documentation',
-        'descriptions': [
-            'Update technical documentation',
-            'Write API documentation',
-            'Create user guides for new features'
-        ]
-    },
-    {
-        'name': 'Training Session',
-        'descriptions': [
-            'Knowledge sharing session on new technologies',
-            'Team skill development workshop',
-            'Technical mentoring session'
-        ]
-    },
-    {
-        'name': 'Break',
-        'descriptions': [
-            'Lunch break and team social time',
-            'Coffee break and informal discussions',
-            'Short break for refreshment'
-        ]
-    }
+# Activity names and descriptions
+activities = [
+    ("Team Stand-up", "Daily team sync and progress update"),
+    ("Code Review", "Review and provide feedback on team's code"),
+    ("Technical Planning", "Architecture and design discussions"),
+    ("Development", "Focused coding session"),
+    ("Testing", "Quality assurance and bug fixing"),
+    ("Documentation", "Update technical documentation"),
+    ("Client Meeting", "Progress updates and feedback"),
+    ("Break", "Short break for refreshment"),
 ]
 
-def create_activity(day, start_time):
-    activity = random.choice(ACTIVITIES)
-    duration = random.choice([30, 45, 60, 90, 120])
-    
-    return {
-        '_id': ObjectId(),
-        'name': activity['name'],
-        'day': day,
-        'startTime': start_time,
-        'duration': duration,
-        'description': random.choice(activity['descriptions'])
-    }
-
 def generate_day_activities(day):
-    activities = []
-    available_times = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00']
+    """Generate activities for a single day from 9:00 to 17:30"""
+    day_activities = []
+    current_time = "09:00"
+    end_time = "17:30"
     
-    # Randomly select number of activities for the day (2-5)
-    num_activities = random.randint(2, 5)
-    selected_times = random.sample(available_times, num_activities)
-    selected_times.sort()
+    while current_time < end_time:
+        # Random duration between 30 and 90 minutes
+        duration = random.choice([30, 45, 60, 90])
+        activity_name, description = random.choice(activities)
+        
+        # Create activity
+        activity = {
+            "_id": ObjectId(),
+            "name": activity_name,
+            "startTime": current_time,
+            "duration": duration,
+            "description": description,
+            "day": day
+        }
+        day_activities.append(activity)
+        
+        # Calculate next start time
+        hours, minutes = map(int, current_time.split(':'))
+        next_time = datetime.strptime(current_time, "%H:%M") + timedelta(minutes=duration)
+        current_time = next_time.strftime("%H:%M")
     
-    for time in selected_times:
-        activities.append(create_activity(day, time))
-    
-    return activities
+    return day_activities
 
-# Create template with activities
+# Find a user (admin)
+user = db.users.find_one({"role": "admin"})
+if not user:
+    print("No admin user found. Please create one first.")
+    exit(1)
+
+print(f"Using user: {user['email']}")
+
+# Create template
 template = {
-    'name': '10-Day Development Sprint',
-    'days': 10,
-    'createdBy': user['_id'],  # Use the found user's ID
-    'activities': [],
-    'createdAt': datetime.utcnow(),
-    'updatedAt': datetime.utcnow()
+    "name": "14-Day Development Sprint",
+    "days": 14,
+    "createdBy": user['_id'],
+    "activities": [],
+    "createdAt": datetime.utcnow(),
+    "updatedAt": datetime.utcnow()
 }
 
 # Generate activities for each day
-for day in range(1, 11):
-    template['activities'].extend(generate_day_activities(day))
+for day in range(1, 15):
+    template["activities"].extend(generate_day_activities(day))
 
-# Insert the template
+# Insert template
 result = db.templates.insert_one(template)
 print(f"Created template with ID: {result.inserted_id}")
-print(f"Total activities created: {len(template['activities'])}")
 
-# Print summary of activities by day
-for day in range(1, 11):
-    day_activities = [a for a in template['activities'] if a['day'] == day]
-    print(f"\nDay {day}: {len(day_activities)} activities")
-    for activity in day_activities:
-        print(f"  - {activity['startTime']}: {activity['name']} ({activity['duration']} min)") 
+# Print summary
+activities_by_day = {}
+for activity in template["activities"]:
+    day = activity["day"]
+    if day not in activities_by_day:
+        activities_by_day[day] = []
+    activities_by_day[day].append(activity)
+
+for day in sorted(activities_by_day.keys()):
+    print(f"\nDay {day}:")
+    for activity in sorted(activities_by_day[day], key=lambda x: x["startTime"]):
+        print(f"  {activity['startTime']} - {activity['name']} ({activity['duration']} min)")
+
+print("\nTemplate created successfully!") 

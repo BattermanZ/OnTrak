@@ -1,57 +1,68 @@
 const mongoose = require('mongoose');
 
+const activitySchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  startTime: {
+    type: String,
+    required: true
+  },
+  duration: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  day: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  completed: {
+    type: Boolean,
+    default: false
+  },
+  isActive: {
+    type: Boolean,
+    default: false
+  }
+});
+
 const scheduleSchema = new mongoose.Schema({
   title: {
     type: String,
     required: true,
     trim: true
   },
-  description: {
-    type: String,
-    trim: true
+  date: {
+    type: Date,
+    required: true,
+    default: Date.now
   },
-  trainer: {
+  templateId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'Template',
     required: true
   },
-  startDate: {
-    type: Date,
-    required: true
+  selectedDay: {
+    type: Number,
+    required: true,
+    min: 1
   },
-  endDate: {
-    type: Date,
-    required: true
+  activities: [activitySchema],
+  activeActivityIndex: {
+    type: Number,
+    default: 0
   },
-  sessions: [{
-    date: {
-      type: Date,
-      required: true
-    },
-    startTime: {
-      type: String,
-      required: true
-    },
-    endTime: {
-      type: String,
-      required: true
-    },
-    title: {
-      type: String,
-      required: true
-    },
-    description: String,
-    status: {
-      type: String,
-      enum: ['pending', 'in-progress', 'completed', 'cancelled'],
-      default: 'pending'
-    },
-    notes: String
-  }],
-  status: {
-    type: String,
-    enum: ['draft', 'active', 'completed', 'cancelled'],
-    default: 'draft'
+  isActive: {
+    type: Boolean,
+    default: true
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -62,20 +73,50 @@ const scheduleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Add index for efficient queries
-scheduleSchema.index({ trainer: 1, startDate: 1 });
-scheduleSchema.index({ status: 1 });
+// Methods to get activities
+scheduleSchema.methods.getCurrentActivity = function() {
+  return this.activities[this.activeActivityIndex] || null;
+};
 
-// Virtual for progress calculation
-scheduleSchema.virtual('progress').get(function() {
-  if (!this.sessions.length) return 0;
+scheduleSchema.methods.getPreviousActivity = function() {
+  return this.activeActivityIndex > 0 ? this.activities[this.activeActivityIndex - 1] : null;
+};
+
+scheduleSchema.methods.getNextActivity = function() {
+  return this.activeActivityIndex < this.activities.length - 1 
+    ? this.activities[this.activeActivityIndex + 1] 
+    : null;
+};
+
+// Method to advance to next activity
+scheduleSchema.methods.advanceToNextActivity = function() {
+  if (this.activeActivityIndex >= this.activities.length - 1) return false;
   
-  const completedSessions = this.sessions.filter(
-    session => session.status === 'completed'
-  ).length;
+  // Mark current activity as completed
+  this.activities[this.activeActivityIndex].completed = true;
+  this.activities[this.activeActivityIndex].isActive = false;
   
-  return (completedSessions / this.sessions.length) * 100;
-});
+  // Move to next activity
+  this.activeActivityIndex += 1;
+  this.activities[this.activeActivityIndex].isActive = true;
+  
+  return true;
+};
+
+// Method to go back to previous activity
+scheduleSchema.methods.goToPreviousActivity = function() {
+  if (this.activeActivityIndex <= 0) return false;
+  
+  // Mark current activity as not completed
+  this.activities[this.activeActivityIndex].isActive = false;
+  
+  // Move to previous activity
+  this.activeActivityIndex -= 1;
+  this.activities[this.activeActivityIndex].isActive = true;
+  this.activities[this.activeActivityIndex].completed = false;
+  
+  return true;
+};
 
 const Schedule = mongoose.model('Schedule', scheduleSchema);
 

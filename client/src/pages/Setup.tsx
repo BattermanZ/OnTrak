@@ -99,7 +99,7 @@ export const Setup = () => {
   });
 
   // Filter templates based on search query
-  const filteredTemplates = templateList?.filter(template =>
+  const filteredTemplates = templateList?.filter((template: Template) =>
     template.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 

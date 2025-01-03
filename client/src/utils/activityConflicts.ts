@@ -1,7 +1,5 @@
 import { Activity, ActivityConflict } from '../types';
-import { addMinutes, parseISO, differenceInMinutes } from 'date-fns';
-
-const MINIMUM_BREAK_MINUTES = 15;
+import { addMinutes, parseISO } from 'date-fns';
 
 export const checkActivityConflicts = (activities: Activity[]): ActivityConflict[] => {
   const conflicts: ActivityConflict[] = [];
@@ -22,7 +20,7 @@ export const checkActivityConflicts = (activities: Activity[]): ActivityConflict
       a.startTime.localeCompare(b.startTime)
     );
 
-    // Check for overlaps and insufficient breaks
+    // Check for overlaps
     for (let i = 0; i < sortedActivities.length - 1; i++) {
       const activity1 = sortedActivities[i];
       const activity2 = sortedActivities[i + 1];
@@ -38,18 +36,8 @@ export const checkActivityConflicts = (activities: Activity[]): ActivityConflict
         conflicts.push({
           activity1,
           activity2,
-          type: 'OVERLAP',
-          day: Number(day)
-        });
-      }
-
-      // Check for insufficient break
-      const breakDuration = differenceInMinutes(activity2Start, activity1End);
-      if (breakDuration < MINIMUM_BREAK_MINUTES) {
-        conflicts.push({
-          activity1,
-          activity2,
-          type: 'NO_BREAK',
+          type: 'overlap',
+          conflictDetails: `Activities "${activity1.name}" and "${activity2.name}" overlap`,
           day: Number(day)
         });
       }

@@ -2,6 +2,8 @@ const express = require('express');
 const passport = require('passport');
 const { body, param, validationResult } = require('express-validator');
 const Schedule = require('../models/schedule.model');
+const Template = require('../models/template.model');
+const logger = require('../config/logger');
 
 const router = express.Router();
 
@@ -26,11 +28,13 @@ const validateSchedule = [
   body('sessions.*.title').trim().notEmpty()
 ];
 
-// Create schedule (admin only)
-router.post('/',
+// Start day with template
+router.post('/start-day',
   passport.authenticate('jwt', { session: false }),
-  isAdmin,
-  validateSchedule,
+  [
+    body('templateId').isMongoId(),
+    body('day').isInt({ min: 1 })
+  ],
   async (req, res, next) => {
     try {
       const errors = validationResult(req);
@@ -38,18 +42,171 @@ router.post('/',
         return res.status(400).json({ errors: errors.array() });
       }
 
+      const { templateId, day } = req.body;
+
+      // Get template
+      const template = await Template.findById(templateId);
+      if (!template) {
+        return res.status(404).json({ message: 'Template not found' });
+      }
+
+      // Validate day
+      if (day > template.days) {
+        return res.status(400).json({ message: `Day must be between 1 and ${template.days}` });
+      }
+
+      // Get activities for the day and sort them by start time
+      const activities = template.activities
+        .filter(a => a.day === day)
+        .sort((a, b) => {
+          const timeA = a.startTime.split(':').map(Number);
+          const timeB = b.startTime.split(':').map(Number);
+          return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+        });
+
+      if (!activities.length) {
+        return res.status(400).json({ message: 'No activities found for selected day' });
+      }
+
+      // Cancel any existing active schedule
+      await Schedule.updateMany(
+        { 
+          createdBy: req.user._id,
+          status: 'active'
+        },
+        { 
+          status: 'cancelled'
+        }
+      );
+
+      // Create schedule
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       const schedule = new Schedule({
-        ...req.body,
-        createdBy: req.user._id
+        title: `${template.name} - Day ${day}`,
+        startDate: today,
+        endDate: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+        activities: activities.map((a, index) => ({
+          ...a.toObject(),
+          status: index === 0 ? 'in-progress' : 'pending'
+        })),
+        currentActivityIndex: 0,
+        status: 'active',
+        createdBy: req.user._id,
+        templateId: template._id,
+        selectedDay: day
       });
 
       await schedule.save();
 
-      // Emit socket event for real-time updates
-      req.app.get('io').emit('schedule:created', schedule);
+      // Safely emit socket event if io is available
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', schedule);
+      }
 
       res.status(201).json(schedule);
     } catch (error) {
+      logger.error('Error starting day:', error);
+      next(error);
+    }
+  }
+);
+
+// Skip current activity
+router.post('/:id/skip/:activityId',
+  passport.authenticate('jwt', { session: false }),
+  [
+    param('id').isMongoId(),
+    param('activityId').isMongoId()
+  ],
+  async (req, res, next) => {
+    try {
+      const schedule = await Schedule.findById(req.params.id);
+      if (!schedule) {
+        return res.status(404).json({ message: 'Schedule not found' });
+      }
+
+      const activityIndex = schedule.activities.findIndex(
+        a => a._id.toString() === req.params.activityId
+      );
+
+      if (activityIndex === -1) {
+        return res.status(404).json({ message: 'Activity not found' });
+      }
+
+      if (activityIndex >= schedule.activities.length - 1) {
+        return res.status(400).json({ message: 'No next activity available' });
+      }
+
+      // Mark current activity as completed
+      schedule.activities[activityIndex].status = 'completed';
+      
+      // Move to next activity and mark it as in-progress
+      schedule.currentActivityIndex = activityIndex + 1;
+      schedule.activities[activityIndex + 1].status = 'in-progress';
+
+      await schedule.save();
+
+      // Emit socket event for real-time updates
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', schedule);
+      }
+
+      res.json(schedule);
+    } catch (error) {
+      logger.error('Error skipping activity:', error);
+      next(error);
+    }
+  }
+);
+
+// Go to previous activity
+router.post('/:id/previous/:activityId',
+  passport.authenticate('jwt', { session: false }),
+  [
+    param('id').isMongoId(),
+    param('activityId').isMongoId()
+  ],
+  async (req, res, next) => {
+    try {
+      const schedule = await Schedule.findById(req.params.id);
+      if (!schedule) {
+        return res.status(404).json({ message: 'Schedule not found' });
+      }
+
+      const activityIndex = schedule.activities.findIndex(
+        a => a._id.toString() === req.params.activityId
+      );
+
+      if (activityIndex === -1) {
+        return res.status(404).json({ message: 'Activity not found' });
+      }
+
+      if (activityIndex === 0) {
+        return res.status(400).json({ message: 'No previous activity available' });
+      }
+
+      // Mark current activity as pending
+      schedule.activities[activityIndex].status = 'pending';
+      
+      // Move to previous activity and mark it as in-progress
+      schedule.currentActivityIndex = activityIndex - 1;
+      schedule.activities[activityIndex - 1].status = 'in-progress';
+
+      await schedule.save();
+
+      // Emit socket event for real-time updates
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', schedule);
+      }
+
+      res.json(schedule);
+    } catch (error) {
+      logger.error('Error going to previous activity:', error);
       next(error);
     }
   }
@@ -81,27 +238,42 @@ router.get('/current',
   async (req, res, next) => {
     try {
       const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+
       const query = {
-        startDate: { $lte: now },
-        endDate: { $gte: now },
-        status: 'active'
+        startDate: { $lte: endOfDay },
+        endDate: { $gte: startOfDay },
+        status: 'active',
+        createdBy: req.user._id
       };
-      
-      if (req.user.role === 'trainer') {
-        query.trainer = req.user._id;
-      }
 
       const schedule = await Schedule.findOne(query)
-        .populate('trainer', 'firstName lastName email')
-        .populate('createdBy', 'firstName lastName')
-        .sort({ startDate: -1 });
+        .sort({ startDate: -1 })
+        .lean({ virtuals: true });
 
       if (!schedule) {
         return res.json(null);
       }
 
-      res.json(schedule);
+      // Add virtual properties manually since we're using lean
+      const currentActivity = schedule.activities[schedule.currentActivityIndex] || null;
+      const previousActivity = schedule.currentActivityIndex > 0 
+        ? schedule.activities[schedule.currentActivityIndex - 1] 
+        : null;
+      const nextActivity = schedule.currentActivityIndex < schedule.activities.length - 1 
+        ? schedule.activities[schedule.currentActivityIndex + 1] 
+        : null;
+
+      res.json({
+        ...schedule,
+        currentActivity,
+        previousActivity,
+        nextActivity
+      });
     } catch (error) {
+      logger.error('Error getting current schedule:', error);
       next(error);
     }
   }
@@ -156,49 +328,6 @@ router.put('/:id',
 
       // Emit socket event for real-time updates
       req.app.get('io').emit('schedule:updated', schedule);
-
-      res.json(schedule);
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// Update session status
-router.patch('/:id/sessions/:sessionId',
-  passport.authenticate('jwt', { session: false }),
-  [
-    param('id').isMongoId(),
-    param('sessionId').isMongoId(),
-    body('status').isIn(['pending', 'in-progress', 'completed', 'cancelled'])
-  ],
-  async (req, res, next) => {
-    try {
-      const schedule = await Schedule.findById(req.params.id);
-
-      if (!schedule) {
-        return res.status(404).json({ message: 'Schedule not found' });
-      }
-
-      // Check access rights
-      if (req.user.role === 'trainer' && schedule.trainer.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ message: 'Access denied' });
-      }
-
-      const session = schedule.sessions.id(req.params.sessionId);
-      if (!session) {
-        return res.status(404).json({ message: 'Session not found' });
-      }
-
-      session.status = req.body.status;
-      await schedule.save();
-
-      // Emit socket event for real-time updates
-      req.app.get('io').emit('schedule:sessionUpdated', {
-        scheduleId: schedule._id,
-        sessionId: session._id,
-        status: session.status
-      });
 
       res.json(schedule);
     } catch (error) {

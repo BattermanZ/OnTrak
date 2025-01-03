@@ -33,78 +33,54 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     logger.debug('API Response', { 
-      status: response.status,
-      url: response.config.url,
       data: response.data
     });
     return response;
   },
   (error) => {
-    logger.error('API Response Error', {
-      status: error.response?.status,
-      url: error.config?.url,
-      message: error.message,
-      data: error.response?.data
-    });
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
+    logger.error('API Response Error', { error: error.message });
     return Promise.reject(error);
   }
 );
 
-// Auth service
+// Auth API
 export const auth = {
   login: (data: { email: string; password: string }) =>
-    api.post<{ token: string; user: User }>('/auth/login', data),
-  register: (data: Partial<User> & { password: string }) =>
-    api.post<{ token: string; user: User }>('/auth/register', data),
-  getCurrentUser: () => api.get<User>('/auth/me'),
-  updateProfile: (data: Partial<User>) => api.put<User>('/auth/profile', data),
+    api.post('/auth/login', data),
+  register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
+    api.post('/auth/register', data),
+  getCurrentUser: () => api.get('/auth/me'),
+  updateProfile: (data: Partial<Omit<User, 'role' | '_id'>>) =>
+    api.put('/auth/profile', data),
 };
 
-// Templates service
+// Templates API
 export const templates = {
-  getAll: () => api.get<Template[]>('/templates'),
-  getById: (id: string) => api.get<Template>(`/templates/${id}`),
-  create: (data: { name: string; days: number; category?: string; tags?: string[] }) => 
-    api.post<Template>('/templates', data),
-  addActivity: (templateId: string, activity: Omit<Activity, '_id'>) =>
-    api.post<Activity>(`/templates/${templateId}/activities`, activity),
-  update: (id: string, data: Partial<Template>) =>
-    api.put<Template>(`/templates/${id}`, data),
+  getAll: () => api.get('/templates'),
+  getById: (id: string) => api.get(`/templates/${id}`),
+  create: (data: { name: string; days: number }) => api.post('/templates', data),
+  update: (id: string, data: Partial<Template>) => api.put(`/templates/${id}`, data),
   delete: (id: string) => api.delete(`/templates/${id}`),
-  duplicate: (id: string) => 
-    api.post(`/templates/${id}/duplicate`),
-  updateActivity: (templateId: string, activityId: string, activity: Partial<Activity>) => 
+  addActivity: (templateId: string, activity: Partial<Activity>) =>
+    api.post(`/templates/${templateId}/activities`, activity),
+  updateActivity: (templateId: string, activityId: string, activity: Partial<Activity>) =>
     api.put(`/templates/${templateId}/activities/${activityId}`, activity),
-  deleteActivity: (templateId: string, activityId: string) => 
-    api.delete(`/templates/${templateId}/activities/${activityId}`),
-  addBatchActivities: (templateId: string, activities: Omit<Activity, '_id'>[]) => 
-    api.post(`/templates/${templateId}/activities/batch`, activities),
-  getCategories: () => 
-    api.get('/templates/categories'),
-  getTags: () => 
-    api.get('/templates/tags'),
-  search: (query: string, filters: { category?: string; tags?: string[] }) => 
-    api.get('/templates/search', { params: { query, ...filters } }),
-  checkConflicts: (templateId: string) => 
-    api.get(`/templates/${templateId}/conflicts`),
-  exportPDF: (templateId: string) => 
-    api.get(`/templates/${templateId}/export-pdf`, { responseType: 'blob' }),
 };
 
-// Schedules service
+// Schedules API
 export const schedules = {
-  getAll: () => api.get<Schedule[]>('/schedules'),
-  getById: (id: string) => api.get<Schedule>(`/schedules/${id}`),
-  create: (data: { templateId: string; startDate: string }) => 
-    api.post<Schedule>('/schedules', data),
-  update: (id: string, data: Partial<Schedule>) =>
-    api.put<Schedule>(`/schedules/${id}`, data),
+  getAll: () => api.get('/schedules'),
+  getById: (id: string) => api.get(`/schedules/${id}`),
+  create: (data: { templateId: string; startDate: string }) => api.post('/schedules', data),
+  update: (id: string, data: Partial<Schedule>) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
-  getCurrentSchedule: () => api.get<Schedule>('/schedules/current'),
+  getCurrentSchedule: () => api.get('/schedules/current'),
+  startDay: (templateId: string, day: number) => 
+    api.post('/schedules/start-day', { templateId, day }),
+  skipActivity: (scheduleId: string, activityId: string) =>
+    api.post(`/schedules/${scheduleId}/skip/${activityId}`),
+  goToPreviousActivity: (scheduleId: string, activityId: string) =>
+    api.post(`/schedules/${scheduleId}/previous/${activityId}`),
 };
 
 export { api };
