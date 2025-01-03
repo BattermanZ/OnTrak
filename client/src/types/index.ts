@@ -21,7 +21,12 @@ export interface Template {
   name: string;
   days: number;
   activities: Activity[];
-  userId: string;
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
   category: string;
   tags: string[];
   createdAt: string;

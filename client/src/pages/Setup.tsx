@@ -38,7 +38,9 @@ import {
   Warning as WarningIcon,
   Undo as UndoIcon,
   Redo as RedoIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  PlaylistAdd as PlaylistAddIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { templates } from '../services/api';
 import type { Template } from '../types';
@@ -48,6 +50,7 @@ export const Setup: React.FC = () => {
   const navigate = useNavigate();
   const [templateList, setTemplateList] = useState<Template[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [editDialog, setEditDialog] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ 
     name: '', 
     days: 1,
@@ -71,6 +74,15 @@ export const Setup: React.FC = () => {
     message: '',
     severity: 'success'
   });
+  const [activityDialog, setActivityDialog] = useState(false);
+  const [newActivity, setNewActivity] = useState({
+    name: '',
+    startTime: '',
+    duration: 30,
+    description: '',
+    day: 1
+  });
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
   const searchTemplates = useCallback(async () => {
     try {
@@ -125,6 +137,24 @@ export const Setup: React.FC = () => {
 
   const handleCreateTemplate = async () => {
     try {
+      if (!newTemplate.name.trim()) {
+        setSnackbar({
+          open: true,
+          message: 'Template name is required',
+          severity: 'error'
+        });
+        return;
+      }
+
+      if (newTemplate.days < 1) {
+        setSnackbar({
+          open: true,
+          message: 'Number of days must be at least 1',
+          severity: 'error'
+        });
+        return;
+      }
+
       const response = await templates.create(newTemplate);
       addAction({
         type: 'CREATE',
@@ -133,17 +163,17 @@ export const Setup: React.FC = () => {
       });
       setOpenDialog(false);
       setNewTemplate({ name: '', days: 1, category: '', tags: [] });
-      loadTemplates();
+      await loadTemplates();
       setSnackbar({
         open: true,
         message: 'Template created successfully',
         severity: 'success'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating template:', error);
       setSnackbar({
         open: true,
-        message: 'Error creating template',
+        message: error.response?.data?.message || 'Error creating template',
         severity: 'error'
       });
     }
@@ -262,6 +292,120 @@ export const Setup: React.FC = () => {
     setSelectedTemplate(null);
   };
 
+  const handleAddActivity = async () => {
+    console.log('Adding activity:', { selectedTemplate, newActivity });  // Debug log
+    
+    if (!selectedTemplate) {
+      console.error('No template selected');  // Debug log
+      setSnackbar({
+        open: true,
+        message: 'No template selected',
+        severity: 'error'
+      });
+      return;
+    }
+
+    // Validate required fields
+    if (!newActivity.name || !newActivity.startTime) {
+      console.error('Missing required fields:', { newActivity });  // Debug log
+      setSnackbar({
+        open: true,
+        message: 'Name and start time are required',
+        severity: 'error'
+      });
+      return;
+    }
+
+    // Validate time format
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(newActivity.startTime)) {
+      console.error('Invalid time format:', { startTime: newActivity.startTime });  // Debug log
+      setSnackbar({
+        open: true,
+        message: 'Invalid time format. Please use HH:MM format (e.g., 09:00)',
+        severity: 'error'
+      });
+      return;
+    }
+
+    try {
+      const templateId = selectedTemplate._id;
+      console.log('Sending request to add activity:', { templateId, activity: newActivity });  // Debug log
+      
+      const response = await templates.addActivity(templateId, {
+        ...newActivity,
+        day: Math.min(Math.max(1, newActivity.day), selectedTemplate.days)
+      });
+      
+      console.log('Activity added successfully:', response.data);  // Debug log
+      
+      addAction({
+        type: 'ADD_ACTIVITY',
+        templateId: templateId,
+        data: response.data
+      });
+      
+      // Reset form and close dialog
+      setActivityDialog(false);
+      setNewActivity({
+        name: '',
+        startTime: '',
+        duration: 30,
+        description: '',
+        day: 1
+      });
+      
+      // Reload templates to get the updated data
+      await loadTemplates();
+      
+      setSnackbar({
+        open: true,
+        message: 'Activity added successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Error adding activity:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Error adding activity',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleEditTemplate = async () => {
+    if (!editingTemplate) return;
+
+    try {
+      const response = await templates.update(editingTemplate._id, {
+        name: editingTemplate.name,
+        days: editingTemplate.days,
+        category: editingTemplate.category,
+        tags: editingTemplate.tags
+      });
+      addAction({
+        type: 'UPDATE',
+        templateId: response.data._id,
+        data: response.data
+      });
+      setEditDialog(false);
+      setEditingTemplate(null);
+      loadTemplates();
+      setSnackbar({
+        open: true,
+        message: 'Template updated successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error updating template:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error updating template',
+        severity: 'error'
+      });
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -368,7 +512,7 @@ export const Setup: React.FC = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <PersonIcon fontSize="small" />
                       <Typography variant="body2" color="text.secondary">
-                        {template.userId}
+                        {template.createdBy?.email || 'Unknown'}
                       </Typography>
                     </Box>
                   </Tooltip>
@@ -409,6 +553,24 @@ export const Setup: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={handleCloseMenu}
       >
+        <MenuItem onClick={() => {
+          if (selectedTemplate) {
+            setActivityDialog(true);
+            setSelectedTemplate(selectedTemplate);
+          }
+          handleCloseMenu();
+        }}>
+          <PlaylistAddIcon sx={{ mr: 1 }} /> Add Activity
+        </MenuItem>
+        <MenuItem onClick={() => {
+          if (selectedTemplate) {
+            setEditingTemplate(selectedTemplate);
+            setEditDialog(true);
+          }
+          handleCloseMenu();
+        }}>
+          <EditIcon sx={{ mr: 1 }} /> Edit Template
+        </MenuItem>
         <MenuItem onClick={() => selectedTemplate && handleDuplicateTemplate(selectedTemplate)}>
           <ContentCopyIcon sx={{ mr: 1 }} /> Duplicate
         </MenuItem>
@@ -475,6 +637,141 @@ export const Setup: React.FC = () => {
           <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
           <Button onClick={handleCreateTemplate} variant="contained" color="primary">
             Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={activityDialog} 
+        onClose={() => {
+          setActivityDialog(false);
+          setNewActivity({
+            name: '',
+            startTime: '',
+            duration: 30,
+            description: '',
+            day: 1
+          });
+          setSelectedTemplate(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Add Activity</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Activity Name"
+            fullWidth
+            value={newActivity.name}
+            onChange={(e) => setNewActivity({ ...newActivity, name: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Start Time (HH:MM)"
+            fullWidth
+            value={newActivity.startTime}
+            onChange={(e) => setNewActivity({ ...newActivity, startTime: e.target.value })}
+            placeholder="09:00"
+          />
+          <TextField
+            margin="dense"
+            label="Duration (minutes)"
+            type="number"
+            fullWidth
+            value={newActivity.duration}
+            onChange={(e) => setNewActivity({ ...newActivity, duration: parseInt(e.target.value) || 30 })}
+          />
+          <TextField
+            margin="dense"
+            label="Description"
+            fullWidth
+            multiline
+            rows={3}
+            value={newActivity.description}
+            onChange={(e) => setNewActivity({ ...newActivity, description: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Day"
+            type="number"
+            fullWidth
+            value={newActivity.day}
+            onChange={(e) => setNewActivity({ ...newActivity, day: parseInt(e.target.value) || 1 })}
+            inputProps={{ min: 1, max: selectedTemplate?.days || 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setActivityDialog(false)}>Cancel</Button>
+          <Button onClick={handleAddActivity} variant="contained" color="primary">
+            Add Activity
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={editDialog} 
+        onClose={() => {
+          setEditDialog(false);
+          setEditingTemplate(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Edit Template</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Template Name"
+            fullWidth
+            value={editingTemplate?.name || ''}
+            onChange={(e) => setEditingTemplate(prev => 
+              prev ? { ...prev, name: e.target.value } : null
+            )}
+          />
+          <TextField
+            margin="dense"
+            label="Number of Days"
+            type="number"
+            fullWidth
+            value={editingTemplate?.days || 1}
+            onChange={(e) => setEditingTemplate(prev => 
+              prev ? { ...prev, days: parseInt(e.target.value) || 1 } : null
+            )}
+          />
+          <Autocomplete
+            value={editingTemplate?.category || ''}
+            onChange={(_, newValue) => setEditingTemplate(prev => 
+              prev ? { ...prev, category: newValue || '' } : null
+            )}
+            options={categories}
+            freeSolo
+            renderInput={(params) => (
+              <TextField {...params} label="Category" margin="dense" />
+            )}
+          />
+          <Autocomplete
+            multiple
+            value={editingTemplate?.tags || []}
+            onChange={(_, newValue) => setEditingTemplate(prev => 
+              prev ? { ...prev, tags: newValue } : null
+            )}
+            options={tags}
+            freeSolo
+            renderInput={(params) => (
+              <TextField {...params} label="Tags" margin="dense" />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setEditDialog(false);
+            setEditingTemplate(null);
+          }}>Cancel</Button>
+          <Button onClick={handleEditTemplate} variant="contained" color="primary">
+            Save Changes
           </Button>
         </DialogActions>
       </Dialog>

@@ -3,71 +3,109 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const templateController = require('../controllers/template.controller');
 const logger = require('../config/logger');
+const Template = require('../models/template.model');
+
+// Apply authentication middleware to all routes
+router.use(authenticate);
 
 // Get all templates
-router.get('/', authenticate, templateController.getAllTemplates);
+router.get('/', templateController.getAllTemplates);
 
 // Get categories
-router.get('/categories', authenticate, async (req, res) => {
-  try {
-    // For now, return an empty array as categories are not yet implemented
-    logger.debug('Categories requested');
-    res.json([]);
-  } catch (error) {
-    logger.error('Error fetching categories', { error: error.message });
-    res.status(500).json({ message: 'Error fetching categories' });
-  }
-});
+router.get('/categories', templateController.getCategories);
 
 // Get tags
-router.get('/tags', authenticate, async (req, res) => {
-  try {
-    // For now, return an empty array as tags are not yet implemented
-    logger.debug('Tags requested');
-    res.json([]);
-  } catch (error) {
-    logger.error('Error fetching tags', { error: error.message });
-    res.status(500).json({ message: 'Error fetching tags' });
-  }
-});
+router.get('/tags', templateController.getTags);
 
 // Search templates
-router.get('/search', authenticate, async (req, res) => {
+router.get('/search', async (req, res) => {
   try {
     const { query, category, tags } = req.query;
-    logger.debug('Search requested', { query, category, tags });
+    logger.debug('Search requested', { query });
     
-    // For now, return all templates as search is not yet implemented
-    const templates = await templateController.getAllTemplates(req, res);
-    res.json(templates);
+    const searchQuery = {};
+    
+    if (query) {
+      searchQuery.name = { $regex: query, $options: 'i' };
+    }
+    
+    if (category && category.trim()) {
+      searchQuery.category = category.trim();
+    }
+    
+    if (tags && tags.length > 0) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      searchQuery.tags = { 
+        $all: tagArray.filter(tag => tag && tag.trim()).map(tag => tag.trim()) 
+      };
+    }
+
+    const templates = await Template.find(searchQuery)
+      .populate('createdBy', 'firstName lastName email');
+    
+    return res.json(templates);
   } catch (error) {
     logger.error('Error searching templates', { error: error.message });
-    res.status(500).json({ message: 'Error searching templates' });
+    return res.status(500).json({ message: 'Error searching templates' });
   }
 });
 
-// Get a specific template
-router.get('/:id', authenticate, templateController.getTemplateById);
+// Get template by ID
+router.get('/:id', templateController.getTemplateById);
 
-// Create a new template
-router.post('/', authenticate, templateController.createTemplate);
+// Create template
+router.post('/', templateController.createTemplate);
 
-// Update a template
-router.put('/:id', authenticate, templateController.updateTemplate);
+// Update template
+router.put('/:id', templateController.updateTemplate);
 
-// Delete a template
-router.delete('/:id', authenticate, templateController.deleteTemplate);
+// Delete template
+router.delete('/:id', templateController.deleteTemplate);
 
-// Duplicate a template
-router.post('/:id/duplicate', authenticate, templateController.duplicateTemplate);
+// Duplicate template
+router.post('/:id/duplicate', templateController.duplicateTemplate);
 
 // Add activity to template
-router.post('/:id/activities', authenticate, templateController.addActivity);
+router.post('/:id/activities', templateController.addActivity);
 
 // Update activity in template
-router.put('/:templateId/activities/:activityId', authenticate, templateController.updateActivity);
+router.put('/:id/activities/:activityId', templateController.updateActivity);
 
 // Delete activity from template
-router.delete('/:templateId/activities/:activityId', authenticate, templateController.deleteActivity);
+router.delete('/:id/activities/:activityId', templateController.deleteActivity);
+
+// Check conflicts in template
+router.get('/:id/conflicts', async (req, res) => {
+  try {
+    const template = await Template.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+    
+    const conflicts = checkActivityConflicts(template.activities);
+    res.json(conflicts);
+  } catch (error) {
+    logger.error('Error checking conflicts', { error: error.message });
+    res.status(500).json({ message: 'Error checking conflicts' });
+  }
+});
+
+// Export template as PDF
+router.get('/:id/export-pdf', async (req, res) => {
+  try {
+    const template = await Template.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName email');
+    
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+    
+    // TODO: Implement PDF generation
+    res.status(501).json({ message: 'PDF export not implemented yet' });
+  } catch (error) {
+    logger.error('Error exporting PDF', { error: error.message });
+    res.status(500).json({ message: 'Error exporting PDF' });
+  }
+});
 
 module.exports = router; 

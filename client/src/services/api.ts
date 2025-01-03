@@ -68,7 +68,7 @@ export const auth = {
 export const templates = {
   getAll: () => api.get<Template[]>('/templates'),
   getById: (id: string) => api.get<Template>(`/templates/${id}`),
-  create: (data: { name: string; days: number }) => 
+  create: (data: { name: string; days: number; category?: string; tags?: string[] }) => 
     api.post<Template>('/templates', data),
   addActivity: (templateId: string, activity: Omit<Activity, '_id'>) =>
     api.post<Activity>(`/templates/${templateId}/activities`, activity),
