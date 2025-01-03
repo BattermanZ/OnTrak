@@ -24,8 +24,6 @@ const activitySchema = new mongoose.Schema({
     required: true,
     min: 1
   }
-}, {
-  timestamps: true
 });
 
 const templateSchema = new mongoose.Schema({
@@ -44,22 +42,10 @@ const templateSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  category: {
-    type: String,
-    default: '',
-    trim: true
-  },
-  tags: [{
-    type: String,
-    trim: true
-  }],
   activities: [activitySchema]
 }, {
   timestamps: true
 });
-
-// Add index for faster queries
-templateSchema.index({ createdBy: 1, createdAt: -1 });
 
 const Template = mongoose.model('Template', templateSchema);
 
