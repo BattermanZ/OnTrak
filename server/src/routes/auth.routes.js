@@ -3,8 +3,15 @@ const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user.model');
+const logger = require('../config/logger');
 
 const router = express.Router();
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  logger.debug('Health check request received');
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Validation middleware
 const validateRegistration = [

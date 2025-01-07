@@ -14,7 +14,7 @@ if (!fs.existsSync(logsDir)) {
 const router = express.Router();
 
 // Handle frontend logs
-router.post('/', authenticate, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { logs } = req.body;
     if (!logs) {
@@ -28,7 +28,7 @@ router.post('/', authenticate, async (req, res) => {
     
     logger.debug('Frontend logs received and written to file', { 
       size: logs.length,
-      user: req.user._id
+      user: req.user?._id || 'unauthenticated'
     });
 
     res.status(200).json({ message: 'Logs written successfully' });

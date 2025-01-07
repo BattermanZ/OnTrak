@@ -10,6 +10,8 @@ import {
   Paper
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
+import axios from 'axios';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -19,23 +21,58 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Test backend connection
+  const testBackendConnection = async () => {
+    try {
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
+      logger.debug('Testing backend connection to:', baseUrl);
+      
+      const response = await axios.get(`${baseUrl}/health`);
+      logger.debug('Backend health check response:', response.data);
+      return true;
+    } catch (err) {
+      logger.error('Backend connection test failed:', err);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError('');
       setLoading(true);
-      console.log('Attempting login with email:', email);
+
+      // Test backend connection first
+      const isBackendAvailable = await testBackendConnection();
+      if (!isBackendAvailable) {
+        throw new Error('Unable to connect to the server. Please check if the backend is running.');
+      }
+
+      logger.debug('Attempting login with email:', email);
+      logger.debug('Current API URL:', process.env.REACT_APP_API_URL);
+
       await login(email, password);
-      console.log('Login successful, navigating to home');
+      logger.info('Login successful, navigating to home');
       navigate('/');
     } catch (err: any) {
-      console.error('Login error details:', {
+      logger.error('Login error details:', {
         status: err.response?.status,
         statusText: err.response?.statusText,
         data: err.response?.data,
-        message: err.message
+        message: err.message,
+        stack: err.stack
       });
-      setError(err.response?.data?.message || err.message || 'Failed to sign in');
+
+      // Set more descriptive error messages
+      if (err.response?.status === 404) {
+        setError('Server not found. Please check if the backend is running.');
+      } else if (err.response?.status === 401) {
+        setError('Invalid email or password');
+      } else if (!err.response) {
+        setError('Network error. Please check your connection and server status.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Failed to sign in');
+      }
     } finally {
       setLoading(false);
     }
@@ -88,7 +125,7 @@ const Login: React.FC = () => {
               sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
             <Box sx={{ textAlign: 'center' }}>
               <Link to="/register" style={{ textDecoration: 'none' }}>

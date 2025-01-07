@@ -2,60 +2,150 @@ import axios from 'axios';
 import type { User, Schedule, Activity, Template } from '../types';
 import { logger } from '../utils/logger';
 
+// Create base API URL with fallback
+const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
+logger.debug('Initializing API with base URL:', baseURL);
+
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3456/api',
+  baseURL,
   headers: {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json'
   },
+  // Add timeout
+  timeout: 10000,
 });
 
-// Add request interceptor to attach JWT token
+// Add request interceptor to handle auth token and logging
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Log the full request details
     logger.debug('API Request', { 
       method: config.method, 
       url: config.url,
-      data: config.data
+      baseURL: config.baseURL,
+      headers: config.headers,
+      data: config.data,
+      params: config.params
     });
+    
     return config;
   },
   (error) => {
-    logger.error('API Request Error', { error: error.message });
+    logger.error('API Request Error', {
+      message: error.message,
+      stack: error.stack
+    });
     return Promise.reject(error);
   }
 );
 
-// Add response interceptor to handle errors
+// Add response interceptor to handle errors and logging
 api.interceptors.response.use(
   (response) => {
     logger.debug('API Response', { 
-      data: response.data
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data,
+      headers: response.headers
     });
     return response;
   },
   (error) => {
-    logger.error('API Response Error', { error: error.message });
+    // Log detailed error information
+    logger.error('API Response Error', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+        headers: error.config?.headers,
+        data: error.config?.data
+      }
+    });
+
+    // Handle specific error cases
+    if (error.code === 'ECONNABORTED') {
+      error.message = 'Request timed out. Please try again.';
+    } else if (!error.response) {
+      error.message = 'Network error. Please check your connection and server status.';
+    } else if (error.response.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+
     return Promise.reject(error);
   }
 );
 
 // Auth API
-export const auth = {
-  login: (data: { email: string; password: string }) =>
-    api.post('/auth/login', data),
-  register: (data: { email: string; password: string; firstName: string; lastName: string }) =>
-    api.post('/auth/register', data),
-  getCurrentUser: () => api.get('/auth/me'),
-  updateProfile: (data: Partial<Omit<User, 'role' | '_id'>>) =>
-    api.put('/auth/profile', data),
+const auth = {
+  login: async (data: { email: string; password: string }) => {
+    try {
+      logger.debug('Attempting login', { email: data.email });
+      const response = await api.post('/auth/login', data);
+      logger.info('Login successful');
+      return response;
+    } catch (error) {
+      logger.error('Login failed', error);
+      throw error;
+    }
+  },
+  register: async (data: { email: string; password: string; firstName: string; lastName: string }) => {
+    try {
+      logger.debug('Attempting registration', { email: data.email });
+      const response = await api.post('/auth/register', data);
+      logger.info('Registration successful');
+      return response;
+    } catch (error) {
+      logger.error('Registration failed', error);
+      throw error;
+    }
+  },
+  getCurrentUser: async () => {
+    try {
+      logger.debug('Fetching current user');
+      const response = await api.get('/auth/me');
+      logger.debug('Current user fetched successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to fetch current user', error);
+      throw error;
+    }
+  },
+  updateProfile: async (data: Partial<User>) => {
+    try {
+      logger.debug('Updating user profile');
+      const response = await api.put('/auth/profile', data);
+      logger.info('Profile updated successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to update profile', error);
+      throw error;
+    }
+  },
+  logout: async () => {
+    try {
+      logger.debug('Attempting logout');
+      const response = await api.post('/auth/logout');
+      logger.info('Logout successful');
+      return response;
+    } catch (error) {
+      logger.error('Logout failed', error);
+      throw error;
+    }
+  }
 };
 
 // Templates API
-export const templates = {
+const templates = {
   getAll: () => api.get('/templates'),
   getById: (id: string) => api.get(`/templates/${id}`),
   create: (data: { name: string; days: number }) => api.post('/templates', data),
@@ -68,7 +158,7 @@ export const templates = {
 };
 
 // Schedules API
-export const schedules = {
+const schedules = {
   getAll: () => api.get('/schedules'),
   getById: (id: string) => api.get(`/schedules/${id}`),
   create: (data: { templateId: string; startDate: string }) => api.post('/schedules', data),
@@ -83,5 +173,6 @@ export const schedules = {
     api.post(`/schedules/${scheduleId}/previous/${activityId}`),
 };
 
-export { api };
+// Export everything at the end
+export { api, auth, templates, schedules };
 export type { User, Schedule, Activity, Template }; 
