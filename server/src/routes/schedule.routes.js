@@ -79,19 +79,19 @@ router.post('/start-day',
         }
       );
 
-      // Create schedule
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
+      // Create schedule with actual start time for first activity
+      const now = new Date();
       const schedule = new Schedule({
         title: `${template.name} - Day ${day}`,
-        startDate: today,
-        endDate: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+        startDate: now,
+        endDate: new Date(now.getTime() + 24 * 60 * 60 * 1000),
         activities: activities.map((a, index) => ({
           ...a.toObject(),
-          status: index === 0 ? 'in-progress' : 'pending'
+          status: index === 0 ? 'in-progress' : 'pending',
+          actualStartTime: index === 0 ? now : null,
+          actualEndTime: null
         })),
-        currentActivityIndex: 0,
+        activeActivityIndex: 0,
         status: 'active',
         createdBy: req.user._id,
         templateId: template._id,
@@ -100,13 +100,19 @@ router.post('/start-day',
 
       await schedule.save();
 
+      // Add virtual properties for response
+      const result = schedule.toObject();
+      result.currentActivity = schedule.activities[0];
+      result.previousActivity = null;
+      result.nextActivity = activities.length > 1 ? schedule.activities[1] : null;
+
       // Safely emit socket event if io is available
       const io = req.app.get('io');
       if (io) {
-        io.emit('schedule:updated', schedule);
+        io.emit('schedule:updated', result);
       }
 
-      res.status(201).json(schedule);
+      res.status(201).json(result);
     } catch (error) {
       logger.error('Error starting day:', error);
       next(error);
@@ -140,16 +146,20 @@ router.post('/:id/skip/:activityId',
         return res.status(400).json({ message: 'No next activity available' });
       }
 
+      const now = new Date();
+
       // Mark current activity as completed and not active
       schedule.activities[activityIndex].status = 'completed';
       schedule.activities[activityIndex].isActive = false;
       schedule.activities[activityIndex].completed = true;
+      schedule.activities[activityIndex].actualEndTime = now;
       
       // Move to next activity and mark it as in-progress
       schedule.activeActivityIndex = activityIndex + 1;
       schedule.activities[activityIndex + 1].status = 'in-progress';
       schedule.activities[activityIndex + 1].isActive = true;
       schedule.activities[activityIndex + 1].completed = false;
+      schedule.activities[activityIndex + 1].actualStartTime = now;
 
       await schedule.save();
 
@@ -375,6 +385,17 @@ router.post('/close-day',
 
       if (!schedule) {
         return res.status(404).json({ message: 'No active schedule found' });
+      }
+
+      const now = new Date();
+
+      // Mark current activity as completed and set its end time
+      const currentActivityIndex = schedule.activeActivityIndex;
+      if (currentActivityIndex >= 0 && currentActivityIndex < schedule.activities.length) {
+        schedule.activities[currentActivityIndex].status = 'completed';
+        schedule.activities[currentActivityIndex].isActive = false;
+        schedule.activities[currentActivityIndex].completed = true;
+        schedule.activities[currentActivityIndex].actualEndTime = now;
       }
 
       schedule.status = 'completed';

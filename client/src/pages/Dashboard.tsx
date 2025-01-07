@@ -39,6 +39,36 @@ const ActivityBox = ({
   isActive?: boolean;
   isCompleted?: boolean;
 }) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    if (isActive && activity) {
+      // Update progress every second
+      const updateProgress = () => {
+        const startTime = parse(activity.startTime, 'HH:mm', new Date());
+        const endTime = addMinutes(startTime, activity.duration);
+        const now = new Date();
+        const total = endTime.getTime() - startTime.getTime();
+        const elapsed = now.getTime() - startTime.getTime();
+        setProgress(Math.min(Math.max((elapsed / total) * 100, 0), 100));
+      };
+
+      // Initial update
+      updateProgress();
+      
+      // Set up interval for live updates
+      intervalId = setInterval(updateProgress, 1000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isActive, activity]);
+
   if (!activity) {
     return (
       <Paper
@@ -93,7 +123,7 @@ const ActivityBox = ({
         <Box sx={{ mt: 2 }}>
           <LinearProgress
             variant="determinate"
-            value={getProgressValue(startTime, endTime)}
+            value={progress}
             sx={{
               height: 10,
               borderRadius: 5,
@@ -104,25 +134,12 @@ const ActivityBox = ({
             }}
           />
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {getTimeRemaining(endTime)} minutes remaining
+            {Math.max(Math.ceil((endTime.getTime() - new Date().getTime()) / 60000), 0)} minutes remaining
           </Typography>
         </Box>
       )}
     </Paper>
   );
-};
-
-const getProgressValue = (startTime: Date, endTime: Date) => {
-  const now = new Date();
-  const total = endTime.getTime() - startTime.getTime();
-  const elapsed = now.getTime() - startTime.getTime();
-  return Math.min(Math.max((elapsed / total) * 100, 0), 100);
-};
-
-const getTimeRemaining = (endTime: Date) => {
-  const now = new Date();
-  const remaining = endTime.getTime() - now.getTime();
-  return Math.max(Math.ceil(remaining / 60000), 0);
 };
 
 const Dashboard = () => {

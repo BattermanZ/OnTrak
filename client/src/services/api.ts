@@ -23,22 +23,17 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // Log the full request details
+    // Simplified request logging
     logger.debug('API Request', { 
       method: config.method, 
       url: config.url,
-      baseURL: config.baseURL,
-      headers: config.headers,
-      data: config.data,
-      params: config.params
     });
     
     return config;
   },
   (error) => {
     logger.error('API Request Error', {
-      message: error.message,
-      stack: error.stack
+      message: error.message
     });
     return Promise.reject(error);
   }
@@ -47,28 +42,30 @@ api.interceptors.request.use(
 // Add response interceptor to handle errors and logging
 api.interceptors.response.use(
   (response) => {
-    logger.debug('API Response', { 
+    // Simplified response logging
+    const logData: {
+      status: number;
+      statusText: string;
+      title?: string;
+    } = {
       status: response.status,
       statusText: response.statusText,
-      data: response.data,
-      headers: response.headers
-    });
+    };
+
+    // Only add training name if it exists
+    if (response.data?.title) {
+      logData.title = response.data.title;
+    }
+
+    logger.debug('API Response', logData);
     return response;
   },
   (error) => {
-    // Log detailed error information
+    // Simplified error logging
     logger.error('API Response Error', {
       message: error.message,
       status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        baseURL: error.config?.baseURL,
-        headers: error.config?.headers,
-        data: error.config?.data
-      }
+      statusText: error.response?.statusText
     });
 
     // Handle specific error cases

@@ -31,6 +31,14 @@ const activitySchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: false
+  },
+  actualStartTime: {
+    type: Date,
+    default: null
+  },
+  actualEndTime: {
+    type: Date,
+    default: null
   }
 });
 
