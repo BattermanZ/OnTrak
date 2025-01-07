@@ -205,6 +205,16 @@ const Dashboard = () => {
     }
   };
 
+  const handleCloseDay = async () => {
+    try {
+      setError('');
+      await schedules.closeDay();
+      await queryClient.invalidateQueries('currentSchedule');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to close day');
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -232,6 +242,21 @@ const Dashboard = () => {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 2 }}>
+            {schedule && (
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={handleCloseDay}
+                sx={{
+                  bgcolor: '#4CAF50',
+                  '&:hover': {
+                    bgcolor: '#388E3C',
+                  },
+                }}
+              >
+                Close Day
+              </Button>
+            )}
             <Button
               component={RouterLink}
               to="/setup"
@@ -339,7 +364,7 @@ const Dashboard = () => {
                 variant="contained"
                 onClick={handleSkipActivity}
                 startIcon={<SkipNextIcon />}
-                disabled={!schedule.nextActivity}
+                disabled={!schedule.currentActivity}
               >
                 Skip Activity
               </Button>

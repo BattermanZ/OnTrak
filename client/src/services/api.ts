@@ -171,6 +171,7 @@ const schedules = {
     api.post(`/schedules/${scheduleId}/skip/${activityId}`),
   goToPreviousActivity: (scheduleId: string, activityId: string) =>
     api.post(`/schedules/${scheduleId}/previous/${activityId}`),
+  closeDay: () => api.post('/schedules/close-day'),
 };
 
 // Export everything at the end

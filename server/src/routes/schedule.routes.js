@@ -140,22 +140,32 @@ router.post('/:id/skip/:activityId',
         return res.status(400).json({ message: 'No next activity available' });
       }
 
-      // Mark current activity as completed
+      // Mark current activity as completed and not active
       schedule.activities[activityIndex].status = 'completed';
+      schedule.activities[activityIndex].isActive = false;
+      schedule.activities[activityIndex].completed = true;
       
       // Move to next activity and mark it as in-progress
-      schedule.currentActivityIndex = activityIndex + 1;
+      schedule.activeActivityIndex = activityIndex + 1;
       schedule.activities[activityIndex + 1].status = 'in-progress';
+      schedule.activities[activityIndex + 1].isActive = true;
+      schedule.activities[activityIndex + 1].completed = false;
 
       await schedule.save();
+
+      // Add virtual properties for the response
+      const result = schedule.toObject();
+      result.currentActivity = schedule.activities[schedule.activeActivityIndex];
+      result.previousActivity = activityIndex > 0 ? schedule.activities[activityIndex] : null;
+      result.nextActivity = activityIndex + 2 < schedule.activities.length ? schedule.activities[activityIndex + 2] : null;
 
       // Emit socket event for real-time updates
       const io = req.app.get('io');
       if (io) {
-        io.emit('schedule:updated', schedule);
+        io.emit('schedule:updated', result);
       }
 
-      res.json(schedule);
+      res.json(result);
     } catch (error) {
       logger.error('Error skipping activity:', error);
       next(error);
@@ -348,6 +358,37 @@ router.delete('/:id',
 
       res.json({ message: 'Schedule deleted successfully' });
     } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Close current day
+router.post('/close-day',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    try {
+      const schedule = await Schedule.findOne({
+        createdBy: req.user._id,
+        status: 'active'
+      });
+
+      if (!schedule) {
+        return res.status(404).json({ message: 'No active schedule found' });
+      }
+
+      schedule.status = 'completed';
+      await schedule.save();
+
+      // Emit socket event for real-time updates
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', schedule);
+      }
+
+      res.json({ message: 'Day closed successfully' });
+    } catch (error) {
+      logger.error('Error closing day:', error);
       next(error);
     }
   }
