@@ -1,4 +1,4 @@
-import { Activity, ActivityConflict } from '../types';
+import { Activity, ActivityConflict } from '../types/index';
 import { addMinutes, parseISO } from 'date-fns';
 
 export const checkActivityConflicts = (activities: Activity[]): ActivityConflict[] => {
@@ -36,8 +36,7 @@ export const checkActivityConflicts = (activities: Activity[]): ActivityConflict
         conflicts.push({
           activity1,
           activity2,
-          type: 'overlap',
-          conflictDetails: `Activities "${activity1.name}" and "${activity2.name}" overlap`,
+          type: 'OVERLAP',
           day: Number(day)
         });
       }

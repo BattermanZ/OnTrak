@@ -11,7 +11,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { format, parse, addMinutes } from 'date-fns';
 import { schedules } from '../services/api';
-import type { Schedule as ScheduleType, Activity } from '../types';
+import type { Schedule as ScheduleType, Activity } from '../types/index';
 import type { AxiosResponse } from 'axios';
 
 const Schedule = () => {

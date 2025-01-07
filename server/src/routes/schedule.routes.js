@@ -120,8 +120,8 @@ router.post('/start-day',
   }
 );
 
-// Skip current activity
-router.post('/:id/skip/:activityId',
+// Go to next activity
+router.post('/:id/next/:activityId',
   passport.authenticate('jwt', { session: false }),
   [
     param('id').isMongoId(),
@@ -177,7 +177,7 @@ router.post('/:id/skip/:activityId',
 
       res.json(result);
     } catch (error) {
-      logger.error('Error skipping activity:', error);
+      logger.error('Error moving to next activity:', error);
       next(error);
     }
   }
@@ -209,22 +209,35 @@ router.post('/:id/previous/:activityId',
         return res.status(400).json({ message: 'No previous activity available' });
       }
 
-      // Mark current activity as pending
+      // Reset current activity times and status (mistake correction)
       schedule.activities[activityIndex].status = 'pending';
+      schedule.activities[activityIndex].isActive = false;
+      schedule.activities[activityIndex].completed = false;
+      schedule.activities[activityIndex].actualStartTime = null;
+      schedule.activities[activityIndex].actualEndTime = null;
       
-      // Move to previous activity and mark it as in-progress
-      schedule.currentActivityIndex = activityIndex - 1;
+      // Move to previous activity and restore its state
+      schedule.activeActivityIndex = activityIndex - 1;
       schedule.activities[activityIndex - 1].status = 'in-progress';
+      schedule.activities[activityIndex - 1].isActive = true;
+      schedule.activities[activityIndex - 1].completed = false;
+      // Don't modify the previous activity's times - keep them as they were
 
       await schedule.save();
+
+      // Add virtual properties for the response
+      const result = schedule.toObject();
+      result.currentActivity = schedule.activities[schedule.activeActivityIndex];
+      result.previousActivity = activityIndex - 2 >= 0 ? schedule.activities[activityIndex - 2] : null;
+      result.nextActivity = schedule.activities[activityIndex];
 
       // Emit socket event for real-time updates
       const io = req.app.get('io');
       if (io) {
-        io.emit('schedule:updated', schedule);
+        io.emit('schedule:updated', result);
       }
 
-      res.json(schedule);
+      res.json(result);
     } catch (error) {
       logger.error('Error going to previous activity:', error);
       next(error);

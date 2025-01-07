@@ -164,8 +164,8 @@ const schedules = {
   getCurrentSchedule: () => api.get('/schedules/current'),
   startDay: (templateId: string, day: number) => 
     api.post('/schedules/start-day', { templateId, day }),
-  skipActivity: (scheduleId: string, activityId: string) =>
-    api.post(`/schedules/${scheduleId}/skip/${activityId}`),
+  nextActivity: (scheduleId: string, activityId: string) =>
+    api.post(`/schedules/${scheduleId}/next/${activityId}`),
   goToPreviousActivity: (scheduleId: string, activityId: string) =>
     api.post(`/schedules/${scheduleId}/previous/${activityId}`),
   closeDay: () => api.post('/schedules/close-day'),
@@ -173,4 +173,4 @@ const schedules = {
 
 // Export everything at the end
 export { api, auth, templates, schedules };
-export type { User, Schedule, Activity, Template }; 
+export type { User, Schedule, Activity, Template } from '../types/index'; 

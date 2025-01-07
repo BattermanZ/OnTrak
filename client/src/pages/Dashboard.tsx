@@ -13,12 +13,16 @@ import {
   InputLabel,
   Alert,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { format, parse, addMinutes } from 'date-fns';
 import { useSocket } from '../hooks/useSocket';
 import { schedules, templates } from '../services/api';
-import type { Schedule, Activity, Template } from '../types';
+import type { Schedule, Activity, Template } from '../types/index';
 import { useQuery, useQueryClient } from 'react-query';
 import {
   PlayArrow as PlayArrowIcon,
@@ -40,6 +44,8 @@ const ActivityBox = ({
   isCompleted?: boolean;
 }) => {
   const [progress, setProgress] = useState(0);
+  const [isOvertime, setIsOvertime] = useState(false);
+  const [overtimeMinutes, setOvertimeMinutes] = useState(0);
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -47,12 +53,28 @@ const ActivityBox = ({
     if (isActive && activity) {
       // Update progress every second
       const updateProgress = () => {
-        const startTime = parse(activity.startTime, 'HH:mm', new Date());
+        const scheduledStartTime = parse(activity.startTime, 'HH:mm', new Date());
+        const actualStartTimeDate = activity.actualStartTime ? new Date(activity.actualStartTime) : null;
+        const startTime = actualStartTimeDate && actualStartTimeDate < scheduledStartTime 
+          ? actualStartTimeDate 
+          : scheduledStartTime;
         const endTime = addMinutes(startTime, activity.duration);
         const now = new Date();
         const total = endTime.getTime() - startTime.getTime();
         const elapsed = now.getTime() - startTime.getTime();
-        setProgress(Math.min(Math.max((elapsed / total) * 100, 0), 100));
+        const currentProgress = (elapsed / total) * 100;
+        
+        setProgress(Math.max(currentProgress, 0));
+        
+        // Calculate overtime
+        if (now > endTime) {
+          setIsOvertime(true);
+          const overtime = (now.getTime() - endTime.getTime()) / (1000 * 60);
+          setOvertimeMinutes(Math.ceil(overtime));
+        } else {
+          setIsOvertime(false);
+          setOvertimeMinutes(0);
+        }
       };
 
       // Initial update
@@ -123,18 +145,25 @@ const ActivityBox = ({
         <Box sx={{ mt: 2 }}>
           <LinearProgress
             variant="determinate"
-            value={progress}
+            value={Math.min(progress, 100)}
             sx={{
               height: 10,
               borderRadius: 5,
               bgcolor: '#E0E0E0',
               '& .MuiLinearProgress-bar': {
-                bgcolor: '#0066CC',
+                bgcolor: isOvertime 
+                  ? '#DC3545' // Red for overtime
+                  : progress > 90 
+                    ? '#FFA726' // Orange for last 10%
+                    : '#4CAF50', // Green by default
               },
             }}
           />
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {Math.max(Math.ceil((endTime.getTime() - new Date().getTime()) / 60000), 0)} minutes remaining
+            {isOvertime 
+              ? `${overtimeMinutes} minutes overtime`
+              : `${Math.max(Math.ceil((addMinutes(parse(activity.startTime, 'HH:mm', new Date()), activity.duration).getTime() - new Date().getTime()) / 60000), 0)} minutes remaining`
+            }
           </Typography>
         </Box>
       )}
@@ -150,6 +179,8 @@ const Dashboard = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [error, setError] = useState<string>('');
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [showCongrats, setShowCongrats] = useState(false);
 
   // Fetch templates
   const { data: templateList } = useQuery('templates', async () => {
@@ -192,18 +223,18 @@ const Dashboard = () => {
     }
   };
 
-  const handleSkipActivity = async () => {
+  const handleNextActivity = async () => {
     try {
       setError('');
       if (!schedule?._id || !schedule.currentActivity?._id) {
-        setError('No active activity to skip');
+        setError('No active activity to move to next');
         return;
       }
 
-      await schedules.skipActivity(schedule._id, schedule.currentActivity._id);
+      await schedules.nextActivity(schedule._id, schedule.currentActivity._id);
       await queryClient.invalidateQueries('currentSchedule');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to skip activity');
+      setError(err.response?.data?.message || 'Failed to move to next activity');
     }
   };
 
@@ -227,6 +258,8 @@ const Dashboard = () => {
       setError('');
       await schedules.closeDay();
       await queryClient.invalidateQueries('currentSchedule');
+      setCloseDialogOpen(false);
+      setShowCongrats(true);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to close day');
     }
@@ -263,7 +296,7 @@ const Dashboard = () => {
               <Button
                 variant="contained"
                 color="secondary"
-                onClick={handleCloseDay}
+                onClick={() => setCloseDialogOpen(true)}
                 sx={{
                   bgcolor: '#4CAF50',
                   '&:hover': {
@@ -377,14 +410,30 @@ const Dashboard = () => {
               >
                 Previous Activity
               </Button>
-              <Button
-                variant="contained"
-                onClick={handleSkipActivity}
-                startIcon={<SkipNextIcon />}
-                disabled={!schedule.currentActivity}
-              >
-                Skip Activity
-              </Button>
+              {schedule.nextActivity ? (
+                <Button
+                  variant="contained"
+                  onClick={handleNextActivity}
+                  startIcon={<SkipNextIcon />}
+                  disabled={!schedule.currentActivity}
+                >
+                  Next Activity
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  onClick={() => setCloseDialogOpen(true)}
+                  sx={{
+                    bgcolor: '#4CAF50',
+                    '&:hover': {
+                      bgcolor: '#388E3C',
+                    },
+                  }}
+                  disabled={!schedule.currentActivity}
+                >
+                  Close Day
+                </Button>
+              )}
             </Box>
 
             <Grid container spacing={4}>
@@ -430,6 +479,58 @@ const Dashboard = () => {
           </>
         )}
       </Box>
+
+      {/* Close Day Confirmation Dialog */}
+      <Dialog
+        open={closeDialogOpen}
+        onClose={() => setCloseDialogOpen(false)}
+      >
+        <DialogTitle>Close Training Day</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to close this training day? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
+          <Button 
+            onClick={handleCloseDay}
+            variant="contained"
+            sx={{
+              bgcolor: '#4CAF50',
+              '&:hover': {
+                bgcolor: '#388E3C',
+              },
+            }}
+          >
+            Close Day
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Congratulations Dialog */}
+      <Dialog
+        open={showCongrats}
+        onClose={() => setShowCongrats(false)}
+      >
+        <DialogTitle>Training Day Complete! 🎉</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Congratulations on completing your training day! Keep up the great work!
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setShowCongrats(false);
+              navigate('/');
+            }}
+            variant="contained"
+          >
+            Back to Dashboard
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

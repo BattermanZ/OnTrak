@@ -10,7 +10,7 @@ export const useTemplateHistory = () => {
   const addAction = useCallback((action: Omit<TemplateHistoryAction, 'timestamp'>) => {
     const newAction: TemplateHistoryAction = {
       ...action,
-      timestamp: new Date()
+      timestamp: Date.now()
     };
 
     setHistory(prev => {

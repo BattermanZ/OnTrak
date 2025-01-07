@@ -30,7 +30,7 @@ import {
 } from '@mui/icons-material';
 import { templates } from '../services/api';
 import { useQuery, useQueryClient } from 'react-query';
-import type { Template, Activity } from '../types';
+import type { Template, Activity } from '../types/index';
 import { logger } from '../utils/logger';
 
 export const Setup = () => {

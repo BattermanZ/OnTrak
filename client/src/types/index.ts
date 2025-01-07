@@ -14,6 +14,11 @@ export interface Activity {
   duration: number;
   description?: string;
   day: number;
+  status?: 'pending' | 'in-progress' | 'completed';
+  isActive?: boolean;
+  completed?: boolean;
+  actualStartTime: string | null;
+  actualEndTime: string | null;
 }
 
 export interface Template {
