@@ -102,9 +102,9 @@ router.post('/start-day',
 
       // Add virtual properties for response
       const result = schedule.toObject();
-      result.currentActivity = schedule.activities[0];
-      result.previousActivity = null;
-      result.nextActivity = activities.length > 1 ? schedule.activities[1] : null;
+      result.currentActivity = schedule.getCurrentActivity();
+      result.previousActivity = schedule.getPreviousActivity();
+      result.nextActivity = schedule.getNextActivity();
 
       // Safely emit socket event if io is available
       const io = req.app.get('io');
@@ -165,9 +165,9 @@ router.post('/:id/next/:activityId',
 
       // Add virtual properties for the response
       const result = schedule.toObject();
-      result.currentActivity = schedule.activities[schedule.activeActivityIndex];
-      result.previousActivity = activityIndex > 0 ? schedule.activities[activityIndex] : null;
-      result.nextActivity = activityIndex + 2 < schedule.activities.length ? schedule.activities[activityIndex + 2] : null;
+      result.currentActivity = schedule.getCurrentActivity();
+      result.previousActivity = schedule.getPreviousActivity();
+      result.nextActivity = schedule.getNextActivity();
 
       // Emit socket event for real-time updates
       const io = req.app.get('io');
@@ -227,9 +227,9 @@ router.post('/:id/previous/:activityId',
 
       // Add virtual properties for the response
       const result = schedule.toObject();
-      result.currentActivity = schedule.activities[schedule.activeActivityIndex];
-      result.previousActivity = activityIndex - 2 >= 0 ? schedule.activities[activityIndex - 2] : null;
-      result.nextActivity = schedule.activities[activityIndex];
+      result.currentActivity = schedule.getCurrentActivity();
+      result.previousActivity = schedule.getPreviousActivity();
+      result.nextActivity = schedule.getNextActivity();
 
       // Emit socket event for real-time updates
       const io = req.app.get('io');

@@ -32,6 +32,71 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
+const ScheduleActivityBox = ({ 
+  activity,
+  isActive,
+  isCompleted,
+}: { 
+  activity: Activity;
+  isActive?: boolean;
+  isCompleted?: boolean;
+}) => {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Paper
+        elevation={2}
+        sx={{
+          flex: 1,
+          p: 2,
+          bgcolor: '#FFFFFF',
+          display: 'flex',
+          flexDirection: 'column',
+          borderLeft: isCompleted || activity.completed ? '4px solid #4CAF50' : isActive ? '4px solid #0066CC' : '4px solid #9E9E9E',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            transform: 'translateX(4px)',
+            boxShadow: 3,
+          }
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: isActive ? 600 : 400,
+                color: isCompleted || activity.completed ? '#166534' : 'inherit'
+              }}
+            >
+              {activity.name} ({activity.duration} min)
+            </Typography>
+            {activity.description && (
+              <Typography 
+                variant="body2" 
+                color={isCompleted || activity.completed ? '#166534' : 'text.secondary'} 
+                sx={{ mt: 0.5 }}
+              >
+                {activity.description}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </Paper>
+      <Typography 
+        variant="h6" 
+        sx={{ 
+          width: '80px', 
+          textAlign: 'left',
+          color: 'text.secondary',
+          transition: 'all 0.2s ease-in-out',
+        }}
+      >
+        {format(parse(activity.startTime, 'HH:mm', new Date()), 'HH:mm')}
+      </Typography>
+    </Box>
+  );
+};
+
 const ActivityBox = ({ 
   title, 
   activity,
@@ -97,10 +162,15 @@ const ActivityBox = ({
         elevation={3}
         sx={{
           p: 3,
-          bgcolor: '#F5F5F5',
+          bgcolor: '#FFFFFF',
           minHeight: 200,
           display: 'flex',
           flexDirection: 'column',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: 4,
+          }
         }}
       >
         <Typography variant="h6" gutterBottom color="#003366">
@@ -121,12 +191,17 @@ const ActivityBox = ({
       elevation={3}
       sx={{
         p: 3,
-        bgcolor: isActive ? '#FFFFFF' : '#F5F5F5',
+        bgcolor: '#FFFFFF',
         minHeight: 200,
         display: 'flex',
         flexDirection: 'column',
         border: isActive ? '2px solid #0066CC' : 'none',
         borderLeft: isCompleted ? '4px solid #4CAF50' : isActive ? '4px solid #0066CC' : '4px solid #9E9E9E',
+        transition: 'all 0.2s ease-in-out',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          boxShadow: 4,
+        }
       }}
     >
       <Typography variant="h6" gutterBottom color={isActive ? '#0066CC' : '#003366'}>
@@ -181,6 +256,7 @@ const Dashboard = () => {
   const [error, setError] = useState<string>('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [showCongrats, setShowCongrats] = useState(false);
+  const [bgColor, setBgColor] = useState('#F0FDF4'); // Light green default
 
   // Fetch templates
   const { data: templateList } = useQuery('templates', async () => {
@@ -193,6 +269,28 @@ const Dashboard = () => {
     const response = await schedules.getCurrentSchedule();
     return response.data;
   });
+
+  // Update background color based on current activity progress
+  useEffect(() => {
+    if (schedule?.currentActivity) {
+      const startTime = parse(schedule.currentActivity.startTime, 'HH:mm', new Date());
+      const endTime = addMinutes(startTime, schedule.currentActivity.duration);
+      const now = new Date();
+      const total = endTime.getTime() - startTime.getTime();
+      const elapsed = now.getTime() - startTime.getTime();
+      const progress = (elapsed / total) * 100;
+
+      if (now > endTime) {
+        setBgColor('#FEE2E2'); // Light red for overtime
+      } else if (progress > 90) {
+        setBgColor('#FFF7ED'); // Light orange for last 10%
+      } else {
+        setBgColor('#F0FDF4'); // Light green by default
+      }
+    } else {
+      setBgColor('#F0FDF4'); // Light green when no activity
+    }
+  }, [schedule?.currentActivity]);
 
   useEffect(() => {
     if (socket) {
@@ -241,12 +339,12 @@ const Dashboard = () => {
   const handlePreviousActivity = async () => {
     try {
       setError('');
-      if (!schedule?._id || !schedule.previousActivity?._id) {
-        setError('No previous activity available');
+      if (!schedule?._id || !schedule.currentActivity?._id) {
+        setError('No active activity to move from');
         return;
       }
 
-      await schedules.goToPreviousActivity(schedule._id, schedule.previousActivity._id);
+      await schedules.goToPreviousActivity(schedule._id, schedule.currentActivity._id);
       await queryClient.invalidateQueries('currentSchedule');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to go to previous activity');
@@ -283,145 +381,20 @@ const Dashboard = () => {
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Box>
-            <Typography variant="h5" color="#003366">
-              {schedule ? schedule.title : "Today's Schedule"}
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            {schedule && (
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={() => setCloseDialogOpen(true)}
-                sx={{
-                  bgcolor: '#4CAF50',
-                  '&:hover': {
-                    bgcolor: '#388E3C',
-                  },
-                }}
-              >
-                Close Day
-              </Button>
-            )}
-            <Button
-              component={RouterLink}
-              to="/setup"
-              variant="contained"
-              sx={{
-                bgcolor: '#0066CC',
-                '&:hover': {
-                  bgcolor: '#003366',
-                },
-              }}
-            >
-              Setup Templates
-            </Button>
-            <IconButton
-              onClick={handleLogout}
-              sx={{
-                color: '#DC3545',
-                '&:hover': {
-                  bgcolor: 'rgba(220, 53, 69, 0.1)',
-                },
-              }}
-            >
-              <LogoutIcon />
-            </IconButton>
-          </Box>
-        </Box>
-
-        {!schedule && (
-          <Paper sx={{ p: 3, mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Start Your Day
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Template</InputLabel>
-                  <Select
-                    value={selectedTemplate || ''}
-                    onChange={(e) => setSelectedTemplate(e.target.value)}
-                    label="Select Template"
-                  >
-                    {templateList?.map((template: Template) => (
-                      <MenuItem key={template._id} value={template._id}>
-                        {template.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>Select Day</InputLabel>
-                  <Select
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(Number(e.target.value))}
-                    label="Select Day"
-                  >
-                    {selectedTemplate && templateList?.find((t: Template) => t._id === selectedTemplate)?.days ?
-                      Array.from(
-                        { length: templateList.find((t: Template) => t._id === selectedTemplate)!.days },
-                        (_, i) => i + 1
-                      ).map((day) => (
-                        <MenuItem key={day} value={day}>
-                          Day {day}
-                        </MenuItem>
-                      ))
-                      : <MenuItem value={1}>Day 1</MenuItem>
-                    }
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleStartDay}
-                  startIcon={<PlayArrowIcon />}
-                  sx={{ height: '56px' }}
-                >
-                  Start Day
-                </Button>
-              </Grid>
-            </Grid>
-          </Paper>
-        )}
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {schedule && (
-          <>
-            <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-              <Button
-                variant="contained"
-                onClick={handlePreviousActivity}
-                startIcon={<SkipPreviousIcon />}
-                disabled={!schedule.previousActivity}
-              >
-                Previous Activity
-              </Button>
-              {schedule.nextActivity ? (
+    <Box sx={{ bgcolor: bgColor, minHeight: '100vh', py: 4 }}>
+      <Container maxWidth="lg">
+        <Box sx={{ mt: 4, mb: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+            <Box>
+              <Typography variant="h5" color="#003366">
+                {schedule ? schedule.title : "Today's Schedule"}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {schedule && (
                 <Button
                   variant="contained"
-                  onClick={handleNextActivity}
-                  startIcon={<SkipNextIcon />}
-                  disabled={!schedule.currentActivity}
-                >
-                  Next Activity
-                </Button>
-              ) : (
-                <Button
-                  variant="contained"
+                  color="secondary"
                   onClick={() => setCloseDialogOpen(true)}
                   sx={{
                     bgcolor: '#4CAF50',
@@ -429,109 +402,238 @@ const Dashboard = () => {
                       bgcolor: '#388E3C',
                     },
                   }}
-                  disabled={!schedule.currentActivity}
                 >
                   Close Day
                 </Button>
               )}
+              <Button
+                component={RouterLink}
+                to="/setup"
+                variant="contained"
+                sx={{
+                  bgcolor: '#0066CC',
+                  '&:hover': {
+                    bgcolor: '#003366',
+                  },
+                }}
+              >
+                Setup Templates
+              </Button>
+              <IconButton
+                onClick={handleLogout}
+                sx={{
+                  color: '#DC3545',
+                  '&:hover': {
+                    bgcolor: 'rgba(220, 53, 69, 0.1)',
+                  },
+                }}
+              >
+                <LogoutIcon />
+              </IconButton>
             </Box>
+          </Box>
 
-            <Grid container spacing={4}>
-              <Grid item xs={12} md={4}>
-                <ActivityBox
-                  title="Previous Activity"
-                  activity={schedule.previousActivity}
-                  isCompleted={true}
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <ActivityBox
-                  title="Current Activity"
-                  activity={schedule.currentActivity}
-                  isActive={true}
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <ActivityBox
-                  title="Next Activity"
-                  activity={schedule.nextActivity}
-                />
-              </Grid>
-            </Grid>
-
-            <Paper elevation={3} sx={{ mt: 4, p: 3 }}>
-              <Typography variant="h6" gutterBottom color="#003366">
-                Full Schedule
+          {!schedule && (
+            <Paper sx={{ p: 3, mb: 4 }}>
+              <Typography variant="h6" gutterBottom>
+                Start Your Day
               </Typography>
               <Grid container spacing={2}>
-                {schedule.activities.map((activity: Activity) => (
-                  <Grid item xs={12} key={activity._id}>
-                    <ActivityBox
-                      title={activity.name}
-                      activity={activity}
-                      isActive={activity._id === schedule.currentActivity?._id}
-                      isCompleted={activity._id === schedule.previousActivity?._id}
-                    />
-                  </Grid>
-                ))}
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Select Template</InputLabel>
+                    <Select
+                      value={selectedTemplate || ''}
+                      onChange={(e) => setSelectedTemplate(e.target.value)}
+                      label="Select Template"
+                    >
+                      {templateList?.map((template: Template) => (
+                        <MenuItem key={template._id} value={template._id}>
+                          {template.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Select Day</InputLabel>
+                    <Select
+                      value={selectedDay}
+                      onChange={(e) => setSelectedDay(Number(e.target.value))}
+                      label="Select Day"
+                    >
+                      {selectedTemplate && templateList?.find((t: Template) => t._id === selectedTemplate)?.days ?
+                        Array.from(
+                          { length: templateList.find((t: Template) => t._id === selectedTemplate)!.days },
+                          (_, i) => i + 1
+                        ).map((day) => (
+                          <MenuItem key={day} value={day}>
+                            Day {day}
+                          </MenuItem>
+                        ))
+                        : <MenuItem value={1}>Day 1</MenuItem>
+                      }
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleStartDay}
+                    startIcon={<PlayArrowIcon />}
+                    sx={{ height: '56px' }}
+                  >
+                    Start Day
+                  </Button>
+                </Grid>
               </Grid>
             </Paper>
-          </>
-        )}
-      </Box>
+          )}
 
-      {/* Close Day Confirmation Dialog */}
-      <Dialog
-        open={closeDialogOpen}
-        onClose={() => setCloseDialogOpen(false)}
-      >
-        <DialogTitle>Close Training Day</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to close this training day? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleCloseDay}
-            variant="contained"
-            sx={{
-              bgcolor: '#4CAF50',
-              '&:hover': {
-                bgcolor: '#388E3C',
-              },
-            }}
-          >
-            Close Day
-          </Button>
-        </DialogActions>
-      </Dialog>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
 
-      {/* Congratulations Dialog */}
-      <Dialog
-        open={showCongrats}
-        onClose={() => setShowCongrats(false)}
-      >
-        <DialogTitle>Training Day Complete! 🎉</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Congratulations on completing your training day! Keep up the great work!
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button 
-            onClick={() => {
-              setShowCongrats(false);
-              navigate('/');
-            }}
-            variant="contained"
-          >
-            Back to Dashboard
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+          {schedule && (
+            <>
+              <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                <Button
+                  variant="contained"
+                  onClick={handlePreviousActivity}
+                  startIcon={<SkipPreviousIcon />}
+                  disabled={!schedule.previousActivity}
+                >
+                  Previous Activity
+                </Button>
+                {schedule.nextActivity ? (
+                  <Button
+                    variant="contained"
+                    onClick={handleNextActivity}
+                    startIcon={<SkipNextIcon />}
+                    disabled={!schedule.currentActivity}
+                  >
+                    Next Activity
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    onClick={() => setCloseDialogOpen(true)}
+                    sx={{
+                      bgcolor: '#4CAF50',
+                      '&:hover': {
+                        bgcolor: '#388E3C',
+                      },
+                    }}
+                    disabled={!schedule.currentActivity}
+                  >
+                    Close Day
+                  </Button>
+                )}
+              </Box>
+
+              <Grid container spacing={4}>
+                <Grid item xs={12} md={4}>
+                  <ActivityBox
+                    title="Previous Activity"
+                    activity={schedule.previousActivity}
+                    isCompleted={true}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <ActivityBox
+                    title="Current Activity"
+                    activity={schedule.currentActivity}
+                    isActive={true}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <ActivityBox
+                    title="Next Activity"
+                    activity={schedule.nextActivity}
+                  />
+                </Grid>
+              </Grid>
+
+              <Paper elevation={3} sx={{ mt: 4, p: 3 }}>
+                <Typography variant="h6" gutterBottom color="#003366">
+                  Full Schedule
+                </Typography>
+                <Grid container spacing={1}>
+                  {schedule.activities.map((activity: Activity, index: number) => {
+                    const currentIndex = schedule.activities.findIndex((a: Activity) => a._id === schedule.currentActivity?._id);
+                    return (
+                      <Grid item xs={12} key={activity._id}>
+                        <ScheduleActivityBox
+                          activity={activity}
+                          isActive={activity._id === schedule.currentActivity?._id}
+                          isCompleted={index < currentIndex || activity.completed}
+                        />
+                      </Grid>
+                    );
+                  })}
+                </Grid>
+              </Paper>
+            </>
+          )}
+        </Box>
+
+        {/* Close Day Confirmation Dialog */}
+        <Dialog
+          open={closeDialogOpen}
+          onClose={() => setCloseDialogOpen(false)}
+        >
+          <DialogTitle>Close Training Day</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to close this training day? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleCloseDay}
+              variant="contained"
+              sx={{
+                bgcolor: '#4CAF50',
+                '&:hover': {
+                  bgcolor: '#388E3C',
+                },
+              }}
+            >
+              Close Day
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Congratulations Dialog */}
+        <Dialog
+          open={showCongrats}
+          onClose={() => setShowCongrats(false)}
+        >
+          <DialogTitle>Training Day Complete! 🎉</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Congratulations on completing your training day! Keep up the great work!
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => {
+                setShowCongrats(false);
+                navigate('/');
+              }}
+              variant="contained"
+            >
+              Back to Dashboard
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Container>
+    </Box>
   );
 };
 
