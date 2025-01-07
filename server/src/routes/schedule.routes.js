@@ -242,36 +242,30 @@ router.get('/current',
       const endOfDay = new Date(startOfDay);
       endOfDay.setDate(endOfDay.getDate() + 1);
 
-      const query = {
-        startDate: { $lte: endOfDay },
-        endDate: { $gte: startOfDay },
+      const schedule = await Schedule.findOne({
+        createdBy: req.user._id,
         status: 'active',
-        createdBy: req.user._id
-      };
-
-      const schedule = await Schedule.findOne(query)
-        .sort({ startDate: -1 })
-        .lean({ virtuals: true });
+        date: {
+          $gte: startOfDay,
+          $lt: endOfDay
+        }
+      }).sort('-createdAt');
 
       if (!schedule) {
         return res.json(null);
       }
 
-      // Add virtual properties manually since we're using lean
-      const currentActivity = schedule.activities[schedule.currentActivityIndex] || null;
-      const previousActivity = schedule.currentActivityIndex > 0 
-        ? schedule.activities[schedule.currentActivityIndex - 1] 
-        : null;
-      const nextActivity = schedule.currentActivityIndex < schedule.activities.length - 1 
-        ? schedule.activities[schedule.currentActivityIndex + 1] 
-        : null;
+      // Add virtual properties
+      const currentActivity = schedule.getCurrentActivity();
+      const previousActivity = schedule.getPreviousActivity();
+      const nextActivity = schedule.getNextActivity();
 
-      res.json({
-        ...schedule,
-        currentActivity,
-        previousActivity,
-        nextActivity
-      });
+      const result = schedule.toObject();
+      result.currentActivity = currentActivity;
+      result.previousActivity = previousActivity;
+      result.nextActivity = nextActivity;
+
+      res.json(result);
     } catch (error) {
       logger.error('Error getting current schedule:', error);
       next(error);

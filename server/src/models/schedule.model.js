@@ -60,9 +60,10 @@ const scheduleSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  isActive: {
-    type: Boolean,
-    default: true
+  status: {
+    type: String,
+    enum: ['active', 'completed', 'cancelled'],
+    default: 'active'
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
