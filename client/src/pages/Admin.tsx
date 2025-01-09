@@ -30,9 +30,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  Settings as SettingsIcon,
 } from '@mui/icons-material';
-import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/api';
 
@@ -145,16 +143,6 @@ const Admin = () => {
           <Typography variant="h4" color="#003366">
             User Management
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              component={RouterLink}
-              to="/setup"
-              startIcon={<SettingsIcon />}
-              variant="outlined"
-            >
-              Setup
-            </Button>
-          </Box>
         </Box>
 
         {/* Success/Error Messages */}

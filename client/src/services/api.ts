@@ -194,6 +194,17 @@ const auth = {
       throw error;
     }
   },
+  changePassword: async (data: { currentPassword: string; newPassword: string }) => {
+    try {
+      logger.debug('Attempting password change');
+      const response = await api.put('/auth/change-password', data);
+      logger.info('Password changed successfully');
+      return response;
+    } catch (error) {
+      logger.error('Password change failed', error);
+      throw error;
+    }
+  },
 };
 
 // Templates API

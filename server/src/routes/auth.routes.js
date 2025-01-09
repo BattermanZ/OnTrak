@@ -256,4 +256,38 @@ router.delete('/users/:id',
   }
 );
 
+// Change password
+router.put('/change-password',
+  passport.authenticate('jwt', { session: false }),
+  [
+    body('currentPassword').notEmpty(),
+    body('newPassword').isLength({ min: 6 })
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+      const user = req.user;
+
+      // Verify current password
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Current password is incorrect' });
+      }
+
+      // Update password
+      user.password = newPassword;
+      await user.save();
+
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 module.exports = router; 

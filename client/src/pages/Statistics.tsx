@@ -5,7 +5,6 @@ import {
   Box,
   Paper,
   Grid,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -30,11 +29,8 @@ import {
   ReferenceLine,
 } from 'recharts';
 import {
-  Dashboard as DashboardIcon,
-  Settings as SettingsIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { Link as RouterLink } from 'react-router-dom';
 import { useQuery, useQueries } from 'react-query';
 import { schedules } from '../services/api';
 
@@ -517,24 +513,6 @@ const Statistics: React.FC = () => {
           <Typography variant="h4" color="#003366">
             Training Statistics
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              component={RouterLink}
-              to="/"
-              startIcon={<DashboardIcon />}
-              variant="outlined"
-            >
-              Dashboard
-            </Button>
-            <Button
-              component={RouterLink}
-              to="/setup"
-              startIcon={<SettingsIcon />}
-              variant="outlined"
-            >
-              Setup
-            </Button>
-          </Box>
         </Box>
 
         {/* Filters */}

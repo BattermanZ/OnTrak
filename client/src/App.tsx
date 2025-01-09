@@ -8,6 +8,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import AuthProvider from './contexts/AuthContext';
 import AppRoutes from './routes';
+import Layout from './components/Layout';
 
 const queryClient = new QueryClient();
 
@@ -19,7 +20,9 @@ const App = () => {
           <CssBaseline />
           <BrowserRouter>
             <AuthProvider>
-              <AppRoutes />
+              <Layout>
+                <AppRoutes />
+              </Layout>
             </AuthProvider>
           </BrowserRouter>
         </LocalizationProvider>

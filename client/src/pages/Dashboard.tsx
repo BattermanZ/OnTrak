@@ -12,13 +12,12 @@ import {
   FormControl,
   InputLabel,
   Alert,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { format, parse, addMinutes } from 'date-fns';
 import { useSocket } from '../hooks/useSocket';
 import { schedules, templates } from '../services/api';
@@ -28,7 +27,6 @@ import {
   PlayArrow as PlayArrowIcon,
   SkipNext as SkipNextIcon,
   SkipPrevious as SkipPreviousIcon,
-  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -350,15 +348,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (err: any) {
-      setError('Failed to logout');
-    }
-  };
-
   const handleProgressUpdate = (progress: number, isOvertime: boolean) => {
     if (isOvertime) {
       setBgColor('#FEE2E2'); // Light red for overtime
@@ -403,43 +392,6 @@ const Dashboard = () => {
                   Close Day
                 </Button>
               )}
-              <Button
-                component={RouterLink}
-                to="/setup"
-                variant="contained"
-                sx={{
-                  bgcolor: '#0066CC',
-                  '&:hover': {
-                    bgcolor: '#003366',
-                  },
-                }}
-              >
-                Setup Templates
-              </Button>
-              <Button
-                component={RouterLink}
-                to="/statistics"
-                variant="contained"
-                sx={{
-                  bgcolor: '#6B7280',
-                  '&:hover': {
-                    bgcolor: '#4B5563',
-                  },
-                }}
-              >
-                Statistics
-              </Button>
-              <IconButton
-                onClick={handleLogout}
-                sx={{
-                  color: '#DC3545',
-                  '&:hover': {
-                    bgcolor: 'rgba(220, 53, 69, 0.1)',
-                  },
-                }}
-              >
-                <LogoutIcon />
-              </IconButton>
             </Box>
           </Box>
 
