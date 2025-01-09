@@ -102,11 +102,13 @@ const ActivityBox = ({
   activity,
   isActive,
   isCompleted,
+  onProgressUpdate,
 }: { 
   title: string; 
   activity: Activity | null;
   isActive?: boolean;
   isCompleted?: boolean;
+  onProgressUpdate?: (progress: number, isOvertime: boolean) => void;
 }) => {
   const [progress, setProgress] = useState(0);
   const [isOvertime, setIsOvertime] = useState(false);
@@ -129,16 +131,23 @@ const ActivityBox = ({
         const elapsed = now.getTime() - startTime.getTime();
         const currentProgress = (elapsed / total) * 100;
         
-        setProgress(Math.max(currentProgress, 0));
+        const newProgress = Math.max(currentProgress, 0);
+        setProgress(newProgress);
         
         // Calculate overtime
-        if (now > endTime) {
-          setIsOvertime(true);
+        const newIsOvertime = now > endTime;
+        setIsOvertime(newIsOvertime);
+        
+        if (newIsOvertime) {
           const overtime = (now.getTime() - endTime.getTime()) / (1000 * 60);
           setOvertimeMinutes(Math.ceil(overtime));
         } else {
-          setIsOvertime(false);
           setOvertimeMinutes(0);
+        }
+
+        // Notify parent component of progress update
+        if (onProgressUpdate) {
+          onProgressUpdate(newProgress, newIsOvertime);
         }
       };
 
@@ -154,7 +163,7 @@ const ActivityBox = ({
         clearInterval(intervalId);
       }
     };
-  }, [isActive, activity]);
+  }, [isActive, activity, onProgressUpdate]);
 
   if (!activity) {
     return (
@@ -270,28 +279,6 @@ const Dashboard = () => {
     return response.data;
   });
 
-  // Update background color based on current activity progress
-  useEffect(() => {
-    if (schedule?.currentActivity) {
-      const startTime = parse(schedule.currentActivity.startTime, 'HH:mm', new Date());
-      const endTime = addMinutes(startTime, schedule.currentActivity.duration);
-      const now = new Date();
-      const total = endTime.getTime() - startTime.getTime();
-      const elapsed = now.getTime() - startTime.getTime();
-      const progress = (elapsed / total) * 100;
-
-      if (now > endTime) {
-        setBgColor('#FEE2E2'); // Light red for overtime
-      } else if (progress > 90) {
-        setBgColor('#FFF7ED'); // Light orange for last 10%
-      } else {
-        setBgColor('#F0FDF4'); // Light green by default
-      }
-    } else {
-      setBgColor('#F0FDF4'); // Light green when no activity
-    }
-  }, [schedule?.currentActivity]);
-
   useEffect(() => {
     if (socket) {
       socket.on('schedule:updated', (updatedSchedule: Schedule) => {
@@ -369,6 +356,16 @@ const Dashboard = () => {
       navigate('/login');
     } catch (err: any) {
       setError('Failed to logout');
+    }
+  };
+
+  const handleProgressUpdate = (progress: number, isOvertime: boolean) => {
+    if (isOvertime) {
+      setBgColor('#FEE2E2'); // Light red for overtime
+    } else if (progress > 90) {
+      setBgColor('#FFF7ED'); // Light orange for last 10%
+    } else {
+      setBgColor('#F0FDF4'); // Light green by default
     }
   };
 
@@ -548,6 +545,7 @@ const Dashboard = () => {
                     title="Current Activity"
                     activity={schedule.currentActivity}
                     isActive={true}
+                    onProgressUpdate={handleProgressUpdate}
                   />
                 </Grid>
                 <Grid item xs={12} md={4}>
