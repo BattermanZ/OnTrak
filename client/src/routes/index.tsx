@@ -7,6 +7,7 @@ import Dashboard from '../pages/Dashboard';
 import { Setup } from '../pages/Setup';
 import Profile from '../pages/Profile';
 import Statistics from '../pages/Statistics';
+import Admin from '../pages/Admin';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -21,6 +22,24 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   if (!user) {
     return <Navigate to="/login" />;
+  }
+
+  return <>{children}</>;
+};
+
+interface AdminRouteProps {
+  children: React.ReactNode;
+}
+
+const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/" />;
   }
 
   return <>{children}</>;
@@ -61,6 +80,14 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <Statistics />
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <Admin />
+          </AdminRoute>
         }
       />
       <Route path="*" element={<Navigate to="/" />} />

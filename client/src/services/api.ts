@@ -139,6 +139,50 @@ const auth = {
       throw error;
     }
   },
+  getAllUsers: async () => {
+    try {
+      logger.debug('Fetching all users');
+      const response = await api.get('/auth/users');
+      logger.debug('Users fetched successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to fetch users', error);
+      throw error;
+    }
+  },
+  createUser: async (data: { email: string; password: string; firstName: string; lastName: string; role: string }) => {
+    try {
+      logger.debug('Creating new user', { email: data.email });
+      const response = await api.post('/auth/users', data);
+      logger.info('User created successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to create user', error);
+      throw error;
+    }
+  },
+  updateUser: async (userId: string, data: Partial<User>) => {
+    try {
+      logger.debug('Updating user', { userId });
+      const response = await api.put(`/auth/users/${userId}`, data);
+      logger.info('User updated successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to update user', error);
+      throw error;
+    }
+  },
+  deleteUser: async (userId: string) => {
+    try {
+      logger.debug('Deleting user', { userId });
+      const response = await api.delete(`/auth/users/${userId}`);
+      logger.info('User deleted successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to delete user', error);
+      throw error;
+    }
+  },
   getTrainers: async () => {
     try {
       logger.debug('Fetching trainers');

@@ -7,6 +7,15 @@ const logger = require('../config/logger');
 
 const router = express.Router();
 
+// Middleware to check if user is admin
+const isAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+  }
+};
+
 // Health check endpoint
 router.get('/health', (req, res) => {
   logger.debug('Health check request received');
@@ -134,6 +143,113 @@ router.put('/profile',
         message: 'Profile updated successfully',
         user: user.toJSON()
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Get all users (admin only)
+router.get('/users', passport.authenticate('jwt', { session: false }), isAdmin, async (req, res, next) => {
+  try {
+    const users = await User.find({}).sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new user (admin only)
+router.post('/users', 
+  passport.authenticate('jwt', { session: false }), 
+  isAdmin,
+  validateRegistration,
+  async (req, res, next) => {
+    try {
+      const { email, password, firstName, lastName, role } = req.body;
+
+      // Check if user exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email already registered' });
+      }
+
+      // Create new user
+      const user = new User({
+        email,
+        password,
+        firstName,
+        lastName,
+        role: role || 'trainer', // Default to trainer if not specified
+      });
+
+      await user.save();
+
+      res.status(201).json(user.toJSON());
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Update user (admin only)
+router.put('/users/:id', 
+  passport.authenticate('jwt', { session: false }), 
+  isAdmin,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { email, password, firstName, lastName, role } = req.body;
+
+      const user = await User.findById(id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check email uniqueness if it's being changed
+      if (email && email !== user.email) {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+          return res.status(400).json({ message: 'Email already in use' });
+        }
+        user.email = email;
+      }
+
+      if (firstName) user.firstName = firstName;
+      if (lastName) user.lastName = lastName;
+      if (password) user.password = password;
+      if (role) user.role = role;
+
+      await user.save();
+
+      res.json(user.toJSON());
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Delete user (admin only)
+router.delete('/users/:id', 
+  passport.authenticate('jwt', { session: false }), 
+  isAdmin,
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      // Prevent self-deletion
+      if (id === req.user.id) {
+        return res.status(400).json({ message: 'Cannot delete your own account' });
+      }
+
+      const user = await User.findById(id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      await user.remove();
+
+      res.json({ message: 'User deleted successfully' });
     } catch (error) {
       next(error);
     }

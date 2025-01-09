@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -27,14 +27,16 @@ import {
   Edit as EditIcon,
   Search as SearchIcon,
   Dashboard as DashboardIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { templates } from '../services/api';
 import { useQuery, useQueryClient } from 'react-query';
 import type { Template, Activity } from '../types/index';
 import { logger } from '../utils/logger';
+import { useAuth } from '../contexts/AuthContext';
 
 export const Setup = () => {
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
@@ -217,27 +219,28 @@ export const Setup = () => {
     <Container maxWidth="lg">
       <Box sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4">Templates</Typography>
-          <Box>
+          <Typography variant="h4" color="#003366">
+            Training Setup
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
             <Button
-              variant="outlined"
+              component={RouterLink}
+              to="/"
               startIcon={<DashboardIcon />}
-              onClick={() => navigate('/')}
-              sx={{ mr: 2 }}
+              variant="outlined"
             >
               Dashboard
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setEditMode(false);
-                setTemplateForm({ name: '', days: 1 });
-                setCreateDialogOpen(true);
-              }}
-            >
-              Create Template
-            </Button>
+            {user?.role === 'admin' && (
+              <Button
+                component={RouterLink}
+                to="/admin"
+                startIcon={<PeopleIcon />}
+                variant="outlined"
+              >
+                User Management
+              </Button>
+            )}
           </Box>
         </Box>
 
