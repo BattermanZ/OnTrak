@@ -298,7 +298,34 @@ const Statistics: React.FC = () => {
     ];
   };
 
-  const renderTimeVarianceChart = (data: TimeVarianceData[], title: string) => (
+  const handleBarClick = (data: any) => {
+    if (!data || !statsData) return;
+
+    // Determine what type of data was clicked based on current view
+    if (filters.training === 'all') {
+      // Clicking on a training bar
+      const training = statsData.trainings.find(t => t.name === data.name);
+      if (training) {
+        setFilters(prev => ({ ...prev, training: training._id, day: undefined }));
+      }
+    } else if (!filters.day) {
+      // Clicking on a day bar
+      const dayNumber = parseInt(data.name.split(' ')[1]);
+      if (!isNaN(dayNumber)) {
+        setFilters(prev => ({ ...prev, day: dayNumber }));
+      }
+    }
+  };
+
+  const handleTrainerBarClick = (data: any) => {
+    if (!data || !statsData) return;
+    const trainer = statsData.trainers.find(t => t.name === data.name);
+    if (trainer) {
+      setSelectedTrainer(trainer._id);
+    }
+  };
+
+  const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => (
     <Grid item xs={12}>
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -331,6 +358,7 @@ const Statistics: React.FC = () => {
               name="Time Variance"
               fill="#4CAF50"
               animationDuration={300}
+              onClick={(data) => isTrainerChart ? handleTrainerBarClick(data) : handleBarClick(data)}
               onMouseEnter={(data, index) => {
                 const bar = document.querySelector(`#bar-${index}`) as SVGElement;
                 if (bar) {
@@ -516,10 +544,10 @@ const Statistics: React.FC = () => {
               <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Trainer</InputLabel>
                 <Select
-                  value={selectedTrainer}
-                  onChange={(e) => setSelectedTrainer(e.target.value)}
+                  value={selectedTrainer || 'all'}
+                  onChange={(e) => setSelectedTrainer(e.target.value === 'all' ? '' : e.target.value)}
                 >
-                  <MenuItem value="">All Trainers</MenuItem>
+                  <MenuItem value="all">All Trainers</MenuItem>
                   {(statsData?.trainers || []).map((trainer) => (
                     <MenuItem key={trainer._id} value={trainer._id}>
                       {trainer.name}
@@ -548,11 +576,11 @@ const Statistics: React.FC = () => {
               <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Day</InputLabel>
                 <Select
-                  value={filters.day || ''}
-                  onChange={(e) => setFilters({ ...filters, day: Number(e.target.value) })}
+                  value={filters.day?.toString() || 'all'}
+                  onChange={(e) => setFilters({ ...filters, day: e.target.value === 'all' ? undefined : Number(e.target.value) })}
                   disabled={!selectedTraining}
                 >
-                  <MenuItem value="">All Days</MenuItem>
+                  <MenuItem value="all">All Days</MenuItem>
                   {selectedTraining?.days && Array.from({ length: selectedTraining.days }, (_, i) => (
                     <MenuItem key={i + 1} value={i + 1}>
                       Day {i + 1}
@@ -636,7 +664,7 @@ const Statistics: React.FC = () => {
           
           {/* Trainer time variance chart when viewing all trainers */}
           {filters.trainer === 'all' && (
-            renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer')
+            renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)
           )}
           
           {/* Timing distribution pie charts */}
