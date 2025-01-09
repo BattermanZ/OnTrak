@@ -416,6 +416,19 @@ const Dashboard = () => {
               >
                 Setup Templates
               </Button>
+              <Button
+                component={RouterLink}
+                to="/statistics"
+                variant="contained"
+                sx={{
+                  bgcolor: '#6B7280',
+                  '&:hover': {
+                    bgcolor: '#4B5563',
+                  },
+                }}
+              >
+                Statistics
+              </Button>
               <IconButton
                 onClick={handleLogout}
                 sx={{

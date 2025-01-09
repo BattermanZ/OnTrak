@@ -5,6 +5,7 @@ const passport = require('passport');
 const logger = require('./config/logger');
 const path = require('path');
 const morgan = require('morgan');
+const statisticsRoutes = require('./routes/statistics.routes');
 
 require('dotenv').config();
 require('./config/passport');
@@ -64,6 +65,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 app.use('/api/logs', require('./routes/logs.routes'));
+app.use('/api/statistics', statisticsRoutes);
 
 const PORT = process.env.PORT || 3456;
 server.listen(PORT, () => {

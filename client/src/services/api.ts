@@ -138,7 +138,18 @@ const auth = {
       logger.error('Logout failed', error);
       throw error;
     }
-  }
+  },
+  getTrainers: async () => {
+    try {
+      logger.debug('Fetching trainers');
+      const response = await api.get('/auth/trainers');
+      logger.debug('Trainers fetched successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to fetch trainers', error);
+      throw error;
+    }
+  },
 };
 
 // Templates API
@@ -169,8 +180,25 @@ const schedules = {
   goToPreviousActivity: (scheduleId: string, activityId: string) =>
     api.post(`/schedules/${scheduleId}/previous/${activityId}`),
   closeDay: () => api.post('/schedules/close-day'),
+  getStatistics: (filters: { trainer: string; training: string; dateRange: string }) =>
+    api.get('/statistics', { params: filters }),
+};
+
+// Add statistics object
+const statistics = {
+  getStatistics: async (filters: { trainer: string; training: string; dateRange: string }) => {
+    try {
+      logger.debug('Fetching statistics', filters);
+      const response = await api.get('/statistics', { params: filters });
+      logger.debug('Statistics fetched successfully');
+      return response;
+    } catch (error) {
+      logger.error('Failed to fetch statistics', error);
+      throw error;
+    }
+  },
 };
 
 // Export everything at the end
-export { api, auth, templates, schedules };
+export { api, auth, templates, schedules, statistics };
 export type { User, Schedule, Activity, Template } from '../types/index'; 
