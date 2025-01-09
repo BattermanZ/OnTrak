@@ -89,19 +89,28 @@ io.on('connection', (socket) => {
   });
 });
 
-// Routes
-app.get('/api/health', (req, res) => {
-  logger.debug('Health check request received');
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
+// API Routes
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 app.use('/api/logs', require('./routes/logs.routes'));
 app.use('/api/statistics', statisticsRoutes);
 
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../../client/build')));
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  logger.debug('Health check request received');
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3456;
-server.listen(PORT, () => {
-  logger.info(`Server is running on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server is running on 0.0.0.0:${PORT}`);
 }); 

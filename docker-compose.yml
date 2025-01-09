@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"  # Frontend port
+    volumes:
+      - mongodb_data:/app/database/data
+      - app_logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://127.0.0.1:27017/ontrak
+      - JWT_SECRET=your-secret-key-here
+      - HOST=0.0.0.0
+      - PORT=3000
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  app_logs: 

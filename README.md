@@ -123,6 +123,39 @@ OnTrak is a comprehensive training session management system designed to help tr
 
 ## Production Deployment
 
+### Using Docker (Recommended)
+
+1. Using Docker Compose (Recommended):
+   ```bash
+   # Build and start the container
+   docker-compose up -d
+
+   # View logs
+   docker-compose logs -f
+   ```
+
+2. Using Docker directly:
+   ```bash
+   # Build the image
+   docker build -t ontrak .
+
+   # Run the container
+   docker run -d \
+     -p 0.0.0.0:3000:3000 \
+     -v mongodb_data:/app/database/data \
+     -v app_logs:/app/logs \
+     -e JWT_SECRET=your-secret-key \
+     -e HOST=0.0.0.0 \
+     --name ontrak \
+     ontrak
+   ```
+
+The application will be available at http://0.0.0.0:3000 and accessible from any network interface.
+
+Note: The backend API runs inside the container and is not exposed externally, as it's only accessed by the frontend application within the container.
+
+### Manual Deployment
+
 1. Build the frontend:
    ```bash
    cd client

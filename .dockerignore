@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+**/build
+**/dist
+
+# Development files
+.git
+.gitignore
+.env
+**/.env
+**/.env.*
+**/npm-debug.log
+**/.DS_Store
+
+# Data and logs
+database
+logs
+**/logs
+**/*.log
+
+# IDE files
+.idea
+.vscode
+**/.idea
+**/.vscode 
