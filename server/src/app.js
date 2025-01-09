@@ -2,9 +2,15 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const passport = require('passport');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 const logger = require('./config/logger');
 const path = require('path');
 const morgan = require('morgan');
+const cookieParser = require('cookie-parser');
 const statisticsRoutes = require('./routes/statistics.routes');
 
 require('dotenv').config();
@@ -23,14 +29,42 @@ const io = require('socket.io')(server, {
 // Make io available to routes
 app.set('io', io);
 
-// Middleware
-app.use(cors({
+// Security middleware
+app.use(helmet()); // Set security HTTP headers
+app.use(mongoSanitize()); // Sanitize data against NoSQL query injection
+app.use(xss()); // Sanitize data against XSS attacks
+app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
+
+// Cookie parser
+app.use(cookieParser());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api/', limiter);
+
+// Body parser
+app.use(express.json({ limit: '10kb' })); // Body limit is 10kb
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+
+// CORS configuration
+const corsOptions = {
   origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
-}));
-app.use(express.json());
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600, // 10 minutes
+};
+app.use(cors(corsOptions));
+
+// Trust proxy if behind a reverse proxy
+app.set('trust proxy', 1);
+
+// Passport middleware
 app.use(passport.initialize());
 
 // Setup request logging

@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user.model');
 const logger = require('../config/logger');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
@@ -29,6 +30,20 @@ const validateRegistration = [
   body('firstName').trim().notEmpty(),
   body('lastName').trim().notEmpty()
 ];
+
+// Strong password validation
+const passwordValidation = body('password')
+  .isLength({ min: 8 })
+  .withMessage('Password must be at least 8 characters long')
+  .matches(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*])/)
+  .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character');
+
+// Login rate limiting
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 login attempts per window
+  message: 'Too many login attempts, please try again after 15 minutes'
+});
 
 // Register new user
 router.post('/register', validateRegistration, async (req, res, next) => {
@@ -82,32 +97,86 @@ router.post('/register', validateRegistration, async (req, res, next) => {
 });
 
 // Login
-router.post('/login', (req, res, next) => {
-  console.log('Login attempt received:', { email: req.body.email });
-  
-  passport.authenticate('local', { session: false }, (err, user, info) => {
-    if (err) {
-      console.error('Login authentication error:', err);
-      return next(err);
-    }
-    
-    if (!user) {
-      console.log('Login failed:', info?.message);
-      return res.status(401).json({ message: info?.message || 'Invalid email or password' });
+router.post('/login', loginLimiter, [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    console.log('Login successful for user:', user.email);
+    const { email, password } = req.body;
+    // Include password in the query since it's needed for comparison
+    const user = await User.findOne({ email }).select('+password +active');
+
+    if (!user || !user.active) {
+      logger.warn('Login attempt with invalid credentials', { email });
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Check if account is locked
+    if (user.isLocked()) {
+      logger.warn('Login attempt on locked account', { email });
+      return res.status(401).json({ 
+        message: 'Account is locked due to too many failed attempts. Please try again later.' 
+      });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      // Handle failed login attempt
+      await user.handleFailedLogin();
+      logger.warn('Login attempt with incorrect password', { email });
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Reset login attempts on successful login
+    await user.handleSuccessfulLogin();
+
     const token = jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '1d' }
+      { 
+        expiresIn: '1h',
+        algorithm: 'HS256'
+      }
     );
 
+    // Set secure cookie
+    res.cookie('jwt', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 3600000 // 1 hour
+    });
+
+    logger.info('User logged in successfully', { userId: user._id });
     res.json({
       token,
-      user: user.toJSON()
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
     });
-  })(req, res, next);
+  } catch (error) {
+    logger.error('Login error', { error: error.message });
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Logout
+router.post('/logout', passport.authenticate('jwt', { session: false }), (req, res) => {
+  res.clearCookie('jwt', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+  res.json({ message: 'Logged out successfully' });
 });
 
 // Get current user
@@ -261,7 +330,7 @@ router.put('/change-password',
   passport.authenticate('jwt', { session: false }),
   [
     body('currentPassword').notEmpty(),
-    body('newPassword').isLength({ min: 6 })
+    passwordValidation
   ],
   async (req, res, next) => {
     try {
@@ -273,18 +342,22 @@ router.put('/change-password',
       const { currentPassword, newPassword } = req.body;
       const user = req.user;
 
-      // Verify current password
       const isMatch = await user.comparePassword(currentPassword);
       if (!isMatch) {
+        logger.warn('Password change attempt with incorrect current password', { userId: user._id });
         return res.status(400).json({ message: 'Current password is incorrect' });
       }
 
-      // Update password
       user.password = newPassword;
+      user.passwordChangedAt = new Date();
       await user.save();
 
-      res.json({ message: 'Password updated successfully' });
+      // Force re-login after password change
+      res.clearCookie('jwt');
+      logger.info('Password changed successfully', { userId: user._id });
+      res.json({ message: 'Password updated successfully. Please login again.' });
     } catch (error) {
+      logger.error('Password change error', { error: error.message });
       next(error);
     }
   }
