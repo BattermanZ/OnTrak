@@ -23,8 +23,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
-  Legend,
   ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
 } from 'recharts';
 import {
   Dashboard as DashboardIcon,
@@ -81,7 +83,16 @@ interface StatisticsData {
   }>;
 }
 
-const COLORS = ['#4CAF50', '#FFA726', '#EF5350'];
+interface TimeVarianceData {
+  name: string;
+  timeVariance: number;
+}
+
+const TIMING_COLORS = {
+  onTime: '#4CAF50',
+  early: '#2196F3',
+  late: '#EF5350'
+};
 
 const Statistics = () => {
   const [filters, setFilters] = useState<StatisticsFilters>({
@@ -107,15 +118,228 @@ const Statistics = () => {
     return statsData.trainings.find(t => t._id === filters.training);
   }, [statsData, filters.training]);
 
-  const adherenceData = useMemo(() => {
-    return statsData?.adherence || [];
-  }, [statsData]);
-
-  const daySpecificData = useMemo(() => {
-    if (!statsData?.daySpecificStats || !filters.training || !filters.day) return [];
-    const key = `${filters.training}-${filters.day}`;
-    return statsData.daySpecificStats[key]?.activities || [];
+  const timeVarianceData = useMemo(() => {
+    if (!statsData) return [];
+    
+    // Single training, single day view
+    if (filters.training !== 'all' && filters.day) {
+      const key = `${filters.training}-${filters.day}`;
+      const dayData = statsData.daySpecificStats[key]?.activities || [];
+      return dayData.map(activity => ({
+        name: activity.name,
+        timeVariance: parseInt(activity.averageVariance.replace(/[^-\d]/g, ''))
+      }));
+    }
+    
+    // Single training, all days view
+    if (filters.training !== 'all') {
+      const training = statsData.trainings.find(t => t._id === filters.training);
+      if (!training) return [];
+      
+      return Array.from({ length: training.days }, (_, i) => {
+        const dayNumber = i + 1;
+        const key = `${filters.training}-${dayNumber}`;
+        const dayData = statsData.daySpecificStats[key]?.activities || [];
+        const totalVariance = dayData.reduce((sum, activity) => {
+          const variance = parseInt(activity.averageVariance.replace(/[^-\d]/g, ''));
+          return sum + variance;
+        }, 0);
+        
+        return {
+          name: `Day ${dayNumber}`,
+          timeVariance: totalVariance
+        };
+      });
+    }
+    
+    // All trainings view
+    if (filters.training === 'all') {
+      return statsData.trainings.map(training => {
+        const totalVariance = Object.entries(statsData.daySpecificStats)
+          .filter(([key]) => key.startsWith(training._id))
+          .reduce((sum, [_, data]) => {
+            return sum + data.activities.reduce((activitySum, activity) => {
+              return activitySum + parseInt(activity.averageVariance.replace(/[^-\d]/g, ''));
+            }, 0);
+          }, 0);
+        
+        return {
+          name: training.name,
+          timeVariance: totalVariance
+        };
+      });
+    }
+    
+    return [];
   }, [statsData, filters]);
+
+  const trainerVarianceData = useMemo(() => {
+    if (!statsData || filters.trainer !== 'all') return [];
+    
+    return statsData.trainers.map(trainer => {
+      const totalVariance = Object.entries(statsData.daySpecificStats)
+        .reduce((sum, [_, data]) => {
+          return sum + data.activities.reduce((activitySum, activity) => {
+            return activitySum + parseInt(activity.averageVariance.replace(/[^-\d]/g, ''));
+          }, 0);
+        }, 0);
+      
+      return {
+        name: trainer.name,
+        timeVariance: totalVariance
+      };
+    });
+  }, [statsData, filters]);
+
+  const calculateTimingDistribution = (data: TimeVarianceData[]) => {
+    const total = data.length;
+    if (total === 0) return [];
+
+    const distribution = data.reduce((acc, item) => {
+      const variance = item.timeVariance;
+      const scheduledDuration = 60; // assuming this is available in your data
+      const variancePercentage = Math.abs(variance / scheduledDuration) * 100;
+      
+      if (variancePercentage <= 10) {
+        acc.onTime++;
+      } else if (variance < 0) {
+        acc.early++;
+      } else {
+        acc.late++;
+      }
+      return acc;
+    }, { onTime: 0, early: 0, late: 0 });
+
+    return [
+      { name: 'On Time (±10%)', value: distribution.onTime },
+      { name: 'Early', value: distribution.early },
+      { name: 'Late', value: distribution.late }
+    ];
+  };
+
+  const renderTimeVarianceChart = (data: TimeVarianceData[], title: string) => (
+    <Grid item xs={12}>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          {title}
+          <Tooltip title="Shows how much time was saved (negative values) or exceeded (positive values) compared to scheduled duration">
+            <IconButton size="small" sx={{ ml: 1 }}>
+              <InfoIcon />
+            </IconButton>
+          </Tooltip>
+        </Typography>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis 
+              label={{ 
+                value: 'Time Variance (minutes)', 
+                angle: -90, 
+                position: 'insideLeft' 
+              }}
+              domain={[
+                (dataMin: number) => Math.min(0, dataMin),
+                (dataMax: number) => Math.max(0, dataMax)
+              ]}
+            />
+            <RechartsTooltip 
+              formatter={(value: number) => [`${value} minutes`, 'Time Variance']}
+            />
+            <Bar 
+              dataKey="timeVariance" 
+              name="Time Variance"
+              fill="#4CAF50"
+            >
+              {data.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`}
+                  fill={entry.timeVariance > 0 ? '#EF5350' : '#4CAF50'}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </Paper>
+    </Grid>
+  );
+
+  const renderTimingDistributionCharts = (data: TimeVarianceData[], title: string) => (
+    <Grid container spacing={2}>
+      <Grid item xs={12} md={6}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            {`${title} Timing Distribution`}
+            <Tooltip title="Distribution of activities/days based on their timing performance">
+              <IconButton size="small" sx={{ ml: 1 }}>
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={calculateTimingDistribution(data)}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={{ stroke: 'none' }}
+                >
+                  {calculateTimingDistribution(data).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`}
+                      fill={Object.values(TIMING_COLORS)[index]}
+                    />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
+      </Grid>
+      <Grid item xs={12} md={6}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Trainer Timing Distribution
+            <Tooltip title="Distribution of trainers based on their timing performance">
+              <IconButton size="small" sx={{ ml: 1 }}>
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={calculateTimingDistribution(trainerVarianceData)}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, value }) => `${name}: ${value}`}
+                  labelLine={{ stroke: 'none' }}
+                >
+                  {calculateTimingDistribution(trainerVarianceData).map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`}
+                      fill={Object.values(TIMING_COLORS)[index]}
+                    />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
+      </Grid>
+    </Grid>
+  );
 
   return (
     <Container maxWidth="lg">
@@ -219,7 +443,7 @@ const Statistics = () => {
           <Grid item xs={12} md={4}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
-                On-Time Start Rate
+                On-Time Activity Start Rate
               </Typography>
               <Typography variant="h4" color="primary">
                 {statsData?.onTimeStartRate || '0%'}
@@ -229,7 +453,7 @@ const Statistics = () => {
           <Grid item xs={12} md={4}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Total Training Days
+                Total Training Days Analysed
               </Typography>
               <Typography variant="h4" color="primary">
                 {statsData?.totalTrainingDays || '0'} days
@@ -238,41 +462,32 @@ const Statistics = () => {
           </Grid>
         </Grid>
 
-        {/* Main Content */}
+        {/* Time Variance Charts */}
         <Grid container spacing={4}>
-          {/* Activity Timing Analysis */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Activity Timing Analysis
-                <Tooltip title="Shows how activities are performing relative to their scheduled duration">
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={filters.day ? daySpecificData : adherenceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <RechartsTooltip />
-                  <Legend />
-                  {filters.day ? (
-                    <>
-                      <Bar dataKey="scheduledDuration" fill="#4CAF50" name="Scheduled Duration" />
-                      <Bar dataKey="averageActualDuration" fill="#FFA726" name="Average Actual Duration" />
-                    </>
-                  ) : (
-                    <>
-                      <Bar dataKey="onTime" fill="#4CAF50" name="On Time" />
-                      <Bar dataKey="delayed" fill="#FFA726" name="Delayed" />
-                    </>
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
-            </Paper>
-          </Grid>
+          {/* Main time variance chart */}
+          {renderTimeVarianceChart(
+            timeVarianceData,
+            filters.training === 'all' 
+              ? 'Time Variance by Training'
+              : filters.day
+                ? 'Time Variance by Activity'
+                : 'Time Variance by Day'
+          )}
+          
+          {/* Trainer time variance chart when viewing all trainers */}
+          {filters.trainer === 'all' && (
+            renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer')
+          )}
+          
+          {/* Timing distribution pie charts */}
+          {renderTimingDistributionCharts(
+            timeVarianceData,
+            filters.training === 'all' 
+              ? 'Training'
+              : filters.day
+                ? 'Activity'
+                : 'Day'
+          )}
 
           {/* Most Delayed Activities */}
           <Grid item xs={12} md={6}>

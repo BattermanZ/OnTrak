@@ -65,7 +65,7 @@ router.get('/',
       const templates = await Template.find({});
 
       // Get all trainers
-      const trainers = await User.find({ role: 'trainer' }, 'firstName lastName email');
+      const trainers = await User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email');
 
       // Process schedules
       const statistics = {
