@@ -1,82 +1,144 @@
-# OnTrak - Training Schedule Application
+# OnTrak - Training Session Management System
 
-A web-based training schedule management system built with React, Node.js, and MongoDB.
-
-## Project Structure
-
-```
-ontrak/
-├── client/           # React frontend application
-├── server/           # Node.js/Express backend
-├── config/           # Configuration files
-└── logs/             # Application logs
-```
-
-## Tech Stack
-
-- **Frontend**: React.js
-- **Backend**: Node.js with Express
-- **Database**: MongoDB
-- **Real-time**: Socket.io
-- **Authentication**: Passport.js
+OnTrak is a comprehensive training session management system designed to help trainers and administrators efficiently manage and track training sessions.
 
 ## Features
 
-- User Authentication (Admin/Trainer roles)
-- Real-time Dashboard
-- Schedule Management
-- Progress Tracking
-- Live Updates
-- Logging System
+### User Management
+- Role-based authentication (Admin and Trainer roles)
+- Secure login with rate limiting and account locking
+- Password management with strong validation
+- Profile management
+
+### Training Management
+- Create and manage training templates
+- Schedule training sessions
+- Real-time progress tracking
+- Activity timing and monitoring
+- Session completion tracking
+
+### Statistics and Analytics
+- Comprehensive training statistics
+- Performance metrics visualization
+- Time variance analysis
+- Trainer-specific analytics
+
+### Administrative Features
+- User account management
+- Training template administration
+- System-wide monitoring
+- Access control
+
+## Technical Stack
+
+### Frontend
+- React with TypeScript
+- Material-UI for styling
+- React Query for data fetching
+- Socket.IO for real-time updates
+- React Router for navigation
+- Context API for state management
+
+### Backend
+- Node.js with Express
+- MongoDB with Mongoose
+- Passport.js for authentication
+- JWT for session management
+- Socket.IO for real-time communication
+
+## Security Features
+- JWT-based authentication
+- Password hashing with bcrypt
+- Rate limiting for API endpoints
+- XSS protection
+- CSRF protection
+- MongoDB injection prevention
+- Secure HTTP headers
+- Cookie security
+- Account locking after failed attempts
+
+## Project Structure
+
+### Frontend (/client)
+- `/src/components` - Reusable UI components
+- `/src/pages` - Main application pages
+- `/src/contexts` - React contexts for state management
+- `/src/services` - API service integrations
+- `/src/hooks` - Custom React hooks
+- `/src/types` - TypeScript type definitions
+- `/src/utils` - Utility functions
+
+### Backend (/server)
+- `/src/routes` - API route definitions
+- `/src/models` - MongoDB schema models
+- `/src/middleware` - Express middleware
+- `/src/config` - Configuration files
+- `/src/utils` - Utility functions
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js (v18 or higher)
-- MongoDB
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone [repository-url]
-   ```
-
+1. Clone the repository
 2. Install dependencies:
    ```bash
-   # Install backend dependencies
-   cd server
+   # Install frontend dependencies
+   cd client
    npm install
 
-   # Install frontend dependencies
-   cd ../client
+   # Install backend dependencies
+   cd ../server
    npm install
    ```
 
 3. Set up environment variables:
+   - Copy `.env.example` to `.env` in both client and server directories
+   - Configure the environment variables as needed
+
+4. Start MongoDB:
    ```bash
-   # In server directory
-   cp .env.example .env
+   # For macOS with Homebrew
+   ./scripts/start-mongodb.sh
+
+   # For other systems, ensure MongoDB is running on default port 27017
    ```
 
-4. Start the development servers:
+5. Start the development servers:
    ```bash
    # Start backend server
    cd server
    npm run dev
 
-   # Start frontend development server
-   cd ../client
+   # Start frontend server (in a new terminal)
+   cd client
    npm start
    ```
 
-## Development
+## Development Guidelines
 
-- Frontend runs on: http://localhost:3000
-- Backend API runs on: http://localhost:5000
+- Write clean, maintainable code
+- Follow TypeScript best practices
+- Use proper error handling
+- Implement proper logging
+- Follow security best practices
+- Test thoroughly before deployment
 
-## License
+## Production Deployment
 
-MIT
+1. Build the frontend:
+   ```bash
+   cd client
+   npm run build
+   ```
+
+2. Configure your reverse proxy (nginx recommended)
+3. Set up SSL certificates
+4. Configure environment variables for production
+5. Set up MongoDB with proper security measures
+6. Implement proper backup strategies
+
+## Monitoring and Maintenance
+
+- Regular security updates
+- Database backups
+- Performance monitoring
+- Error logging and tracking
+- User activity monitoring
