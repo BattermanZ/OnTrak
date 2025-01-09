@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -130,7 +130,7 @@ const Statistics: React.FC = () => {
   }, [statsData, filters.training]);
 
   // Add a helper function to parse duration strings
-  const parseDuration = useCallback((durationStr: string): number => {
+  const parseDuration = (durationStr: string): number => {
     const hours = durationStr.match(/(\d+)h/);
     const minutes = durationStr.match(/(\d+)min/);
     const isNegative = durationStr.startsWith('-');
@@ -140,7 +140,7 @@ const Statistics: React.FC = () => {
     if (minutes) totalMinutes += parseInt(minutes[1]);
     
     return isNegative ? -totalMinutes : totalMinutes;
-  }, []);
+  };
 
   const timeVarianceData = useMemo(() => {
     if (!statsData) return [];
@@ -194,7 +194,7 @@ const Statistics: React.FC = () => {
     }
     
     return [];
-  }, [statsData, filters, parseDuration]);
+  }, [statsData, filters]);
 
   // Fetch trainer-specific statistics
   const trainerQueries = useMemo(() => {
@@ -221,56 +221,21 @@ const Statistics: React.FC = () => {
       const trainerStats = trainerResults[index]?.data;
       if (!trainerStats) return { name: trainer.name, timeVariance: 0 };
       
-      // Calculate average variance based on the selected view
-      if (filters.training !== 'all') {
-        if (filters.day) {
-          // Single day view
-          const key = `${filters.training}-${filters.day}`;
-          const dayData = trainerStats.daySpecificStats[key]?.activities || [];
-          const totalVariance = dayData.reduce((sum: number, activity: { averageVariance: string }) => {
-            return sum + parseDuration(activity.averageVariance);
-          }, 0);
-          return {
-            name: trainer.name,
-            timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
-          };
-        } else {
-          // All days for specific training
-          interface ActivityData {
-            activities: Array<{ averageVariance: string }>;
-          }
-          
-          const daysData = Object.entries(trainerStats.daySpecificStats)
-            .filter(([key]) => key.startsWith(filters.training))
-            .map(([_, data]) => {
-              const typedData = data as ActivityData;
-              return typedData.activities;
-            })
-            .flat();
-
-          const totalVariance = daysData.reduce((sum: number, activity: { averageVariance: string }) => {
-            return sum + parseDuration(activity.averageVariance);
-          }, 0);
-
-          return {
-            name: trainer.name,
-            timeVariance: daysData.length > 0 ? Math.round(totalVariance / daysData.length) : 0
-          };
-        }
-      } else {
-        // All trainings view - use adherence data
-        const totalVariance = trainerStats.adherence.reduce((sum: number, activity: { averageVariance: string }) => {
-          return sum + parseDuration(activity.averageVariance);
-        }, 0);
-        return {
-          name: trainer.name,
-          timeVariance: trainerStats.adherence.length > 0 
-            ? Math.round(totalVariance / trainerStats.adherence.length)
-            : 0
-        };
-      }
+      // Calculate average variance from adherence data
+      const totalVariance = trainerStats.adherence.reduce((sum: number, activity: { averageVariance: string }) => {
+        return sum + parseDuration(activity.averageVariance);
+      }, 0);
+      
+      const averageVariance = trainerStats.adherence.length > 0 
+        ? Math.round(totalVariance / trainerStats.adherence.length)
+        : 0;
+      
+      return {
+        name: trainer.name,
+        timeVariance: averageVariance
+      };
     });
-  }, [statsData, filters, trainerResults, parseDuration]);
+  }, [statsData, filters, trainerResults]);
 
   const calculateTimingDistribution = (data: TimeVarianceData[]) => {
     const total = data.length;
@@ -363,6 +328,55 @@ const Statistics: React.FC = () => {
   );
 
   const renderTimingDistributionCharts = (data: TimeVarianceData[], title: string) => {
+    const LABEL_LINE_HEIGHT = 15;
+    const wrapLabel = (label: string) => {
+      const words = label.split(' ');
+      const lines = [];
+      let currentLine = words[0];
+      
+      for (let i = 1; i < words.length; i++) {
+        if (currentLine.length + words[i].length < 15) {
+          currentLine += ' ' + words[i];
+        } else {
+          lines.push(currentLine);
+          currentLine = words[i];
+        }
+      }
+      lines.push(currentLine);
+      return lines;
+    };
+
+    const renderCustomLabel = ({ name, value, percent }: any) => {
+      const lines = wrapLabel(name);
+      return (
+        <g>
+          {lines.map((line, i) => (
+            <text
+              key={i}
+              x={0}
+              y={i * LABEL_LINE_HEIGHT}
+              fill="#666666"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={12}
+            >
+              {line}
+            </text>
+          ))}
+          <text
+            x={0}
+            y={lines.length * LABEL_LINE_HEIGHT}
+            fill="#666666"
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={12}
+          >
+            {`${value} (${(percent * 100).toFixed(0)}%)`}
+          </text>
+        </g>
+      );
+    };
+
     return (
       <Grid container spacing={2}>
         <Grid item xs={12} md={filters.trainer === 'all' ? 6 : 12}>
@@ -386,12 +400,34 @@ const Statistics: React.FC = () => {
                     cy="50%"
                     outerRadius={80}
                     animationDuration={300}
-                    label={false}
+                    label={renderCustomLabel}
+                    labelLine={{ 
+                      stroke: '#666',
+                      strokeWidth: 1,
+                      offset: 20
+                    }}
+                    onMouseEnter={(_, index) => {
+                      const sector = document.querySelector(`#timing-pie-${index}`) as SVGElement;
+                      if (sector) {
+                        sector.style.opacity = '0.9';
+                      }
+                    }}
+                    onMouseLeave={(_, index) => {
+                      const sector = document.querySelector(`#timing-pie-${index}`) as SVGElement;
+                      if (sector) {
+                        sector.style.opacity = '1';
+                      }
+                    }}
                   >
                     {calculateTimingDistribution(data).map((entry, index) => (
                       <Cell 
                         key={`cell-${index}`}
+                        id={`timing-pie-${index}`}
                         fill={Object.values(TIMING_COLORS)[index]}
+                        style={{ 
+                          cursor: 'pointer',
+                          transition: 'opacity 0.2s ease-in-out',
+                        }}
                       />
                     ))}
                   </Pie>
@@ -442,12 +478,38 @@ const Statistics: React.FC = () => {
                       cy="50%"
                       outerRadius={80}
                       animationDuration={300}
-                      label={false}
+                      label={({ name, value, percent }) => 
+                        `${name}: ${value} (${(percent * 100).toFixed(0)}%)`
+                      }
+                      labelLine={{ 
+                        stroke: '#666',
+                        strokeWidth: 1,
+                        offset: 20
+                      }}
+                      onMouseEnter={(_, index) => {
+                        const sector = document.querySelector(`#trainer-pie-${index}`) as SVGElement;
+                        if (sector) {
+                          sector.style.opacity = '0.9';
+                          sector.style.transform = 'scale(1.02)';
+                        }
+                      }}
+                      onMouseLeave={(_, index) => {
+                        const sector = document.querySelector(`#trainer-pie-${index}`) as SVGElement;
+                        if (sector) {
+                          sector.style.opacity = '1';
+                          sector.style.transform = 'scale(1)';
+                        }
+                      }}
                     >
                       {calculateTimingDistribution(trainerVarianceData).map((entry, index) => (
                         <Cell 
                           key={`cell-${index}`}
+                          id={`trainer-pie-${index}`}
                           fill={Object.values(TIMING_COLORS)[index]}
+                          style={{ 
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease-in-out',
+                          }}
                         />
                       ))}
                     </Pie>
