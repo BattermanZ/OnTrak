@@ -94,6 +94,11 @@ const TIMING_COLORS = {
   late: '#EF5350'
 };
 
+const CHART_HOVER_STYLE = {
+  opacity: 0.8,
+  transition: 'opacity 0.3s ease-in-out',
+};
+
 const Statistics = () => {
   const [filters, setFilters] = useState<StatisticsFilters>({
     trainer: 'all',
@@ -219,7 +224,7 @@ const Statistics = () => {
 
   const renderTimeVarianceChart = (data: TimeVarianceData[], title: string) => (
     <Grid item xs={12}>
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, transition: 'transform 0.2s ease-in-out', '&:hover': { transform: 'scale(1.01)' } }}>
         <Typography variant="h6" gutterBottom>
           {title}
           <Tooltip title="Shows how much time was saved (negative values) or exceeded (positive values) compared to scheduled duration">
@@ -239,9 +244,10 @@ const Statistics = () => {
                 position: 'insideLeft' 
               }}
               domain={[
-                (dataMin: number) => Math.min(0, dataMin),
-                (dataMax: number) => Math.max(0, dataMax)
+                (dataMin: number) => Math.floor(Math.min(0, dataMin) / 100) * 100,
+                (dataMax: number) => Math.ceil(Math.max(0, dataMax) / 100) * 100
               ]}
+              tickFormatter={(value) => Math.round(value).toString()}
             />
             <RechartsTooltip 
               formatter={(value: number) => [`${value} minutes`, 'Time Variance']}
@@ -250,11 +256,16 @@ const Statistics = () => {
               dataKey="timeVariance" 
               name="Time Variance"
               fill="#4CAF50"
+              animationDuration={300}
+              onMouseOver={(data, index) => {
+                // Optional: Add any hover effects here
+              }}
             >
               {data.map((entry, index) => (
                 <Cell 
                   key={`cell-${index}`}
                   fill={entry.timeVariance > 0 ? '#EF5350' : '#4CAF50'}
+                  style={{ cursor: 'pointer', ...CHART_HOVER_STYLE }}
                 />
               ))}
             </Bar>
@@ -276,7 +287,7 @@ const Statistics = () => {
               </IconButton>
             </Tooltip>
           </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 300, position: 'relative' }}>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -286,19 +297,62 @@ const Statistics = () => {
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={{ stroke: 'none' }}
+                  animationDuration={300}
+                  label={({ name, value, percent }) => 
+                    `${name}: ${value} (${(percent * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ 
+                    stroke: '#666',
+                    strokeWidth: 1,
+                    distance: 20
+                  }}
+                  onMouseEnter={(_, index) => {
+                    const sector = document.querySelector(`#timing-pie-${index}`) as SVGElement;
+                    if (sector) {
+                      sector.style.opacity = '0.8';
+                    }
+                  }}
+                  onMouseLeave={(_, index) => {
+                    const sector = document.querySelector(`#timing-pie-${index}`) as SVGElement;
+                    if (sector) {
+                      sector.style.opacity = '1';
+                    }
+                  }}
                 >
                   {calculateTimingDistribution(data).map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`}
+                      id={`timing-pie-${index}`}
                       fill={Object.values(TIMING_COLORS)[index]}
+                      style={{ 
+                        cursor: 'pointer',
+                        transition: 'opacity 0.3s ease-in-out',
+                      }}
                     />
                   ))}
                 </Pie>
-                <RechartsTooltip />
+                <RechartsTooltip 
+                  formatter={(value: any, name: string) => [`${value} (${((Number(value) / data.length) * 100).toFixed(0)}%)`, name]}
+                />
               </PieChart>
             </ResponsiveContainer>
+            <Box sx={{ 
+              position: 'absolute', 
+              bottom: 0, 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: 2,
+              backgroundColor: 'white',
+              p: 1,
+              borderRadius: 1
+            }}>
+              {Object.entries(TIMING_COLORS).map(([key, color]) => (
+                <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ width: 12, height: 12, backgroundColor: color, borderRadius: '50%' }} />
+                  <Typography variant="caption">{key.charAt(0).toUpperCase() + key.slice(1)}</Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         </Paper>
       </Grid>
@@ -312,7 +366,7 @@ const Statistics = () => {
               </IconButton>
             </Tooltip>
           </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 300, position: 'relative' }}>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -322,19 +376,62 @@ const Statistics = () => {
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
-                  label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={{ stroke: 'none' }}
+                  animationDuration={300}
+                  label={({ name, value, percent }) => 
+                    `${name}: ${value} (${(percent * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ 
+                    stroke: '#666',
+                    strokeWidth: 1,
+                    distance: 20
+                  }}
+                  onMouseEnter={(_, index) => {
+                    const sector = document.querySelector(`#trainer-pie-${index}`) as SVGElement;
+                    if (sector) {
+                      sector.style.opacity = '0.8';
+                    }
+                  }}
+                  onMouseLeave={(_, index) => {
+                    const sector = document.querySelector(`#trainer-pie-${index}`) as SVGElement;
+                    if (sector) {
+                      sector.style.opacity = '1';
+                    }
+                  }}
                 >
                   {calculateTimingDistribution(trainerVarianceData).map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`}
+                      id={`trainer-pie-${index}`}
                       fill={Object.values(TIMING_COLORS)[index]}
+                      style={{ 
+                        cursor: 'pointer',
+                        transition: 'opacity 0.3s ease-in-out',
+                      }}
                     />
                   ))}
                 </Pie>
-                <RechartsTooltip />
+                <RechartsTooltip 
+                  formatter={(value: any, name: string) => [`${value} (${((Number(value) / trainerVarianceData.length) * 100).toFixed(0)}%)`, name]}
+                />
               </PieChart>
             </ResponsiveContainer>
+            <Box sx={{ 
+              position: 'absolute', 
+              bottom: 0, 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: 2,
+              backgroundColor: 'white',
+              p: 1,
+              borderRadius: 1
+            }}>
+              {Object.entries(TIMING_COLORS).map(([key, color]) => (
+                <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ width: 12, height: 12, backgroundColor: color, borderRadius: '50%' }} />
+                  <Typography variant="caption">{key.charAt(0).toUpperCase() + key.slice(1)}</Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         </Paper>
       </Grid>
@@ -373,7 +470,7 @@ const Statistics = () => {
         <Paper sx={{ p: 3, mb: 4 }}>
           <Grid container spacing={3}>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Trainer</InputLabel>
                 <Select
                   value={filters.trainer}
@@ -389,7 +486,7 @@ const Statistics = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Training</InputLabel>
                 <Select
                   value={filters.training}
@@ -405,7 +502,7 @@ const Statistics = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Day</InputLabel>
                 <Select
                   value={filters.day || ''}
@@ -422,7 +519,7 @@ const Statistics = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
                 <InputLabel>Date Range</InputLabel>
                 <Select
                   value={filters.dateRange}
@@ -441,7 +538,14 @@ const Statistics = () => {
         {/* Summary Statistics */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ 
+              p: 3,
+              transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: 4,
+              }
+            }}>
               <Typography variant="h6" gutterBottom>
                 On-Time Activity Start Rate
               </Typography>
@@ -451,7 +555,14 @@ const Statistics = () => {
             </Paper>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3 }}>
+            <Paper sx={{ 
+              p: 3,
+              transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: 4,
+              }
+            }}>
               <Typography variant="h6" gutterBottom>
                 Total Training Days Analysed
               </Typography>
@@ -480,62 +591,69 @@ const Statistics = () => {
           )}
           
           {/* Timing distribution pie charts */}
-          {renderTimingDistributionCharts(
-            timeVarianceData,
-            filters.training === 'all' 
-              ? 'Training'
-              : filters.day
-                ? 'Activity'
-                : 'Day'
+          <Grid item xs={12}>
+            {renderTimingDistributionCharts(
+              timeVarianceData,
+              filters.training === 'all' 
+                ? 'Training'
+                : filters.day
+                  ? 'Activity'
+                  : 'Day'
+            )}
+          </Grid>
+
+          {/* Most Delayed and Efficient Activities */}
+          {filters.training !== 'all' && (
+            <>
+              {/* Most Delayed Activities */}
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Most Delayed Activities
+                    <Tooltip title="Activities that consistently run longer than scheduled">
+                      <IconButton size="small" sx={{ ml: 1 }}>
+                        <InfoIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Typography>
+                  <List>
+                    {(statsData?.mostDelayedActivities || []).map((activity, index) => (
+                      <ListItem key={index}>
+                        <ListItemText
+                          primary={activity.name}
+                          secondary={`Average delay: ${activity.averageDelay}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </Grid>
+
+              {/* Most Efficient Activities */}
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Most Efficient Activities
+                    <Tooltip title="Activities that are consistently completed faster than scheduled">
+                      <IconButton size="small" sx={{ ml: 1 }}>
+                        <InfoIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Typography>
+                  <List>
+                    {(statsData?.mostEfficientActivities || []).map((activity, index) => (
+                      <ListItem key={index}>
+                        <ListItemText
+                          primary={activity.name}
+                          secondary={`Average time saved: ${activity.averageTimeSaved}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </Grid>
+            </>
           )}
-
-          {/* Most Delayed Activities */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Most Delayed Activities
-                <Tooltip title="Activities that consistently run longer than scheduled">
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <List>
-                {(statsData?.mostDelayedActivities || []).map((activity, index) => (
-                  <ListItem key={index}>
-                    <ListItemText
-                      primary={activity.name}
-                      secondary={`Average delay: ${activity.averageDelay}`}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
-
-          {/* Most Efficient Activities */}
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Most Efficient Activities
-                <Tooltip title="Activities that are consistently completed faster than scheduled">
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <List>
-                {(statsData?.mostEfficientActivities || []).map((activity, index) => (
-                  <ListItem key={index}>
-                    <ListItemText
-                      primary={activity.name}
-                      secondary={`Average time saved: ${activity.averageTimeSaved}`}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
         </Grid>
       </Box>
     </Container>
