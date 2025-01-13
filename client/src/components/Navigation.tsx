@@ -9,7 +9,6 @@ import {
   ListItemText,
   ListItemButton,
   Typography,
-  useTheme,
 } from '@mui/material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import {
@@ -27,7 +26,6 @@ const Navigation = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const theme = useTheme();
 
   const isActive = (path: string) => location.pathname === path;
 

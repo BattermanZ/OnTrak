@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 import Dashboard from '../pages/Dashboard';
-import { Setup } from '../pages/Setup';
+import Setup from '../pages/Setup';
 import Profile from '../pages/Profile';
 import Statistics from '../pages/Statistics';
 import Admin from '../pages/Admin';

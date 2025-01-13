@@ -9,9 +9,13 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth();
+  const { loading } = useAuth();
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+
+  if (loading) {
+    return null;
+  }
 
   if (isAuthPage) {
     return <>{children}</>;

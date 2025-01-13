@@ -255,27 +255,29 @@ const ActivityBox = ({
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user } = useAuth();
   const socket = useSocket();
   const queryClient = useQueryClient();
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [error, setError] = useState<string>('');
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [showCongrats, setShowCongrats] = useState(false);
+  const [isStartDayDialogOpen, setIsStartDayDialogOpen] = useState(false);
   const [bgColor, setBgColor] = useState('#F0FDF4'); // Light green default
 
-  // Fetch templates
   const { data: templateList } = useQuery('templates', async () => {
     const response = await templates.getAll();
     return response.data;
   });
 
-  // Fetch current schedule
-  const { data: schedule, isLoading } = useQuery('currentSchedule', async () => {
-    const response = await schedules.getCurrentSchedule();
-    return response.data;
-  });
+  const { data: currentSchedule, isLoading } = useQuery<Schedule>(
+    'currentSchedule',
+    async () => {
+      const response = await schedules.getCurrentSchedule();
+      return response.data;
+    }
+  );
 
   useEffect(() => {
     if (socket) {
@@ -294,27 +296,23 @@ const Dashboard = () => {
   const handleStartDay = async () => {
     try {
       setError('');
-      if (!selectedTemplate || !selectedDay) {
-        setError('Please select a template and day to start');
-        return;
-      }
-
-      await schedules.startDay(selectedTemplate, selectedDay);
-      await queryClient.invalidateQueries('currentSchedule');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to start day');
+      await schedules.startDay(selectedTemplateId, selectedDay);
+      setIsStartDayDialogOpen(false);
+      queryClient.invalidateQueries('currentSchedule');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start day');
     }
   };
 
   const handleNextActivity = async () => {
     try {
       setError('');
-      if (!schedule?._id || !schedule.currentActivity?._id) {
+      if (!currentSchedule?._id || !currentSchedule.currentActivity?._id) {
         setError('No active activity to move to next');
         return;
       }
 
-      await schedules.nextActivity(schedule._id, schedule.currentActivity._id);
+      await schedules.nextActivity(currentSchedule._id, currentSchedule.currentActivity._id);
       await queryClient.invalidateQueries('currentSchedule');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to move to next activity');
@@ -324,12 +322,12 @@ const Dashboard = () => {
   const handlePreviousActivity = async () => {
     try {
       setError('');
-      if (!schedule?._id || !schedule.currentActivity?._id) {
+      if (!currentSchedule?._id || !currentSchedule.currentActivity?._id) {
         setError('No active activity to move from');
         return;
       }
 
-      await schedules.goToPreviousActivity(schedule._id, schedule.currentActivity._id);
+      await schedules.goToPreviousActivity(currentSchedule._id, currentSchedule.currentActivity._id);
       await queryClient.invalidateQueries('currentSchedule');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to go to previous activity');
@@ -373,11 +371,11 @@ const Dashboard = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
             <Box>
               <Typography variant="h5" color="#003366">
-                {schedule ? schedule.title : "Today's Schedule"}
+                {currentSchedule ? currentSchedule.title : "Today's Schedule"}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
-              {schedule && (
+              {currentSchedule && (
                 <Button
                   variant="contained"
                   color="secondary"
@@ -395,7 +393,7 @@ const Dashboard = () => {
             </Box>
           </Box>
 
-          {!schedule && (
+          {!currentSchedule && (
             <Paper sx={{ p: 3, mb: 4 }}>
               <Typography variant="h6" gutterBottom>
                 Start Your Day
@@ -405,8 +403,8 @@ const Dashboard = () => {
                   <FormControl fullWidth>
                     <InputLabel>Select Template</InputLabel>
                     <Select
-                      value={selectedTemplate || ''}
-                      onChange={(e) => setSelectedTemplate(e.target.value)}
+                      value={selectedTemplateId || ''}
+                      onChange={(e) => setSelectedTemplateId(e.target.value)}
                       label="Select Template"
                     >
                       {templateList?.map((template: Template) => (
@@ -425,9 +423,9 @@ const Dashboard = () => {
                       onChange={(e) => setSelectedDay(Number(e.target.value))}
                       label="Select Day"
                     >
-                      {selectedTemplate && templateList?.find((t: Template) => t._id === selectedTemplate)?.days ?
+                      {selectedTemplateId && templateList?.find((t: Template) => t._id === selectedTemplateId)?.days ?
                         Array.from(
-                          { length: templateList.find((t: Template) => t._id === selectedTemplate)!.days },
+                          { length: templateList.find((t: Template) => t._id === selectedTemplateId)!.days },
                           (_, i) => i + 1
                         ).map((day) => (
                           <MenuItem key={day} value={day}>
@@ -443,7 +441,7 @@ const Dashboard = () => {
                   <Button
                     fullWidth
                     variant="contained"
-                    onClick={handleStartDay}
+                    onClick={() => setIsStartDayDialogOpen(true)}
                     startIcon={<PlayArrowIcon />}
                     sx={{ height: '56px' }}
                   >
@@ -460,23 +458,23 @@ const Dashboard = () => {
             </Alert>
           )}
 
-          {schedule && (
+          {currentSchedule && (
             <>
               <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
                 <Button
                   variant="contained"
                   onClick={handlePreviousActivity}
                   startIcon={<SkipPreviousIcon />}
-                  disabled={!schedule.previousActivity}
+                  disabled={!currentSchedule.previousActivity}
                 >
                   Previous Activity
                 </Button>
-                {schedule.nextActivity ? (
+                {currentSchedule.nextActivity ? (
                   <Button
                     variant="contained"
                     onClick={handleNextActivity}
                     startIcon={<SkipNextIcon />}
-                    disabled={!schedule.currentActivity}
+                    disabled={!currentSchedule.currentActivity}
                   >
                     Next Activity
                   </Button>
@@ -490,7 +488,7 @@ const Dashboard = () => {
                         bgcolor: '#388E3C',
                       },
                     }}
-                    disabled={!schedule.currentActivity}
+                    disabled={!currentSchedule.currentActivity}
                   >
                     Close Day
                   </Button>
@@ -501,14 +499,14 @@ const Dashboard = () => {
                 <Grid item xs={12} md={4}>
                   <ActivityBox
                     title="Previous Activity"
-                    activity={schedule.previousActivity}
+                    activity={currentSchedule.previousActivity}
                     isCompleted={true}
                   />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <ActivityBox
                     title="Current Activity"
-                    activity={schedule.currentActivity}
+                    activity={currentSchedule.currentActivity}
                     isActive={true}
                     onProgressUpdate={handleProgressUpdate}
                   />
@@ -516,7 +514,7 @@ const Dashboard = () => {
                 <Grid item xs={12} md={4}>
                   <ActivityBox
                     title="Next Activity"
-                    activity={schedule.nextActivity}
+                    activity={currentSchedule.nextActivity}
                   />
                 </Grid>
               </Grid>
@@ -526,13 +524,13 @@ const Dashboard = () => {
                   Full Schedule
                 </Typography>
                 <Grid container spacing={1}>
-                  {schedule.activities.map((activity: Activity, index: number) => {
-                    const currentIndex = schedule.activities.findIndex((a: Activity) => a._id === schedule.currentActivity?._id);
+                  {currentSchedule.activities.map((activity: Activity, index: number) => {
+                    const currentIndex = currentSchedule.activities.findIndex((a: Activity) => a._id === currentSchedule.currentActivity?._id);
                     return (
                       <Grid item xs={12} key={activity._id}>
                         <ScheduleActivityBox
                           activity={activity}
-                          isActive={activity._id === schedule.currentActivity?._id}
+                          isActive={activity._id === currentSchedule.currentActivity?._id}
                           isCompleted={index < currentIndex || activity.completed}
                         />
                       </Grid>

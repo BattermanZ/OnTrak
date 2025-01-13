@@ -40,15 +40,16 @@ export interface Template {
 
 export interface Schedule {
   _id: string;
-  name: string;
-  days: number;
-  userId: string;
+  title: string;
+  templateId: string;
+  selectedDay: number;
   activities: Activity[];
   currentActivity: Activity | null;
   previousActivity: Activity | null;
   nextActivity: Activity | null;
-  createdAt: Date;
-  updatedAt: Date;
+  status: 'active' | 'completed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
 }
 
 // For undo/redo functionality

@@ -67,7 +67,7 @@ const updateTemplate = async (req, res) => {
   try {
     logger.debug('Updating template', { templateId: req.params.id, updates: req.body });
     
-    const { name, days } = req.body;
+    const { name, days, activities } = req.body;
     const template = await Template.findById(req.params.id);
     
     if (!template) {
@@ -76,6 +76,9 @@ const updateTemplate = async (req, res) => {
 
     template.name = name;
     template.days = days;
+    if (activities) {
+      template.activities = activities;
+    }
 
     await template.save();
     
