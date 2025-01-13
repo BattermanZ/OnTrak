@@ -19,12 +19,21 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Badge,
+  Tooltip,
+  Card,
+  CardContent,
+  CardActions,
+  alpha,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   Search as SearchIcon,
+  Schedule as ScheduleIcon,
+  Person as PersonIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
 import { templates } from '../services/api';
 import { useQuery, useQueryClient } from 'react-query';
@@ -213,55 +222,144 @@ export const Setup = () => {
   return (
     <Container maxWidth="lg">
       <Box sx={{ mt: 4, mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4" color="#003366">
-            Training Setup
-          </Typography>
+        {/* Header Section */}
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            mb: 4,
+            background: theme => `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+            p: 3,
+            borderRadius: 2,
+            color: 'white',
+          }}
+        >
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 600 }}>
+              Training Setup
+            </Typography>
+            <Typography variant="subtitle1" sx={{ mt: 1, opacity: 0.8 }}>
+              Create and manage your training templates
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setTemplateForm({ name: '', days: 1 });
+              setEditMode(false);
+              setCreateDialogOpen(true);
+            }}
+            sx={{
+              bgcolor: 'white',
+              color: theme => theme.palette.primary.main,
+              '&:hover': {
+                bgcolor: alpha('#ffffff', 0.9),
+              },
+              px: 3,
+              py: 1.5,
+              borderRadius: 2,
+              boxShadow: 2,
+            }}
+          >
+            Create Training
+          </Button>
         </Box>
 
-        <TextField
-          fullWidth
-          placeholder="Search templates..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          sx={{ mb: 4 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
+        {/* Search Section */}
+        <Card sx={{ mb: 4, p: 2, boxShadow: 2 }}>
+          <TextField
+            fullWidth
+            placeholder="Search templates..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: 'primary.main' }} />
+                </InputAdornment>
+              ),
+              sx: {
+                borderRadius: 2,
+                '& fieldset': {
+                  borderWidth: 2,
+                  borderColor: theme => alpha(theme.palette.primary.main, 0.2),
+                },
+                '&:hover fieldset': {
+                  borderColor: 'primary.main !important',
+                },
+              },
+            }}
+          />
+        </Card>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert 
+            severity="error" 
+            sx={{ 
+              mb: 2,
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
             {error}
           </Alert>
         )}
 
+        {/* Templates Grid */}
         <Grid container spacing={3}>
           {filteredTemplates?.map((template: Template) => (
             <Grid item xs={12} md={6} key={template._id}>
-              <Paper sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box 
-                    onClick={() => handleViewActivities(template)}
-                    sx={{ 
-                      cursor: 'pointer',
-                      '&:hover': { color: 'primary.main' }
-                    }}
-                  >
-                    <Typography variant="h6">{template.name}</Typography>
-                    <Typography color="text.secondary">Days: {template.days}</Typography>
-                    <Typography color="text.secondary">
-                      Created by: {template.createdBy.email}
-                    </Typography>
-                    <Typography color="text.secondary">
-                      Activities: {template.activities.length}
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4,
+                  },
+                  borderRadius: 2,
+                }}
+              >
+                <CardContent 
+                  sx={{ 
+                    flexGrow: 1,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => handleViewActivities(template)}
+                >
+                  <Typography variant="h6" gutterBottom color="primary.main" sx={{ fontWeight: 600 }}>
+                    {template.name}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                    <Badge 
+                      badgeContent={template.days} 
+                      color="primary"
+                      sx={{ '& .MuiBadge-badge': { fontSize: '0.8rem', height: '22px', minWidth: '22px' } }}
+                    >
+                      <CalendarIcon color="action" />
+                    </Badge>
+                    <Badge 
+                      badgeContent={template.activities.length} 
+                      color="secondary"
+                      sx={{ '& .MuiBadge-badge': { fontSize: '0.8rem', height: '22px', minWidth: '22px' } }}
+                    >
+                      <ScheduleIcon color="action" />
+                    </Badge>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.secondary' }}>
+                    <PersonIcon sx={{ mr: 1, fontSize: '1rem' }} />
+                    <Typography variant="body2">
+                      {template.createdBy.email}
                     </Typography>
                   </Box>
-                  <Box>
+                </CardContent>
+                <Divider />
+                <CardActions sx={{ justifyContent: 'flex-end', gap: 1, p: 2 }}>
+                  <Tooltip title="Add Activity">
                     <IconButton
                       onClick={() => {
                         setSelectedTemplate(template);
@@ -275,11 +373,15 @@ export const Setup = () => {
                         });
                         setActivityDialogOpen(true);
                       }}
-                      color="primary"
-                      title="Add Activity"
+                      sx={{ 
+                        color: 'primary.main',
+                        '&:hover': { bgcolor: alpha('#0066CC', 0.1) },
+                      }}
                     >
                       <AddIcon />
                     </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit Template">
                     <IconButton
                       onClick={() => {
                         setSelectedTemplate(template);
@@ -290,33 +392,55 @@ export const Setup = () => {
                         setEditMode(true);
                         setCreateDialogOpen(true);
                       }}
-                      color="primary"
-                      title="Edit Template"
+                      sx={{ 
+                        color: 'primary.main',
+                        '&:hover': { bgcolor: alpha('#0066CC', 0.1) },
+                      }}
                     >
                       <EditIcon />
                     </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete Template">
                     <IconButton
                       onClick={() => handleDeleteTemplate(template._id)}
-                      color="error"
-                      title="Delete Template"
+                      sx={{ 
+                        color: 'error.main',
+                        '&:hover': { bgcolor: alpha('#DC3545', 0.1) },
+                      }}
                     >
                       <DeleteIcon />
                     </IconButton>
-                  </Box>
-                </Box>
-              </Paper>
+                  </Tooltip>
+                </CardActions>
+              </Card>
             </Grid>
           ))}
         </Grid>
       </Box>
 
-      {/* Create/Edit Template Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => {
-        setCreateDialogOpen(false);
-        setEditMode(false);
-      }}>
-        <DialogTitle>{editMode ? 'Edit Template' : 'Create Template'}</DialogTitle>
-        <DialogContent>
+      {/* Dialogs remain mostly the same but with enhanced styling */}
+      <Dialog 
+        open={createDialogOpen} 
+        onClose={() => {
+          setCreateDialogOpen(false);
+          setEditMode(false);
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider',
+          px: 3,
+          py: 2,
+        }}>
+          {editMode ? 'Edit Template' : 'Create Template'}
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
           <TextField
             autoFocus
             margin="dense"
@@ -324,6 +448,12 @@ export const Setup = () => {
             fullWidth
             value={templateForm.name}
             onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+            sx={{ mb: 2 }}
+            InputProps={{
+              sx: {
+                borderRadius: 1,
+              }
+            }}
           />
           <TextField
             margin="dense"
@@ -332,16 +462,33 @@ export const Setup = () => {
             fullWidth
             value={templateForm.days}
             onChange={(e) => setTemplateForm({ ...templateForm, days: parseInt(e.target.value) || 1 })}
+            InputProps={{
+              sx: {
+                borderRadius: 1,
+              }
+            }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setCreateDialogOpen(false);
-            setEditMode(false);
-          }}>Cancel</Button>
+        <DialogActions sx={{ p: 3, pt: 2 }}>
+          <Button 
+            onClick={() => {
+              setCreateDialogOpen(false);
+              setEditMode(false);
+            }}
+            sx={{ 
+              color: 'text.secondary',
+              '&:hover': { bgcolor: alpha('#000', 0.05) },
+            }}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={editMode ? handleUpdateTemplate : handleCreateTemplate} 
             variant="contained"
+            sx={{
+              px: 3,
+              borderRadius: 1,
+            }}
           >
             {editMode ? 'Update' : 'Create'}
           </Button>
