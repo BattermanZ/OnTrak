@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity } from '../types';
 
@@ -46,7 +46,8 @@ export default function Setup() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: '',
-    days: 1
+    days: 1,
+    tags: [] as string[]
   });
   const [activityForm, setActivityForm] = useState({
     name: '',
@@ -62,6 +63,11 @@ export default function Setup() {
   const [isEditActivityDialogOpen, setIsEditActivityDialogOpen] = useState(false);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tagSearchQuery, setTagSearchQuery] = useState('');
+  const [showTagSearchSuggestions, setShowTagSearchSuggestions] = useState(false);
+  const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -128,7 +134,7 @@ export default function Setup() {
       setError(null);
       await templateApi.create(templateForm);
       setIsCreateDialogOpen(false);
-      setTemplateForm({ name: '', days: 1 });
+      setTemplateForm({ name: '', days: 1, tags: [] });
       await fetchTemplates();
     } catch (err) {
       console.error('Error creating template:', err);
@@ -143,7 +149,7 @@ export default function Setup() {
       await templateApi.update(selectedTemplate._id, templateForm);
       setIsEditDialogOpen(false);
       setSelectedTemplate(null);
-      setTemplateForm({ name: '', days: 1 });
+      setTemplateForm({ name: '', days: 1, tags: [] });
       await fetchTemplates();
     } catch (err) {
       console.error('Error updating template:', err);
@@ -247,6 +253,108 @@ export default function Setup() {
     setIsEditActivityDialogOpen(true);
   };
 
+  const handleTagsChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const value = tagInput.trim();
+      
+      if (value && !templateForm.tags.includes(value) && templateForm.tags.length < 5) {
+        setTemplateForm(prev => ({
+          ...prev,
+          tags: [...prev.tags, value]
+        }));
+        setTagInput('');
+      }
+      setShowTagSuggestions(false);
+    } else if (e.key === 'Tab' && showTagSuggestions) {
+      e.preventDefault();
+      const suggestions = getAllUniqueTags().filter(tag => 
+        tag.toLowerCase().includes(tagInput.toLowerCase()) &&
+        !templateForm.tags.includes(tag)
+      );
+      if (suggestions.length > 0) {
+        const [firstSuggestion] = suggestions;
+        if (templateForm.tags.length < 5) {
+          setTemplateForm(prev => ({
+            ...prev,
+            tags: [...prev.tags, firstSuggestion]
+          }));
+          setTagInput('');
+          setShowTagSuggestions(false);
+        }
+      }
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTemplateForm(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  // Function to get all unique tags from templates
+  const getAllUniqueTags = () => {
+    const tagSet = new Set<string>();
+    // Sort templates by creation date to maintain consistent order
+    const sortedTemplates = [...templates].sort((a, b) => {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+    
+    // Add tags in order of template creation
+    sortedTemplates.forEach(template => {
+      template.tags?.forEach(tag => tagSet.add(tag));
+    });
+    
+    // Convert to array and sort alphabetically for consistent ordering
+    return Array.from(tagSet).sort();
+  };
+
+  // Function to get consistent color for a tag
+  const getTagColor = (tag: string) => {
+    const colors = [
+      'bg-pink-100 hover:bg-pink-200 border-pink-200 text-pink-800',
+      'bg-blue-100 hover:bg-blue-200 border-blue-200 text-blue-800',
+      'bg-green-100 hover:bg-green-200 border-green-200 text-green-800',
+      'bg-purple-100 hover:bg-purple-200 border-purple-200 text-purple-800',
+      'bg-yellow-100 hover:bg-yellow-200 border-yellow-200 text-yellow-800',
+      'bg-indigo-100 hover:bg-indigo-200 border-indigo-200 text-indigo-800',
+      'bg-red-100 hover:bg-red-200 border-red-200 text-red-800',
+      'bg-teal-100 hover:bg-teal-200 border-teal-200 text-teal-800',
+      'bg-orange-100 hover:bg-orange-200 border-orange-200 text-orange-800',
+      'bg-cyan-100 hover:bg-cyan-200 border-cyan-200 text-cyan-800',
+      'bg-lime-100 hover:bg-lime-200 border-lime-200 text-lime-800',
+      'bg-violet-100 hover:bg-violet-200 border-violet-200 text-violet-800'
+    ];
+
+    // Get all unique tags in a consistent order
+    const allTags = getAllUniqueTags();
+    const tagIndex = allTags.indexOf(tag);
+    
+    // Use the tag's index to cycle through colors
+    return colors[tagIndex % colors.length];
+  };
+
+  // Add this new function for tag filtering
+  const handleTagClick = (tag: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!selectedFilterTags.includes(tag)) {
+      setSelectedFilterTags([...selectedFilterTags, tag]);
+    }
+  };
+
+  // Add this new function for removing tag filters
+  const removeFilterTag = (tag: string) => {
+    setSelectedFilterTags(selectedFilterTags.filter(t => t !== tag));
+  };
+
+  // Update the templates filtering logic
+  const filteredTemplates = templates.filter(template => 
+    template.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+    (selectedFilterTags.length === 0 || 
+     selectedFilterTags.every(tag => template.tags?.includes(tag)))
+  );
+
   return (
     <div className="container mx-auto p-6">
       {/* Header Section */}
@@ -268,15 +376,79 @@ export default function Setup() {
       </div>
 
       {/* Search Section */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
-        <Input
-          className="pl-10"
-          placeholder="Search templates..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      <div className="flex gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
+          <Input
+            className="pl-10"
+            placeholder="Search templates..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="relative w-72">
+          <div className="relative">
+            <Input
+              placeholder="Filter by tags..."
+              value={tagSearchQuery}
+              onChange={(e) => {
+                setTagSearchQuery(e.target.value);
+                setShowTagSearchSuggestions(true);
+              }}
+              onBlur={() => setTimeout(() => setShowTagSearchSuggestions(false), 200)}
+            />
+            {showTagSearchSuggestions && tagSearchQuery && (
+              <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+                {getAllUniqueTags()
+                  .filter(tag => 
+                    tag.toLowerCase().includes(tagSearchQuery.toLowerCase()) &&
+                    !selectedFilterTags.includes(tag)
+                  )
+                  .map(tag => (
+                    <div
+                      key={tag}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      onClick={() => {
+                        setSelectedFilterTags([...selectedFilterTags, tag]);
+                        setTagSearchQuery('');
+                        setShowTagSearchSuggestions(false);
+                      }}
+                    >
+                      <Badge className={getTagColor(tag)}>
+                        {tag}
+                      </Badge>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Add Active Filters Section */}
+      {selectedFilterTags.length > 0 && (
+        <div className="flex gap-2 mb-4 items-center">
+          <span className="text-sm text-gray-500">Active filters:</span>
+          {selectedFilterTags.map(tag => (
+            <Badge 
+              key={tag} 
+              className={`cursor-pointer ${getTagColor(tag)}`}
+              onClick={() => removeFilterTag(tag)}
+            >
+              {tag}
+              <X className="h-3 w-3 ml-1 hover:text-red-500" />
+            </Badge>
+          ))}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setSelectedFilterTags([])}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
 
       {/* Error Alert */}
         {error && (
@@ -287,147 +459,161 @@ export default function Setup() {
 
       {/* Templates Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {templates
-          .filter(template => 
-            template.name.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-          .map((template) => (
-            <Card 
-              key={template._id} 
-              className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
-              onClick={() => {
-                setSelectedTemplate(template);
-                setIsPreviewDialogOpen(true);
-              }}
-            >
-              <CardHeader className="bg-gray-50 border-b">
-                <div className="flex justify-between items-start">
-                  <div className="w-full">
-                    <h3 className="text-lg font-semibold">{template.name}</h3>
-                    <p className="text-sm text-gray-500 mt-1 mb-2">
-                      Created by{' '}
-                      <span className="font-medium">
-                        {template.createdBy ? 
-                          `${template.createdBy.firstName} ${template.createdBy.lastName}` : 
-                          'Unknown'
-                        }
-                      </span>
-                    </p>
-                    <div className="flex gap-2">
-                      <Badge variant="secondary" className="flex items-center">
-                        <Calendar className="w-3 h-3 mr-2" />
-                        {template.days} Days
-                      </Badge>
-                      <Badge variant="outline" className="flex items-center">
-                        <Clock className="w-3 h-3 mr-2" />
-                        {template.activities.length} Activities
-                      </Badge>
+        {filteredTemplates.map((template) => (
+          <Card 
+            key={template._id} 
+            className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
+            onClick={() => {
+              setSelectedTemplate(template);
+              setIsPreviewDialogOpen(true);
+            }}
+          >
+            <CardHeader className="bg-gray-50 border-b">
+              <div className="flex justify-between items-start">
+                <div className="w-full flex flex-col h-full">
+                  <h3 className="text-lg font-semibold">{template.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1 mb-2">
+                    Created by{' '}
+                    <span className="font-medium">
+                      {template.createdBy ? 
+                        `${template.createdBy.firstName} ${template.createdBy.lastName}` : 
+                        'Unknown'
+                      }
+                    </span>
+                  </p>
+                  {template.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {template.tags.map((tag) => (
+                        <Badge 
+                          key={tag} 
+                          className={`text-xs cursor-pointer ${getTagColor(tag)}`}
+                          onClick={(e) => handleTagClick(tag, e)}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
                     </div>
-                  </div>
-                  <div className="flex gap-2 ml-4" onClick={e => e.stopPropagation()}>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedTemplate(template);
-                              setIsEditDialogOpen(true);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit template</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                      onClick={() => {
-                        setSelectedTemplate(template);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete template</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                  )}
+                  <div className="flex gap-2 mt-auto">
+                    <Badge variant="secondary" className="flex items-center">
+                      <Calendar className="w-3 h-3 mr-2" />
+                      {template.days} Days
+                    </Badge>
+                    <Badge variant="outline" className="flex items-center">
+                      <Clock className="w-3 h-3 mr-2" />
+                      {template.activities.length} Activities
+                    </Badge>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="p-4 flex-1">
-                <ScrollArea className="h-[200px]">
-                  {Array.from({ length: template.days }, (_, i) => i + 1).map((day) => {
-                    const dayActivities = template.activities.filter((a) => a.day === day);
-                    return (
-                      <div key={day} className="mb-4">
-                        <h4 className="font-medium text-sm text-gray-600 mb-2">Day {day}</h4>
-                        {dayActivities.length > 0 ? (
-                          dayActivities.map((activity) => (
-                            <div
-                              key={activity._id}
-                              className="p-2 bg-gray-50 rounded-md mb-2 hover:bg-gray-100 cursor-pointer"
-                              onClick={(e) => handleActivityClick(template, activity, e)}
-                            >
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium">{activity.name}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-500">{activity.startTime}</span>
-                                  <Badge variant="outline" className="ml-2">
-                                    {activity.duration}m
-                                  </Badge>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedActivity(activity);
-                                      setIsDeleteActivityDialogOpen(true);
-                                    }}
-                                  >
-                                    <Trash2 className="h-3 w-3 text-red-500" />
-                                  </Button>
-                                </div>
+                <div className="flex gap-2 ml-4" onClick={e => e.stopPropagation()}>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTemplate(template);
+                            setTemplateForm({
+                              name: template.name,
+                              days: template.days,
+                              tags: template.tags || []
+                            });
+                            setIsEditDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit template</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTemplate(template);
+                            setIsDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Delete template</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 flex-1">
+              <ScrollArea className="h-[200px]">
+                {Array.from({ length: template.days }, (_, i) => i + 1).map((day) => {
+                  const dayActivities = template.activities.filter((a) => a.day === day);
+                  return (
+                    <div key={day} className="mb-4">
+                      <h4 className="font-medium text-sm text-gray-600 mb-2">Day {day}</h4>
+                      {dayActivities.length > 0 ? (
+                        dayActivities.map((activity) => (
+                          <div
+                            key={activity._id}
+                            className="p-2 bg-gray-50 rounded-md mb-2 hover:bg-gray-100 cursor-pointer"
+                            onClick={(e) => handleActivityClick(template, activity, e)}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">{activity.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">{activity.startTime}</span>
+                                <Badge variant="outline" className="ml-2">
+                                  {activity.duration}m
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedActivity(activity);
+                                    setIsDeleteActivityDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3 text-red-500" />
+                                </Button>
                               </div>
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500 italic">No activities scheduled</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </ScrollArea>
-              </CardContent>
-              <CardFooter className="bg-gray-50 border-t p-4 mt-auto">
-                <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedTemplate(template);
-                        setActivityForm({
-                          name: '',
-                          startTime: '',
-                          duration: 30,
-                          day: 1,
-                      description: ''
-                    });
-                    setIsAddActivityDialogOpen(true);
-                  }}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Activity
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500 italic">No activities scheduled</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </ScrollArea>
+            </CardContent>
+            <CardFooter className="bg-gray-50 border-t p-4 mt-auto">
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedTemplate(template);
+                  setActivityForm({
+                    name: '',
+                    startTime: '',
+                    duration: 30,
+                    day: 1,
+                    description: ''
+                  });
+                  setIsAddActivityDialogOpen(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Activity
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
       </div>
 
       {/* Create/Edit Template Dialog */}
@@ -464,6 +650,68 @@ export default function Setup() {
             value={templateForm.days}
                 onChange={(e) => setTemplateForm({ ...templateForm, days: parseInt(e.target.value) })}
               />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tags (optional)</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {templateForm.tags.map((tag) => (
+                  <Badge 
+                    key={tag} 
+                    className={`flex items-center gap-1 ${getTagColor(tag)}`}
+                  >
+                    {tag}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-red-500" 
+                      onClick={() => removeTag(tag)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <div className="relative">
+                <Input
+                  placeholder="Add tags (press Enter or comma to add)"
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    setShowTagSuggestions(true);
+                  }}
+                  onKeyDown={handleTagsChange}
+                  onBlur={() => setTimeout(() => setShowTagSuggestions(false), 200)}
+                  disabled={templateForm.tags.length >= 5}
+                />
+                {showTagSuggestions && tagInput && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+                    {getAllUniqueTags()
+                      .filter(tag => 
+                        tag.toLowerCase().includes(tagInput.toLowerCase()) &&
+                        !templateForm.tags.includes(tag)
+                      )
+                      .map(tag => (
+                        <div
+                          key={tag}
+                          className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                          onClick={() => {
+                            if (templateForm.tags.length < 5) {
+                              setTemplateForm(prev => ({
+                                ...prev,
+                                tags: [...prev.tags, tag]
+                              }));
+                              setTagInput('');
+                              setShowTagSuggestions(false);
+                            }
+                          }}
+                        >
+                          <Badge className={getTagColor(tag)}>
+                            {tag}
+                          </Badge>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Add up to 5 tags to help organize your templates. Press Tab to autocomplete.
+              </p>
             </div>
           </div>
           <DialogFooter>

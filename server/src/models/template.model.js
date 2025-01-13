@@ -37,6 +37,16 @@ const templateSchema = new mongoose.Schema({
     required: true,
     min: 1
   },
+  tags: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(v) {
+        return v.length <= 5; // Maximum 5 tags per template
+      },
+      message: 'A template can have at most 5 tags'
+    }
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -34,7 +34,7 @@ const createTemplate = async (req, res) => {
       user: req.user?._id
     });
 
-    const { name, days } = req.body;
+    const { name, days, tags } = req.body;
     
     if (!req.user?._id) {
       logger.error('User not found in request');
@@ -44,6 +44,7 @@ const createTemplate = async (req, res) => {
     const template = new Template({
       name,
       days,
+      tags: tags || [],
       createdBy: req.user._id,
       activities: []
     });
@@ -67,7 +68,7 @@ const updateTemplate = async (req, res) => {
   try {
     logger.debug('Updating template', { templateId: req.params.id, updates: req.body });
     
-    const { name, days, activities } = req.body;
+    const { name, days, activities, tags } = req.body;
     const template = await Template.findById(req.params.id);
     
     if (!template) {
@@ -76,6 +77,9 @@ const updateTemplate = async (req, res) => {
 
     template.name = name;
     template.days = days;
+    if (tags !== undefined) {
+      template.tags = tags;
+    }
     if (activities) {
       template.activities = activities;
     }

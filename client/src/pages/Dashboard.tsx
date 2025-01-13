@@ -160,7 +160,7 @@ export default function Dashboard() {
                   ? currentSchedule.title.split(' - Day')[0] 
                   : currentSchedule.title}
               </h1>
-              <p className="text-gray-600 mt-2">Day {currentSchedule.selectedDay}</p>
+              <p className="text-gray-600 mt-2">Training Day {currentSchedule.selectedDay}</p>
             </>
           ) : (
             <>
