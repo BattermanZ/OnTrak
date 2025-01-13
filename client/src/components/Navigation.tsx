@@ -1,132 +1,82 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  IconButton,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemButton,
-  Typography,
-} from '@mui/material';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
-import {
-  Dashboard as DashboardIcon,
-  Settings as SettingsIcon,
-  BarChart as StatisticsIcon,
-  Person as ProfileIcon,
-  People as AdminIcon,
-  Logout as LogoutIcon,
-  Menu as MenuIcon,
-} from '@mui/icons-material';
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
 import { useAuth } from '../contexts/AuthContext';
+import {
+  LayoutDashboard,
+  Settings,
+  BarChart,
+  User,
+  Users,
+  LogOut
+} from "lucide-react";
 
 const Navigation = () => {
-  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
-  const isActive = (path: string) => location.pathname === path;
+  const { user, logout } = useAuth();
 
   const handleLogout = async () => {
     try {
       await logout();
-      setDrawerOpen(false);
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
   const menuItems = [
-    { path: '/', label: 'Dashboard', icon: <DashboardIcon /> },
-    { path: '/setup', label: 'Setup', icon: <SettingsIcon /> },
-    { path: '/statistics', label: 'Statistics', icon: <StatisticsIcon /> },
-    { path: '/profile', label: 'Profile', icon: <ProfileIcon /> },
-    ...(user?.role === 'admin' ? [{ path: '/admin', label: 'Admin', icon: <AdminIcon /> }] : []),
+    { value: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { value: '/setup', label: 'Setup', icon: <Settings className="w-4 h-4" /> },
+    { value: '/statistics', label: 'Statistics', icon: <BarChart className="w-4 h-4" /> },
+    { value: '/profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
+    ...(user?.role === 'admin' ? [{ value: '/admin', label: 'Admin', icon: <Users className="w-4 h-4" /> }] : []),
   ];
 
-  const navigationList = (
-    <List>
-      {menuItems.map((item) => (
-        <ListItem key={item.path} disablePadding>
-          <ListItemButton
-            component={RouterLink}
-            to={item.path}
-            selected={isActive(item.path)}
-            onClick={() => setDrawerOpen(false)}
-            sx={{
-              bgcolor: isActive(item.path) ? 'rgba(0, 51, 102, 0.1)' : 'transparent',
-              '&:hover': {
-                bgcolor: isActive(item.path) ? 'rgba(0, 51, 102, 0.2)' : 'rgba(0, 51, 102, 0.1)',
-              },
-            }}
-          >
-            <ListItemIcon sx={{ color: isActive(item.path) ? '#003366' : '#666' }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText 
-              primary={item.label}
-              sx={{ 
-                color: isActive(item.path) ? '#003366' : '#666',
-                '& .MuiTypography-root': {
-                  fontWeight: isActive(item.path) ? 600 : 400,
-                },
-              }}
-            />
-          </ListItemButton>
-        </ListItem>
-      ))}
-      <ListItem disablePadding>
-        <ListItemButton onClick={handleLogout} sx={{ color: '#DC3545' }}>
-          <ListItemIcon sx={{ color: '#DC3545' }}>
-            <LogoutIcon />
-          </ListItemIcon>
-          <ListItemText primary="Logout" />
-        </ListItemButton>
-      </ListItem>
-    </List>
-  );
-
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <IconButton
-        edge="start"
-        color="inherit"
-        aria-label="menu"
-        onClick={() => setDrawerOpen(true)}
-      >
-        <MenuIcon />
-      </IconButton>
-
-      <Typography variant="h6" component="div" sx={{ color: '#003366' }}>
-        OnTrak
-      </Typography>
-
-      <Typography variant="subtitle1" sx={{ color: '#666' }}>
-        {user?.firstName} {user?.lastName}
-      </Typography>
-
-      <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: 280,
-            boxSizing: 'border-box',
-            bgcolor: '#fff',
-          },
-        }}
-      >
-        <Box sx={{ p: 2 }}>
-          <Typography variant="h6" sx={{ color: '#003366', mb: 2 }}>
-            OnTrak
-          </Typography>
-          {navigationList}
-        </Box>
-      </Drawer>
-    </Box>
+    <div className="w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 max-w-screen-2xl items-center">
+        <div className="mr-4 hidden md:flex">
+          <a className="mr-6 flex items-center space-x-2" href="/">
+            <span className="hidden font-bold sm:inline-block">
+              OnTrak
+              {user && (
+                <span className="font-normal text-muted-foreground ml-2">
+                  - {user.firstName} {user.lastName}
+                </span>
+              )}
+            </span>
+          </a>
+        </div>
+        <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
+          <Tabs
+            value={location.pathname}
+            onValueChange={(value) => navigate(value)}
+            className="w-full md:w-auto"
+          >
+            <TabsList className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground w-full md:w-auto">
+              {menuItems.map((item) => (
+                <TabsTrigger
+                  key={item.value}
+                  value={item.value}
+                  className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow gap-2"
+                >
+                  {item.icon}
+                  {item.label}
+                </TabsTrigger>
+              ))}
+              <TabsTrigger
+                value="logout"
+                onClick={handleLogout}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive hover:text-destructive-foreground gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+    </div>
   );
 };
 
