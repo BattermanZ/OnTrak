@@ -151,7 +151,7 @@ export default function Dashboard() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-lg shadow-sm">
         <div>
           {currentSchedule ? (
             <>

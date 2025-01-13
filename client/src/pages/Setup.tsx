@@ -294,7 +294,7 @@ export default function Setup() {
           .map((template) => (
             <Card 
               key={template._id} 
-              className="hover:shadow-lg transition-shadow cursor-pointer"
+              className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
               onClick={() => {
                 setSelectedTemplate(template);
                 setIsPreviewDialogOpen(true);
@@ -362,7 +362,7 @@ export default function Setup() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent className="p-4 flex-1">
                 <ScrollArea className="h-[200px]">
                   {Array.from({ length: template.days }, (_, i) => i + 1).map((day) => {
                     const dayActivities = template.activities.filter((a) => a.day === day);
@@ -406,10 +406,9 @@ export default function Setup() {
                   })}
                 </ScrollArea>
               </CardContent>
-              <CardFooter className="bg-gray-50 border-t p-4">
+              <CardFooter className="bg-gray-50 border-t p-4 mt-auto">
                 <Button
-                  variant="outline"
-                  className="w-full"
+                  className="w-full bg-blue-600 hover:bg-blue-700"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedTemplate(template);
@@ -720,7 +719,7 @@ export default function Setup() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
               Close
-            </Button>
+          </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
