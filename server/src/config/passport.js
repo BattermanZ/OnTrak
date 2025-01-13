@@ -52,7 +52,7 @@ const jwtOptions = {
   ]),
   secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
   algorithms: ['HS256'],
-  ignoreExpiration: false,
+  ignoreExpiration: true,
 };
 
 passport.use(new JwtStrategy(jwtOptions, async (jwt_payload, done) => {

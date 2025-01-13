@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../services/api';
+import axios from 'axios';
 
 interface User {
   _id: string;
@@ -33,22 +34,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // Function to check and refresh user data
+  const refreshUser = async () => {
     const token = localStorage.getItem('token');
-    if (token) {
-      auth.getCurrentUser()
-        .then(response => {
-          setUser(response.data as User);
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await auth.getCurrentUser();
+      setUser(response.data as User);
+    } catch (error) {
+      // Only remove token if it's an auth error
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        setUser(null);
+      }
+    } finally {
       setLoading(false);
     }
+  };
+
+  // Initial load
+  useEffect(() => {
+    refreshUser();
   }, []);
 
   const login = async (email: string, password: string) => {

@@ -16,7 +16,7 @@ import type { AxiosResponse } from 'axios';
 
 const Schedule = () => {
   const { data: schedule } = useQuery('currentSchedule', async () => {
-    const response = await schedules.getCurrentSchedule();
+    const response = await schedules.getCurrent();
     return response.data;
   });
 

@@ -60,7 +60,7 @@ api.interceptors.response.use(
     logger.debug('API Response', logData);
     return response;
   },
-  (error) => {
+  async (error) => {
     // Simplified error logging
     logger.error('API Response Error', {
       message: error.message,
@@ -74,8 +74,15 @@ api.interceptors.response.use(
     } else if (!error.response) {
       error.message = 'Network error. Please check your connection and server status.';
     } else if (error.response.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Only remove token and redirect for auth-related endpoints
+      const isAuthEndpoint = error.config.url?.includes('/auth/');
+      if (isAuthEndpoint) {
+        localStorage.removeItem('token');
+        // Use React Router's navigate instead of window.location
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
     }
 
     return Promise.reject(error);
@@ -227,16 +234,13 @@ const schedules = {
   create: (data: { templateId: string; startDate: string }) => api.post('/schedules', data),
   update: (id: string, data: Partial<Schedule>) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
-  getCurrentSchedule: () => api.get('/schedules/current'),
-  startDay: (templateId: string, day: number) => 
-    api.post('/schedules/start-day', { templateId, day }),
-  nextActivity: (scheduleId: string, activityId: string) =>
-    api.post(`/schedules/${scheduleId}/next/${activityId}`),
-  goToPreviousActivity: (scheduleId: string, activityId: string) =>
-    api.post(`/schedules/${scheduleId}/previous/${activityId}`),
+  getCurrent: () => api.get('/schedules/current'),
+  startDay: (templateId: string, day: number) => api.post('/schedules/start-day', { templateId, day }),
   closeDay: () => api.post('/schedules/close-day'),
-  getStatistics: (filters: { trainer: string; training: string; dateRange: string }) =>
-    api.get('/statistics', { params: filters }),
+  cancelDay: () => api.post('/schedules/cancel-day'),
+  nextActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/next/${activityId}`),
+  goToPreviousActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/previous/${activityId}`),
+  getStatistics: (filters: { trainer: string; training: string; dateRange: string }) => api.get('/statistics', { params: filters }),
 };
 
 // Add statistics object

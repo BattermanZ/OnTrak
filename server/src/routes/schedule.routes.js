@@ -88,6 +88,8 @@ router.post('/start-day',
         activities: activities.map((a, index) => ({
           ...a.toObject(),
           status: index === 0 ? 'in-progress' : 'pending',
+          isActive: index === 0,
+          completed: false,
           actualStartTime: index === 0 ? now : null,
           actualEndTime: null
         })),
@@ -423,6 +425,55 @@ router.post('/close-day',
       res.json({ message: 'Day closed successfully' });
     } catch (error) {
       logger.error('Error closing day:', error);
+      next(error);
+    }
+  }
+);
+
+// Cancel current day
+router.post('/cancel-day',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    try {
+      const schedule = await Schedule.findOne({
+        createdBy: req.user._id,
+        status: 'active'
+      });
+
+      if (!schedule) {
+        return res.status(404).json({ message: 'No active schedule found' });
+      }
+
+      const now = new Date();
+
+      // Mark current activity as cancelled
+      const currentActivityIndex = schedule.activeActivityIndex;
+      if (currentActivityIndex >= 0 && currentActivityIndex < schedule.activities.length) {
+        schedule.activities[currentActivityIndex].status = 'cancelled';
+        schedule.activities[currentActivityIndex].isActive = false;
+        schedule.activities[currentActivityIndex].completed = false;
+        schedule.activities[currentActivityIndex].actualEndTime = now;
+      }
+
+      // Mark all remaining activities as cancelled
+      for (let i = currentActivityIndex + 1; i < schedule.activities.length; i++) {
+        schedule.activities[i].status = 'cancelled';
+        schedule.activities[i].isActive = false;
+        schedule.activities[i].completed = false;
+      }
+
+      schedule.status = 'cancelled';
+      await schedule.save();
+
+      // Emit socket event for real-time updates
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', schedule);
+      }
+
+      res.json({ message: 'Day cancelled successfully' });
+    } catch (error) {
+      logger.error('Error canceling day:', error);
       next(error);
     }
   }

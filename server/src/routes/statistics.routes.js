@@ -56,7 +56,7 @@ router.get('/',
         query.templateId = training;
       }
 
-      // Fetch completed schedules
+      // Fetch completed schedules (excluding cancelled ones)
       const schedules = await Schedule.find(query)
         .populate('createdBy', 'firstName lastName email')
         .populate('templateId', 'name days');

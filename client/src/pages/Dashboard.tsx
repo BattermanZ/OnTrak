@@ -1,601 +1,418 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Container,
-  Box,
-  Typography,
-  Paper,
-  Grid,
-  LinearProgress,
-  Button,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from '@mui/material';
-import { useNavigate } from 'react-router-dom';
-import { format, parse, addMinutes } from 'date-fns';
 import { useSocket } from '../hooks/useSocket';
 import { schedules, templates } from '../services/api';
 import type { Schedule, Activity, Template } from '../types/index';
 import { useQuery, useQueryClient } from 'react-query';
+import { ActivityCard } from '../components/ActivityCard';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import {
-  PlayArrow as PlayArrowIcon,
-  SkipNext as SkipNextIcon,
-  SkipPrevious as SkipPreviousIcon,
-} from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { PlayCircle, SkipForward, SkipBack, StopCircle } from 'lucide-react';
+import { Button } from '../components/ui/button';
+// @ts-ignore
+import ReactMarkdown from 'react-markdown';
+// @ts-ignore
+import remarkGfm from 'remark-gfm';
 
-const ScheduleActivityBox = ({ 
-  activity,
-  isActive,
-  isCompleted,
-}: { 
-  activity: Activity;
-  isActive?: boolean;
-  isCompleted?: boolean;
-}) => {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <Paper
-        elevation={2}
-        sx={{
-          flex: 1,
-          p: 2,
-          bgcolor: '#FFFFFF',
-          display: 'flex',
-          flexDirection: 'column',
-          borderLeft: isCompleted || activity.completed ? '4px solid #4CAF50' : isActive ? '4px solid #0066CC' : '4px solid #9E9E9E',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            transform: 'translateX(4px)',
-            boxShadow: 3,
-          }
-        }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography 
-              variant="subtitle1" 
-              sx={{ 
-                fontWeight: isActive ? 600 : 400,
-                color: isCompleted || activity.completed ? '#166534' : 'inherit'
-              }}
-            >
-              {activity.name} ({activity.duration} min)
-            </Typography>
-            {activity.description && (
-              <Typography 
-                variant="body2" 
-                color={isCompleted || activity.completed ? '#166534' : 'text.secondary'} 
-                sx={{ mt: 0.5 }}
-              >
-                {activity.description}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-      </Paper>
-      <Typography 
-        variant="h6" 
-        sx={{ 
-          width: '80px', 
-          textAlign: 'left',
-          color: 'text.secondary',
-          transition: 'all 0.2s ease-in-out',
-        }}
-      >
-        {format(parse(activity.startTime, 'HH:mm', new Date()), 'HH:mm')}
-      </Typography>
-    </Box>
-  );
-};
-
-const ActivityBox = ({ 
-  title, 
-  activity,
-  isActive,
-  isCompleted,
-  onProgressUpdate,
-}: { 
-  title: string; 
-  activity: Activity | null;
-  isActive?: boolean;
-  isCompleted?: boolean;
-  onProgressUpdate?: (progress: number, isOvertime: boolean) => void;
-}) => {
-  const [progress, setProgress] = useState(0);
-  const [isOvertime, setIsOvertime] = useState(false);
-  const [overtimeMinutes, setOvertimeMinutes] = useState(0);
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    if (isActive && activity) {
-      // Update progress every second
-      const updateProgress = () => {
-        const scheduledStartTime = parse(activity.startTime, 'HH:mm', new Date());
-        const actualStartTimeDate = activity.actualStartTime ? new Date(activity.actualStartTime) : null;
-        const startTime = actualStartTimeDate && actualStartTimeDate < scheduledStartTime 
-          ? actualStartTimeDate 
-          : scheduledStartTime;
-        const endTime = addMinutes(startTime, activity.duration);
-        const now = new Date();
-        const total = endTime.getTime() - startTime.getTime();
-        const elapsed = now.getTime() - startTime.getTime();
-        const currentProgress = (elapsed / total) * 100;
-        
-        const newProgress = Math.max(currentProgress, 0);
-        setProgress(newProgress);
-        
-        // Calculate overtime
-        const newIsOvertime = now > endTime;
-        setIsOvertime(newIsOvertime);
-        
-        if (newIsOvertime) {
-          const overtime = (now.getTime() - endTime.getTime()) / (1000 * 60);
-          setOvertimeMinutes(Math.ceil(overtime));
-        } else {
-          setOvertimeMinutes(0);
-        }
-
-        // Notify parent component of progress update
-        if (onProgressUpdate) {
-          onProgressUpdate(newProgress, newIsOvertime);
-        }
-      };
-
-      // Initial update
-      updateProgress();
-      
-      // Set up interval for live updates
-      intervalId = setInterval(updateProgress, 1000);
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [isActive, activity, onProgressUpdate]);
-
-  if (!activity) {
-    return (
-      <Paper
-        elevation={3}
-        sx={{
-          p: 3,
-          bgcolor: '#FFFFFF',
-          minHeight: 200,
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: 4,
-          }
-        }}
-      >
-        <Typography variant="h6" gutterBottom color="#003366">
-          {title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          No {title.toLowerCase()}
-        </Typography>
-      </Paper>
-    );
-  }
-
-  const startTime = parse(activity.startTime, 'HH:mm', new Date());
-  const endTime = addMinutes(startTime, activity.duration);
-
-  return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 3,
-        bgcolor: '#FFFFFF',
-        minHeight: 200,
-        display: 'flex',
-        flexDirection: 'column',
-        border: isActive ? '2px solid #0066CC' : 'none',
-        borderLeft: isCompleted ? '4px solid #4CAF50' : isActive ? '4px solid #0066CC' : '4px solid #9E9E9E',
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: 4,
-        }
-      }}
-    >
-      <Typography variant="h6" gutterBottom color={isActive ? '#0066CC' : '#003366'}>
-        {title}
-      </Typography>
-      <Typography variant="subtitle1">{activity.name}</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
-      </Typography>
-      {activity.description && (
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          {activity.description}
-        </Typography>
-      )}
-      {isActive && (
-        <Box sx={{ mt: 2 }}>
-          <LinearProgress
-            variant="determinate"
-            value={Math.min(progress, 100)}
-            sx={{
-              height: 10,
-              borderRadius: 5,
-              bgcolor: '#E0E0E0',
-              '& .MuiLinearProgress-bar': {
-                bgcolor: isOvertime 
-                  ? '#DC3545' // Red for overtime
-                  : progress > 90 
-                    ? '#FFA726' // Orange for last 10%
-                    : '#4CAF50', // Green by default
-              },
-            }}
-          />
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {isOvertime 
-              ? `${overtimeMinutes} minutes overtime`
-              : `${Math.max(Math.ceil((addMinutes(parse(activity.startTime, 'HH:mm', new Date()), activity.duration).getTime() - new Date().getTime()) / 60000), 0)} minutes remaining`
-            }
-          </Typography>
-        </Box>
-      )}
-    </Paper>
-  );
-};
-
-const Dashboard = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+export default function Dashboard() {
   const socket = useSocket();
   const queryClient = useQueryClient();
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(1);
-  const [error, setError] = useState<string>('');
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [showCongrats, setShowCongrats] = useState(false);
   const [isStartDayDialogOpen, setIsStartDayDialogOpen] = useState(false);
-  const [bgColor, setBgColor] = useState('#F0FDF4'); // Light green default
+  const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
+  const [isCancelDayDialogOpen, setIsCancelDayDialogOpen] = useState(false);
 
-  const { data: templateList } = useQuery('templates', async () => {
+  const { data: currentSchedule } = useQuery(['currentSchedule'], () => 
+    schedules.getCurrent().then(res => res.data)
+  );
+
+  const { data: availableTemplates } = useQuery<Template[]>(['templates'], async () => {
     const response = await templates.getAll();
     return response.data;
   });
 
-  const { data: currentSchedule, isLoading } = useQuery<Schedule>(
-    'currentSchedule',
-    async () => {
-      const response = await schedules.getCurrentSchedule();
-      return response.data;
-    }
-  );
-
   useEffect(() => {
     if (socket) {
-      socket.on('schedule:updated', (updatedSchedule: Schedule) => {
-        queryClient.setQueryData('currentSchedule', updatedSchedule);
+      socket.on('scheduleUpdate', () => {
+        queryClient.invalidateQueries(['currentSchedule']);
       });
     }
-
-    return () => {
-      if (socket) {
-        socket.off('schedule:updated');
-      }
-    };
   }, [socket, queryClient]);
 
   const handleStartDay = async () => {
+    if (!selectedTemplate) return;
     try {
-      setError('');
-      await schedules.startDay(selectedTemplateId, selectedDay);
+      await schedules.startDay(selectedTemplate._id, selectedDay);
       setIsStartDayDialogOpen(false);
-      queryClient.invalidateQueries('currentSchedule');
+      setSelectedTemplate(null);
+      setSelectedDay(1);
+      queryClient.invalidateQueries(['currentSchedule']);
     } catch (err) {
+      console.error('Error starting day:', err);
       setError(err instanceof Error ? err.message : 'Failed to start day');
     }
   };
 
-  const handleNextActivity = async () => {
+  const handleSkipActivity = async () => {
+    if (!currentSchedule) return;
+    const currentActivity = getCurrentActivity(currentSchedule);
+    if (!currentActivity) return;
     try {
-      setError('');
-      if (!currentSchedule?._id || !currentSchedule.currentActivity?._id) {
-        setError('No active activity to move to next');
-        return;
-      }
-
-      await schedules.nextActivity(currentSchedule._id, currentSchedule.currentActivity._id);
-      await queryClient.invalidateQueries('currentSchedule');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to move to next activity');
+      await schedules.nextActivity(currentSchedule._id, currentActivity._id);
+      queryClient.invalidateQueries(['currentSchedule']);
+    } catch (err) {
+      console.error('Error skipping activity:', err);
+      setError(err instanceof Error ? err.message : 'Failed to skip activity');
     }
   };
 
   const handlePreviousActivity = async () => {
+    if (!currentSchedule) return;
+    const currentActivity = getCurrentActivity(currentSchedule);
+    if (!currentActivity) return;
     try {
-      setError('');
-      if (!currentSchedule?._id || !currentSchedule.currentActivity?._id) {
-        setError('No active activity to move from');
-        return;
-      }
-
-      await schedules.goToPreviousActivity(currentSchedule._id, currentSchedule.currentActivity._id);
-      await queryClient.invalidateQueries('currentSchedule');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to go to previous activity');
+      await schedules.goToPreviousActivity(currentSchedule._id, currentActivity._id);
+      queryClient.invalidateQueries(['currentSchedule']);
+    } catch (err) {
+      console.error('Error going to previous activity:', err);
+      setError(err instanceof Error ? err.message : 'Failed to go to previous activity');
     }
+  };
+
+  const getCurrentActivity = (schedule: Schedule): Activity | null => {
+    return schedule.activities.find(a => a.isActive) || null;
+  };
+
+  const getNextActivity = (schedule: Schedule): Activity | null => {
+    const currentIndex = schedule.activities.findIndex(a => a.isActive);
+    if (currentIndex === -1 || currentIndex === schedule.activities.length - 1) return null;
+    return schedule.activities[currentIndex + 1];
+  };
+
+  const getPreviousActivity = (schedule: Schedule): Activity | null => {
+    const currentIndex = schedule.activities.findIndex(a => a.isActive);
+    if (currentIndex <= 0) return null;
+    return schedule.activities[currentIndex - 1];
   };
 
   const handleCloseDay = async () => {
     try {
-      setError('');
       await schedules.closeDay();
-      await queryClient.invalidateQueries('currentSchedule');
-      setCloseDialogOpen(false);
-      setShowCongrats(true);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to close day');
+      setIsCloseDayDialogOpen(false);
+      queryClient.invalidateQueries(['currentSchedule']);
+    } catch (err) {
+      console.error('Error closing day:', err);
+      setError(err instanceof Error ? err.message : 'Failed to close day');
     }
   };
 
-  const handleProgressUpdate = (progress: number, isOvertime: boolean) => {
-    if (isOvertime) {
-      setBgColor('#FEE2E2'); // Light red for overtime
-    } else if (progress > 90) {
-      setBgColor('#FFF7ED'); // Light orange for last 10%
-    } else {
-      setBgColor('#F0FDF4'); // Light green by default
+  const handleCancelDay = async () => {
+    try {
+      await schedules.cancelDay();
+      setIsCancelDayDialogOpen(false);
+      setIsStartDayDialogOpen(true);
+      queryClient.invalidateQueries(['currentSchedule']);
+    } catch (error) {
+      setError('Failed to cancel day. Please try again.');
     }
   };
 
-  if (isLoading) {
-    return (
-      <Box sx={{ width: '100%', mt: 4 }}>
-        <LinearProgress />
-      </Box>
-    );
-  }
+  const markdownComponents = {
+    p: ({ children }: { children: React.ReactNode }) => (
+      <p className="mb-2 last:mb-0">{children}</p>
+    ),
+    a: ({ href, children }: { href?: string; children: React.ReactNode }) => (
+      <a 
+        href={href}
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:text-blue-800 underline"
+      >
+        {children}
+      </a>
+    )
+  };
 
   return (
-    <Box sx={{ bgcolor: bgColor, minHeight: '100vh', py: 4 }}>
-      <Container maxWidth="lg">
-        <Box sx={{ mt: 4, mb: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-            <Box>
-              <Typography variant="h5" color="#003366">
-                {currentSchedule ? currentSchedule.title : "Today's Schedule"}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              {currentSchedule && (
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  onClick={() => setCloseDialogOpen(true)}
-                  sx={{
-                    bgcolor: '#4CAF50',
-                    '&:hover': {
-                      bgcolor: '#388E3C',
-                    },
-                  }}
-                >
-                  Close Day
-                </Button>
-              )}
-            </Box>
-          </Box>
-
-          {!currentSchedule && (
-            <Paper sx={{ p: 3, mb: 4 }}>
-              <Typography variant="h6" gutterBottom>
-                Start Your Day
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <FormControl fullWidth>
-                    <InputLabel>Select Template</InputLabel>
-                    <Select
-                      value={selectedTemplateId || ''}
-                      onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      label="Select Template"
-                    >
-                      {templateList?.map((template: Template) => (
-                        <MenuItem key={template._id} value={template._id}>
-                          {template.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <FormControl fullWidth>
-                    <InputLabel>Select Day</InputLabel>
-                    <Select
-                      value={selectedDay}
-                      onChange={(e) => setSelectedDay(Number(e.target.value))}
-                      label="Select Day"
-                    >
-                      {selectedTemplateId && templateList?.find((t: Template) => t._id === selectedTemplateId)?.days ?
-                        Array.from(
-                          { length: templateList.find((t: Template) => t._id === selectedTemplateId)!.days },
-                          (_, i) => i + 1
-                        ).map((day) => (
-                          <MenuItem key={day} value={day}>
-                            Day {day}
-                          </MenuItem>
-                        ))
-                        : <MenuItem value={1}>Day 1</MenuItem>
-                      }
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    onClick={() => setIsStartDayDialogOpen(true)}
-                    startIcon={<PlayArrowIcon />}
-                    sx={{ height: '56px' }}
-                  >
-                    Start Day
-                  </Button>
-                </Grid>
-              </Grid>
-            </Paper>
-          )}
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {currentSchedule && (
-            <>
-              <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-                <Button
-                  variant="contained"
-                  onClick={handlePreviousActivity}
-                  startIcon={<SkipPreviousIcon />}
-                  disabled={!currentSchedule.previousActivity}
-                >
-                  Previous Activity
-                </Button>
-                {currentSchedule.nextActivity ? (
-                  <Button
-                    variant="contained"
-                    onClick={handleNextActivity}
-                    startIcon={<SkipNextIcon />}
-                    disabled={!currentSchedule.currentActivity}
-                  >
-                    Next Activity
-                  </Button>
-                ) : (
-                  <Button
-                    variant="contained"
-                    onClick={() => setCloseDialogOpen(true)}
-                    sx={{
-                      bgcolor: '#4CAF50',
-                      '&:hover': {
-                        bgcolor: '#388E3C',
-                      },
-                    }}
-                    disabled={!currentSchedule.currentActivity}
-                  >
-                    Close Day
-                  </Button>
-                )}
-              </Box>
-
-              <Grid container spacing={4}>
-                <Grid item xs={12} md={4}>
-                  <ActivityBox
-                    title="Previous Activity"
-                    activity={currentSchedule.previousActivity}
-                    isCompleted={true}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <ActivityBox
-                    title="Current Activity"
-                    activity={currentSchedule.currentActivity}
-                    isActive={true}
-                    onProgressUpdate={handleProgressUpdate}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <ActivityBox
-                    title="Next Activity"
-                    activity={currentSchedule.nextActivity}
-                  />
-                </Grid>
-              </Grid>
-
-              <Paper elevation={3} sx={{ mt: 4, p: 3 }}>
-                <Typography variant="h6" gutterBottom color="#003366">
-                  Full Schedule
-                </Typography>
-                <Grid container spacing={1}>
-                  {currentSchedule.activities.map((activity: Activity, index: number) => {
-                    const currentIndex = currentSchedule.activities.findIndex((a: Activity) => a._id === currentSchedule.currentActivity?._id);
-                    return (
-                      <Grid item xs={12} key={activity._id}>
-                        <ScheduleActivityBox
-                          activity={activity}
-                          isActive={activity._id === currentSchedule.currentActivity?._id}
-                          isCompleted={index < currentIndex || activity.completed}
-                        />
-                      </Grid>
-                    );
-                  })}
-                </Grid>
-              </Paper>
-            </>
-          )}
-        </Box>
-
-        {/* Close Day Confirmation Dialog */}
-        <Dialog
-          open={closeDialogOpen}
-          onClose={() => setCloseDialogOpen(false)}
-        >
-          <DialogTitle>Close Training Day</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to close this training day? This action cannot be undone.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleCloseDay}
-              variant="contained"
-              sx={{
-                bgcolor: '#4CAF50',
-                '&:hover': {
-                  bgcolor: '#388E3C',
-                },
-              }}
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600 mt-2">Track your training progress</p>
+        </div>
+        {!currentSchedule ? (
+          <Button
+            onClick={() => setIsStartDayDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <PlayCircle className="mr-2 h-4 w-4" />
+            Start Day
+          </Button>
+        ) : (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setIsCancelDayDialogOpen(true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
             >
+              Cancel Day
+            </Button>
+            <Button
+              onClick={() => setIsCloseDayDialogOpen(true)}
+              variant="destructive"
+            >
+              <StopCircle className="mr-2 h-4 w-4" />
               Close Day
             </Button>
-          </DialogActions>
-        </Dialog>
+          </div>
+        )}
+      </div>
 
-        {/* Congratulations Dialog */}
-        <Dialog
-          open={showCongrats}
-          onClose={() => setShowCongrats(false)}
-        >
-          <DialogTitle>Training Day Complete! 🎉</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Congratulations on completing your training day! Keep up the great work!
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button 
-              onClick={() => {
-                setShowCongrats(false);
-                navigate('/');
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {currentSchedule ? (
+        <div className="space-y-8">
+          {/* Activity Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            <ActivityCard
+              title="Previous"
+              activity={getPreviousActivity(currentSchedule)}
+              isCompleted
+            />
+            <ActivityCard
+              title="Current"
+              activity={getCurrentActivity(currentSchedule)}
+              isActive
+              onProgressUpdate={(progress, isOvertime) => {
+                // Handle progress updates if needed
               }}
-              variant="contained"
-            >
-              Back to Dashboard
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Container>
-    </Box>
-  );
-};
+            />
+            <ActivityCard
+              title="Next"
+              activity={getNextActivity(currentSchedule)}
+            />
+          </div>
 
-export default Dashboard; 
+          {/* Controls */}
+          <div className="flex justify-center gap-4">
+            <Button
+              variant="outline"
+              onClick={handlePreviousActivity}
+              disabled={!getPreviousActivity(currentSchedule)}
+            >
+              <SkipBack className="mr-2 h-4 w-4" />
+              Previous
+            </Button>
+            {getNextActivity(currentSchedule) ? (
+              <Button
+                onClick={handleSkipActivity}
+              >
+                <SkipForward className="mr-2 h-4 w-4" />
+                Next
+              </Button>
+            ) : (
+              getCurrentActivity(currentSchedule) && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setIsCloseDayDialogOpen(true)}
+                >
+                  <StopCircle className="mr-2 h-4 w-4" />
+                  Close Day
+                </Button>
+              )
+            )}
+          </div>
+
+          {/* Schedule List */}
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm border p-4">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Today's Schedule</h2>
+              <div className="divide-y divide-gray-100">
+                {currentSchedule.activities.map((activity: Activity, index: number) => (
+                  <div 
+                    key={activity._id}
+                    className={`py-2 flex items-start ${
+                      activity.isActive ? 'bg-blue-50' : ''
+                    }`}
+                  >
+                    <div className="w-20 shrink-0 font-medium text-gray-900 pt-1">
+                      {activity.startTime}
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
+                      <div className="flex items-start space-x-3 min-w-0 flex-1">
+                        <span className="text-sm font-medium text-gray-500 w-6 shrink-0 pt-1">
+                          {index + 1}.
+                        </span>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-gray-900">{activity.name}</p>
+                            <span className="text-sm text-gray-500 shrink-0">
+                              ({activity.duration} min)
+                            </span>
+                          </div>
+                          {activity.description && (
+                            <div className="text-sm text-gray-600 break-words max-w-full">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]} 
+                                components={markdownComponents}
+                                className="prose prose-sm max-w-none prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline"
+                              >
+                                {activity.description}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 pt-1 shrink-0">
+                        {activity.completed && (
+                          <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded whitespace-nowrap">
+                            Completed
+                          </span>
+                        )}
+                        {activity.isActive && (
+                          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded whitespace-nowrap">
+                            In Progress
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-gray-600">No active training session. Start your day to begin tracking.</p>
+        </div>
+      )}
+
+      {/* Start Day Dialog */}
+      <Dialog open={isStartDayDialogOpen} onOpenChange={setIsStartDayDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start Training Day</DialogTitle>
+            <DialogDescription>
+              Select a training template and day to begin.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Training Template</label>
+              <Select
+                value={selectedTemplate?._id}
+                onValueChange={(value) => {
+                  const template = availableTemplates?.find(t => t._id === value);
+                  setSelectedTemplate(template || null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableTemplates?.map((template) => (
+                    <SelectItem key={template._id} value={template._id}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedTemplate && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Day</label>
+                <Select
+                  value={selectedDay.toString()}
+                  onValueChange={(value) => setSelectedDay(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a day" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
+                      <SelectItem key={day} value={day.toString()}>
+                        Day {day}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsStartDayDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleStartDay} disabled={!selectedTemplate}>
+              Start Day
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Day Dialog */}
+      <Dialog open={isCloseDayDialogOpen} onOpenChange={setIsCloseDayDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close Training Day</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to close this training day? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCloseDayDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleCloseDay}>
+              Close Day
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Day Dialog */}
+      <Dialog open={isCancelDayDialogOpen} onOpenChange={setIsCancelDayDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Training Day</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this training day? You will be able to select a new day immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCancelDayDialogOpen(false)}>
+              No, Keep Current Day
+            </Button>
+            <Button 
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={handleCancelDay}
+            >
+              Yes, Cancel Day
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+} 

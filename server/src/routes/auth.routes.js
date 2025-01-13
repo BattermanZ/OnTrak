@@ -83,7 +83,7 @@ router.post('/register', validateRegistration, async (req, res, next) => {
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '1d' }
+      { algorithm: 'HS256' }
     );
 
     res.status(201).json({
@@ -139,7 +139,6 @@ router.post('/login', loginLimiter, [
       { id: user._id, role: user.role },
       process.env.JWT_SECRET || 'your-secret-key',
       { 
-        expiresIn: '1h',
         algorithm: 'HS256'
       }
     );
@@ -148,8 +147,7 @@ router.post('/login', loginLimiter, [
     res.cookie('jwt', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 3600000 // 1 hour
+      sameSite: 'strict'
     });
 
     logger.info('User logged in successfully', { userId: user._id });

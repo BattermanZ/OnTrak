@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, User, Search } from 'lucide-react';
-import { templates as templateApi, type Template } from '../services/api';
-import type { Activity } from '../types';
+import { Plus, Edit2, Trash2, Search } from 'lucide-react';
+import { templates as templateApi } from '../services/api';
+import type { Template, Activity } from '../types';
 
 import {
   Card,
