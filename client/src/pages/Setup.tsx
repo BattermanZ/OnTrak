@@ -83,7 +83,7 @@ export default function Setup() {
     if (!startTime || !startTime.match(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
       return '';
     }
-
+    
     const [hours, minutes] = startTime.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes + durationMinutes;
     
@@ -255,16 +255,16 @@ export default function Setup() {
           <h1 className="text-3xl font-bold text-gray-900">Training Setup</h1>
           <p className="text-gray-600 mt-2">Manage your training templates and activities</p>
         </div>
-        <Button 
-          onClick={() => {
+            <Button
+              onClick={() => {
             setSelectedTemplate(null);
             setIsCreateDialogOpen(true);
-          }}
+              }}
           className="bg-blue-600 hover:bg-blue-700"
-        >
+            >
           <Plus className="mr-2 h-4 w-4" />
           Create Training
-        </Button>
+            </Button>
       </div>
 
       {/* Search Section */}
@@ -279,11 +279,11 @@ export default function Setup() {
       </div>
 
       {/* Error Alert */}
-      {error && (
+        {error && (
         <Alert variant="destructive" className="mb-6">
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+          </Alert>
+        )}
 
       {/* Templates Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -348,8 +348,8 @@ export default function Setup() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
-                              setSelectedTemplate(template);
+                      onClick={() => {
+                        setSelectedTemplate(template);
                               setIsDeleteDialogOpen(true);
                             }}
                           >
@@ -410,13 +410,14 @@ export default function Setup() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setSelectedTemplate(template);
-                    setActivityForm({
-                      name: '',
-                      startTime: '',
-                      duration: 30,
-                      day: 1,
+                        setActivityForm({
+                          name: '',
+                          startTime: '',
+                          duration: 30,
+                          day: 1,
                       description: ''
                     });
                     setIsAddActivityDialogOpen(true);
@@ -451,17 +452,17 @@ export default function Setup() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Template Name</label>
               <Input
-                value={templateForm.name}
-                onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+            value={templateForm.name}
+            onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
                 placeholder="Enter template name"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Number of Days</label>
               <Input
-                type="number"
+            type="number"
                 min="1"
-                value={templateForm.days}
+            value={templateForm.days}
                 onChange={(e) => setTemplateForm({ ...templateForm, days: parseInt(e.target.value) })}
               />
             </div>
@@ -476,7 +477,7 @@ export default function Setup() {
             </Button>
             <Button onClick={isEditDialogOpen ? handleEditTemplate : handleCreateTemplate}>
               {isEditDialogOpen ? 'Save Changes' : 'Create Template'}
-            </Button>
+          </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -486,7 +487,7 @@ export default function Setup() {
         if (!open) {
           setIsAddActivityDialogOpen(false);
           setIsEditActivityDialogOpen(false);
-          setSelectedActivity(null);
+        setSelectedActivity(null);
         }
       }}>
         <DialogContent>
@@ -504,8 +505,8 @@ export default function Setup() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Activity Name</label>
               <Input
-                value={activityForm.name}
-                onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
+            value={activityForm.name}
+            onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
                 placeholder="Enter activity name"
               />
             </div>
@@ -513,8 +514,8 @@ export default function Setup() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Start Time</label>
                 <Input
-                  value={activityForm.startTime}
-                  onChange={(e) => {
+            value={activityForm.startTime}
+            onChange={(e) => {
                     const formatted = formatTimeInput(e.target.value);
                     setActivityForm({ ...activityForm, startTime: formatted });
                   }}
@@ -524,9 +525,9 @@ export default function Setup() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Duration (minutes)</label>
                 <Input
-                  type="number"
+            type="number"
                   min="1"
-                  value={activityForm.duration}
+            value={activityForm.duration}
                   onChange={(e) => setActivityForm({ ...activityForm, duration: parseInt(e.target.value) })}
                 />
               </div>
@@ -546,9 +547,9 @@ export default function Setup() {
                   <SelectValue placeholder="Select day" />
                 </SelectTrigger>
                 <SelectContent>
-                  {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
+            {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
                     <SelectItem key={day} value={day.toString()}>
-                      Day {day}
+                Day {day}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -557,8 +558,8 @@ export default function Setup() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Description (optional)</label>
               <Input
-                value={activityForm.description}
-                onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
+            value={activityForm.description}
+            onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
                 placeholder="Enter activity description"
               />
             </div>
@@ -623,7 +624,7 @@ export default function Setup() {
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setIsDeleteActivityDialogOpen(false);
-              setSelectedActivity(null);
+            setSelectedActivity(null);
             }}>
               Cancel
             </Button>
@@ -641,7 +642,7 @@ export default function Setup() {
           setSelectedTemplate(null);
         }
       }}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[1200px]">
           <DialogHeader>
             <DialogTitle>
               {selectedTemplate?.name}
@@ -653,58 +654,67 @@ export default function Setup() {
               }
             </DialogDescription>
           </DialogHeader>
-          
-          <ScrollArea className="h-[calc(100vh-200px)] rounded-md border p-4">
-            {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, dayIndex) => (
-              <div key={dayIndex} className="mb-6 last:mb-0">
-                <h3 className="mb-2 font-semibold">Day {dayIndex + 1}</h3>
-                {selectedTemplate.activities
-                  .filter(activity => activity.day === dayIndex + 1)
-                  .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                  .map(activity => (
-                    <div
-                      key={activity._id}
-                      className="mb-2 rounded-lg border p-3 last:mb-0 group hover:border-primary transition-colors cursor-pointer"
-                      onClick={(e) => handleActivityClick(selectedTemplate, activity, e)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">{activity.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {activity.startTime} - {calculateEndTime(activity.startTime, activity.duration)} ({activity.duration} min)
-                          </p>
+
+          <ScrollArea className="h-[calc(100vh-200px)] rounded-md border p-6">
+            <div className="grid grid-cols-3 gap-8">
+              {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, dayIndex) => (
+                <div key={dayIndex} className="rounded-lg border p-6">
+                  <h3 className="mb-4 font-semibold text-lg">Day {dayIndex + 1}</h3>
+                  <div className="space-y-2">
+                    {selectedTemplate.activities
+                      .filter(activity => activity.day === dayIndex + 1)
+                      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                      .map(activity => (
+                        <div
+                          key={activity._id}
+                          className="rounded-lg border p-3 group hover:border-primary transition-colors cursor-pointer"
+                          onClick={(e) => handleActivityClick(selectedTemplate, activity, e)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">{activity.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {activity.startTime} - {calculateEndTime(activity.startTime, activity.duration)} ({activity.duration} min)
+                              </p>
+                              {activity.description && (
+                                <p className="text-sm text-gray-600 mt-2 break-words">
+                                  {activity.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex gap-2 ml-4 shrink-0" onClick={e => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActivityClick(selectedTemplate, activity, e);
+                                }}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedActivity(activity);
+                                  setIsDeleteActivityDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleActivityClick(selectedTemplate, activity, e);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedActivity(activity);
-                              setIsDeleteActivityDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                {selectedTemplate.activities.filter(activity => activity.day === dayIndex + 1).length === 0 && (
-                  <p className="text-sm text-muted-foreground">No activities scheduled for this day</p>
-                )}
-              </div>
-            ))}
+                      ))}
+                    {selectedTemplate.activities.filter(activity => activity.day === dayIndex + 1).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No activities scheduled for this day</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </ScrollArea>
 
           <DialogFooter>

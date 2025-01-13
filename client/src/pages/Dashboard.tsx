@@ -153,8 +153,21 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Track your training progress</p>
+          {currentSchedule ? (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {currentSchedule.title.includes(' - Day') 
+                  ? currentSchedule.title.split(' - Day')[0] 
+                  : currentSchedule.title}
+              </h1>
+              <p className="text-gray-600 mt-2">Day {currentSchedule.selectedDay}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900">Training</h1>
+              <p className="text-gray-600 mt-2">Select a training to begin</p>
+            </>
+          )}
         </div>
         {!currentSchedule ? (
           <Button

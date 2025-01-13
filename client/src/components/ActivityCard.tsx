@@ -1,9 +1,9 @@
 import React from 'react';
-import { format, parse, addMinutes } from 'date-fns';
+import { parse, addMinutes } from 'date-fns';
 import { Activity } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { cn } from "../lib/utils";
-import { Clock, CheckCircle2, ArrowRight } from "lucide-react";
+import { Clock, ArrowRight } from "lucide-react";
 // @ts-ignore
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
@@ -11,6 +11,7 @@ import 'react-circular-progressbar/dist/styles.css';
 import ReactMarkdown from 'react-markdown';
 // @ts-ignore
 import remarkGfm from 'remark-gfm';
+import { Badge } from "./ui/badge";
 
 interface ActivityCardProps {
   title: string;
@@ -43,7 +44,6 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   isCompleted,
   onProgressUpdate,
 }) => {
-  const [sideCardsHeight, setSideCardsHeight] = React.useState<number>(200);
   const leftCardRef = React.useRef<HTMLDivElement>(null);
   const rightCardRef = React.useRef<HTMLDivElement>(null);
 
@@ -64,7 +64,6 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         
         // Set the maximum height
         const maxHeight = Math.max(leftHeight, rightHeight, 200);
-        setSideCardsHeight(maxHeight);
         
         // Apply the height
         if (leftCard) leftCard.style.height = `${maxHeight}px`;
@@ -159,7 +158,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         className="min-h-[200px] transition-all hover:-translate-y-1 hover:shadow-lg bg-gray-50 flex flex-col"
       >
         <CardHeader className="pb-2">
-          <CardTitle className="text-blue-900">{title}</CardTitle>
+          <CardTitle className="text-2xl text-blue-600 text-center">{title}</CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col items-center justify-center">
           <ArrowRight className="w-6 h-6 text-gray-400 mb-1" />
@@ -173,6 +172,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
 
   const startTime = parse(activity.startTime, 'HH:mm', new Date());
   const endTime = addMinutes(startTime, activity.duration);
+  const endTimeString = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`;
 
   const borderColorClass = isCompleted || activity.completed
     ? "border-l-4 border-l-green-500"
@@ -195,94 +195,97 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         isActive ? "min-h-[280px] border-2 border-blue-600" : "min-h-[200px]"
       )}
     >
-      <CardHeader className="pb-2">
-        <CardTitle className={isActive ? "text-blue-600" : "text-blue-900"}>
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col space-y-4">
-        <div>
-          <h3 className={cn(
-            "font-medium mb-1",
-            isActive ? "text-lg" : "text-base"
-          )}>{activity.name}</h3>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="w-4 h-4" />
-            <span>{format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}</span>
-            <span className="text-xs px-2 py-0.5 bg-gray-100 rounded-full">
-              {activity.duration}min
-            </span>
-          </div>
-        </div>
-        
-        {activity.description && (
-          <div className="text-sm text-gray-600 border-l-2 border-gray-200 pl-3 overflow-auto break-words">
-            <ReactMarkdown 
-              remarkPlugins={[remarkGfm]} 
-              components={markdownComponents}
-              className="prose prose-sm max-w-none prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline"
-            >
-              {activity.description}
-            </ReactMarkdown>
-          </div>
-        )}
-        
-        <div className={cn(
-          "mt-auto",
-          isActive ? "space-y-4" : "flex items-center justify-center"
-        )}>
-          {isActive ? (
-            <>
-              <div className="w-32 h-32 mx-auto">
-                <CircularProgressbar
-                  value={Math.min(progress, 100)}
-                  text={isOvertime ? `+${Math.abs(timeRemaining)}m` : `${Math.abs(timeRemaining)}m`}
-                  styles={buildStyles({
-                    rotation: 0,
-                    strokeLinecap: 'round',
-                    textSize: '16px',
-                    pathTransitionDuration: 0.5,
-                    pathColor: circularProgressColor,
-                    textColor: circularProgressColor,
-                    trailColor: '#E5E7EB',
-                  })}
-                />
-              </div>
-              
-              <div className="flex justify-center">
-                <span 
-                  className={cn(
-                    "px-3 py-1 rounded-full text-sm font-medium",
-                    isOvertime 
-                      ? "bg-red-100 text-red-800"
-                      : progress > 90
-                      ? "bg-orange-100 text-orange-800"
-                      : "bg-green-100 text-green-800"
-                  )}
+      <CardHeader>
+        <CardTitle className="text-2xl text-blue-600 text-center">{title}</CardTitle>
+        {activity && (
+          <>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">{activity.name}</h3>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Clock className="h-4 w-4" />
+              <span>{`${activity.startTime} - ${endTimeString}`}</span>
+              <Badge variant="secondary">{activity.duration}min</Badge>
+            </div>
+            {activity.description && (
+              <div className="mt-3 text-sm text-gray-600 break-words">
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]} 
+                  components={markdownComponents}
+                  className="prose prose-sm max-w-none prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline"
                 >
-                  {isOvertime 
-                    ? `${overtimeMinutes}min overtime`
-                    : progress > 90
-                    ? `${timeRemaining}min remaining (finishing soon)`
-                    : `${timeRemaining}min remaining (on track)`
-                  }
-                </span>
+                  {activity.description}
+                </ReactMarkdown>
               </div>
-            </>
-          ) : (
-            isCompleted || activity.completed ? (
-              <div className="flex items-center gap-1.5 text-green-600">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm font-medium">Completed</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-gray-500">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm font-medium">Scheduled</span>
-              </div>
-            )
-          )}
-        </div>
+            )}
+          </>
+        )}
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col">
+        {!activity ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <ArrowRight className="h-8 w-8" />
+          </div>
+        ) : (
+          <>
+            {/* Progress section */}
+            <div className={cn(
+              "mt-auto",
+              isActive ? "space-y-4" : "flex items-center justify-center"
+            )}>
+              {isActive ? (
+                <>
+                  <div className="w-32 h-32 mx-auto">
+                    <CircularProgressbar
+                      value={isOvertime ? 100 : progress}
+                      text={isOvertime ? `+${Math.abs(timeRemaining)}m` : `${Math.abs(timeRemaining)}m`}
+                      styles={buildStyles({
+                        rotation: 0,
+                        strokeLinecap: 'round',
+                        textSize: '16px',
+                        pathTransitionDuration: 0.5,
+                        pathColor: circularProgressColor,
+                        textColor: circularProgressColor,
+                        trailColor: '#E5E7EB',
+                      })}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-center">
+                    <span 
+                      className={cn(
+                        "px-3 py-1 rounded-full text-sm font-medium",
+                        isOvertime 
+                          ? "bg-red-100 text-red-800"
+                          : progress > 90
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-green-100 text-green-800"
+                      )}
+                    >
+                      {isOvertime 
+                        ? `${overtimeMinutes}min overtime`
+                        : progress > 90
+                        ? `${timeRemaining}min remaining (finishing soon)`
+                        : `${timeRemaining}min remaining (on track)`
+                      }
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  {activity.completed && (
+                    <span className="px-3 py-1 text-sm font-medium bg-green-100 text-green-800 rounded-full">
+                      Completed
+                    </span>
+                  )}
+                  {!activity.completed && !isActive && (
+                    <span className="px-3 py-1 text-sm font-medium bg-gray-100 text-gray-800 rounded-full">
+                      Scheduled
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

@@ -219,7 +219,7 @@ router.put('/profile',
 // Get all users (admin only)
 router.get('/users', passport.authenticate('jwt', { session: false }), isAdmin, async (req, res, next) => {
   try {
-    const users = await User.find({}).sort({ createdAt: -1 });
+    const users = await User.find({}).select('+lastLogin').sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     next(error);

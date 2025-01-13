@@ -13,15 +13,35 @@ import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/api';
 
 const Profile = () => {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+  });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmNewPassword: '',
   });
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setError('');
+      setSuccess('');
+      setLoading(true);
+      
+      await updateProfile(profileForm);
+      setSuccess('Profile updated successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,48 +92,6 @@ const Profile = () => {
               <Typography variant="h6" gutterBottom>
                 User Information
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="First Name"
-                    value={user?.firstName || ''}
-                    disabled
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Last Name"
-                    value={user?.lastName || ''}
-                    disabled
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Email"
-                    value={user?.email || ''}
-                    disabled
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Role"
-                    value={user?.role || ''}
-                    disabled
-                  />
-                </Grid>
-              </Grid>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Change Password
-              </Typography>
               {error && (
                 <Alert severity="error" sx={{ mb: 2 }}>
                   {error}
@@ -124,6 +102,71 @@ const Profile = () => {
                   {success}
                 </Alert>
               )}
+              <form onSubmit={handleProfileUpdate}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="First Name"
+                      value={profileForm.firstName}
+                      onChange={(e) => setProfileForm({
+                        ...profileForm,
+                        firstName: e.target.value
+                      })}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Last Name"
+                      value={profileForm.lastName}
+                      onChange={(e) => setProfileForm({
+                        ...profileForm,
+                        lastName: e.target.value
+                      })}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Email"
+                      value={user?.email || ''}
+                      disabled
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Role"
+                      value={user?.role || ''}
+                      disabled
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      disabled={loading}
+                      sx={{
+                        bgcolor: '#0066CC',
+                        '&:hover': {
+                          bgcolor: '#004C99',
+                        },
+                      }}
+                    >
+                      {loading ? 'Saving Changes...' : 'Save Changes'}
+                    </Button>
+                  </Grid>
+                </Grid>
+              </form>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Change Password
+              </Typography>
               <form onSubmit={handlePasswordChange}>
                 <Grid container spacing={2}>
                   <Grid item xs={12}>
