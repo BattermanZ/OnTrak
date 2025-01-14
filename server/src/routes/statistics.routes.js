@@ -18,8 +18,11 @@ const getDateFilter = (range) => {
       return { $gte: startOfMonth(now) };
     case 'year':
       return { $gte: startOfYear(now) };
+    case 'all':
+      return null;
     default:
-      return undefined; // Remove date filter for 'all' case
+      logger.warn('Invalid date range provided', { range });
+      return null;
   }
 };
 
@@ -38,174 +41,160 @@ const formatPercentage = (value) => `${Math.round(value)}%`;
 // Process schedules to get statistics
 const processSchedules = (schedules, trainerId = null) => {
   try {
-    // Filter schedules by trainer if specified
-    const filteredSchedules = trainerId && schedules
-      ? schedules.filter(s => s?.createdBy?._id?.toString() === trainerId)
-      : schedules || [];
+    if (!Array.isArray(schedules)) {
+      throw new Error('Invalid schedules data: expected an array');
+    }
 
+    // Filter schedules by trainer if specified
+    const filteredSchedules = trainerId 
+      ? schedules.filter(s => s.createdBy?._id?.toString() === trainerId)
+      : schedules;
+
+    // Initialize statistics object with default values
     const statistics = {
-      adherence: [],
-      durations: [],
-      daySpecificStats: {},
+      totalTrainingDays: filteredSchedules.length,
+      adherence: 0,
       onTimeStartRate: 0,
-      totalTrainingDays: filteredSchedules.length, // Use filtered schedules count
+      averageDelay: 0,
+      daySpecificStats: {},
       mostDelayedActivities: [],
       mostEfficientActivities: []
     };
 
+    if (filteredSchedules.length === 0) {
+      return statistics;
+    }
+
+    // Calculate adherence and timing statistics
     let totalActivities = 0;
-    let onTimeStarts = 0;
+    let completedOnTime = 0;
+    let totalDelay = 0;
     const activityStats = new Map();
-    const dayStats = new Map();
 
     filteredSchedules.forEach(schedule => {
-      if (!schedule?.templateId?._id || !schedule?.selectedDay) {
-        logger.warn('Invalid schedule data', { schedule });
-        return;
-      }
-
-      const dayKey = `${schedule.templateId._id}-${schedule.selectedDay}`;
-      if (!dayStats.has(dayKey)) {
-        dayStats.set(dayKey, {
-          templateId: schedule.templateId._id,
-          day: schedule.selectedDay,
-          activities: new Map()
-        });
-      }
-      
-      if (!Array.isArray(schedule.activities)) {
-        logger.warn('Schedule activities is not an array', { schedule });
-        return;
-      }
-
-      schedule.activities.forEach(activity => {
-        if (!activity?.name) {
-          logger.warn('Invalid activity data', { activity });
+      try {
+        if (!schedule.activities || !Array.isArray(schedule.activities)) {
+          logger.warn('Invalid schedule activities', { scheduleId: schedule._id });
           return;
         }
 
-        totalActivities++;
-        
-        if (!activityStats.has(activity.name)) {
-          activityStats.set(activity.name, {
-            onTime: 0,
-            delayed: 0,
-            totalTimeVariance: 0,
-            count: 0
-          });
-        }
-        const stats = activityStats.get(activity.name);
-        stats.count++;
-        
-        if (activity.actualStartTime && activity.startTime && schedule.date) {
+        schedule.activities.forEach(activity => {
           try {
-            const scheduledStart = parseISO(`${schedule.date.toISOString().split('T')[0]}T${activity.startTime}`);
-            const actualStart = new Date(activity.actualStartTime);
-            
-            if (actualStart <= scheduledStart) {
-              stats.onTime++;
-              onTimeStarts++;
-            } else {
-              stats.delayed++;
+            if (!activity.name || !activity.startTime || !activity.actualStartTime) {
+              logger.warn('Invalid activity data', { 
+                scheduleId: schedule._id,
+                activityId: activity._id 
+              });
+              return;
             }
-            
-            if (activity.actualEndTime && activity.duration) {
-              const actualDuration = differenceInMinutes(
-                new Date(activity.actualEndTime),
-                new Date(activity.actualStartTime)
-              );
-              const variance = actualDuration - activity.duration;
-              stats.totalTimeVariance += variance;
 
-              const dayActivities = dayStats.get(dayKey).activities;
-              if (!dayActivities.has(activity.name)) {
-                dayActivities.set(activity.name, {
-                  timeVariances: [],
-                  scheduledDuration: activity.duration
-                });
+            totalActivities++;
+
+            // Calculate delay
+            const plannedStart = activity.startTime;
+            const actualStart = activity.actualStartTime;
+            const delay = differenceInMinutes(
+              new Date(actualStart),
+              parseISO(`${schedule.startDate.toISOString().split('T')[0]}T${plannedStart}:00`)
+            );
+
+            // Update activity statistics
+            const key = activity.name;
+            if (!activityStats.has(key)) {
+              activityStats.set(key, { totalDelay: 0, count: 0, onTimeCount: 0 });
+            }
+            const stats = activityStats.get(key);
+            stats.totalDelay += delay;
+            stats.count++;
+            
+            if (delay <= 5) { // Consider 5 minutes as the threshold for "on time"
+              completedOnTime++;
+              stats.onTimeCount++;
+            }
+
+            totalDelay += Math.max(0, delay);
+
+            // Update day-specific stats
+            const day = schedule.selectedDay;
+            if (day) {
+              if (!statistics.daySpecificStats[day]) {
+                statistics.daySpecificStats[day] = {
+                  totalActivities: 0,
+                  completedOnTime: 0,
+                  averageDelay: 0
+                };
               }
-              dayActivities.get(activity.name).timeVariances.push(variance);
+              statistics.daySpecificStats[day].totalActivities++;
+              if (delay <= 5) {
+                statistics.daySpecificStats[day].completedOnTime++;
+              }
+              statistics.daySpecificStats[day].averageDelay = 
+                (statistics.daySpecificStats[day].averageDelay * 
+                  (statistics.daySpecificStats[day].totalActivities - 1) + delay) / 
+                statistics.daySpecificStats[day].totalActivities;
             }
           } catch (error) {
-            logger.error('Error processing activity times', { error, activity });
+            logger.error('Error processing activity:', {
+              error: error.message,
+              scheduleId: schedule._id,
+              activityId: activity._id
+            });
           }
-        }
-      });
-    });
-
-    // Calculate adherence statistics
-    activityStats.forEach((stats, name) => {
-      if (stats.count > 0) {
-        statistics.adherence.push({
-          activity: name,
-          onTime: formatPercentage((stats.onTime / stats.count) * 100),
-          delayed: formatPercentage((stats.delayed / stats.count) * 100),
-          averageVariance: formatDuration(stats.totalTimeVariance / stats.count)
+        });
+      } catch (error) {
+        logger.error('Error processing schedule:', {
+          error: error.message,
+          scheduleId: schedule._id
         });
       }
     });
 
-    // Calculate day-specific statistics
-    dayStats.forEach((dayData, key) => {
-      const dayStats = {
-        activities: []
-      };
-
-      dayData.activities.forEach((stats, activityName) => {
-        if (stats.timeVariances.length > 0) {
-          const averageVariance = stats.timeVariances.reduce((a, b) => a + b, 0) / stats.timeVariances.length;
-          dayStats.activities.push({
-            name: activityName,
-            scheduledDuration: formatDuration(stats.scheduledDuration),
-            averageActualDuration: formatDuration(stats.scheduledDuration + averageVariance),
-            averageVariance: formatDuration(averageVariance)
-          });
-        }
-      });
-
-      statistics.daySpecificStats[key] = dayStats;
-    });
-
-    // Calculate most delayed and most efficient activities
-    if (activityStats.size > 0) {
-      const delayedActivities = [...activityStats.entries()]
-        .filter(([_, stats]) => stats.count > 0)
-        .map(([name, stats]) => ({
-          name,
-          averageVariance: stats.totalTimeVariance / stats.count
-        }))
-        .sort((a, b) => b.averageVariance - a.averageVariance)
-        .slice(0, 5)
-        .map(activity => ({
-          name: activity.name,
-          averageDelay: formatDuration(Math.abs(activity.averageVariance))
-        }));
-
-      const efficientActivities = [...activityStats.entries()]
-        .filter(([_, stats]) => stats.count > 0)
-        .map(([name, stats]) => ({
-          name,
-          averageVariance: stats.totalTimeVariance / stats.count
-        }))
-        .sort((a, b) => a.averageVariance - b.averageVariance)
-        .slice(0, 5)
-        .map(activity => ({
-          name: activity.name,
-          averageTimeSaved: formatDuration(Math.abs(activity.averageVariance))
-        }));
-
-      statistics.mostDelayedActivities = delayedActivities;
-      statistics.mostEfficientActivities = efficientActivities;
+    // Calculate final statistics
+    if (totalActivities > 0) {
+      statistics.adherence = formatPercentage((completedOnTime / totalActivities) * 100);
+      statistics.onTimeStartRate = formatPercentage((completedOnTime / totalActivities) * 100);
+      statistics.averageDelay = formatDuration(totalDelay / totalActivities);
     }
 
-    statistics.onTimeStartRate = totalActivities > 0 
-      ? formatPercentage((onTimeStarts / totalActivities) * 100)
-      : '0%';
+    // Sort and format activity statistics
+    const activityArray = Array.from(activityStats.entries()).map(([name, stats]) => ({
+      name,
+      averageDelay: stats.totalDelay / stats.count,
+      onTimeRate: (stats.onTimeCount / stats.count) * 100
+    }));
+
+    statistics.mostDelayedActivities = activityArray
+      .sort((a, b) => b.averageDelay - a.averageDelay)
+      .slice(0, 5)
+      .map(a => ({
+        name: a.name,
+        averageDelay: formatDuration(a.averageDelay)
+      }));
+
+    statistics.mostEfficientActivities = activityArray
+      .sort((a, b) => b.onTimeRate - a.onTimeRate)
+      .slice(0, 5)
+      .map(a => ({
+        name: a.name,
+        onTimeRate: formatPercentage(a.onTimeRate)
+      }));
+
+    // Format day-specific stats
+    Object.keys(statistics.daySpecificStats).forEach(day => {
+      const dayStats = statistics.daySpecificStats[day];
+      dayStats.adherence = formatPercentage((dayStats.completedOnTime / dayStats.totalActivities) * 100);
+      dayStats.averageDelay = formatDuration(dayStats.averageDelay);
+      delete dayStats.totalActivities;
+      delete dayStats.completedOnTime;
+    });
 
     return statistics;
   } catch (error) {
-    logger.error('Error processing schedules:', error);
-    throw error;
+    logger.error('Error in processSchedules:', {
+      error: error.message,
+      stack: error.stack
+    });
+    throw new Error(`Failed to process statistics: ${error.message}`);
   }
 };
 
@@ -213,123 +202,128 @@ const processSchedules = (schedules, trainerId = null) => {
 router.get('/',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
-    const startTime = Date.now();
+    let templates = [];
+    let trainers = [];
+    let schedules = [];
+
     try {
-      const { trainer, training, dateRange } = req.query;
-      
-      logger.debug('Statistics request received', { trainer, training, dateRange });
-      
+      logger.debug('Fetching statistics', { 
+        filters: req.query,
+        userId: req.user._id 
+      });
+
       // Build base query
-      const baseQuery = {
-        status: 'completed'
-      };
+      const baseQuery = { status: 'completed' };
+
+      // Add trainer filter if specified
+      if (req.query.trainer) {
+        baseQuery.createdBy = req.query.trainer;
+      }
+
+      // Add training filter if specified
+      if (req.query.training) {
+        baseQuery.templateId = req.query.training;
+      }
+
+      // Add day filter if specified
+      if (req.query.day) {
+        baseQuery.selectedDay = parseInt(req.query.day);
+      }
 
       // Add date filter if specified
-      const dateFilter = getDateFilter(dateRange);
-      if (dateFilter) {
+      const dateFilter = getDateFilter(req.query.dateRange);
+      if (dateFilter !== null) {
         baseQuery.date = dateFilter;
       }
 
-      if (training !== 'all') {
-        baseQuery.templateId = training;
-        // Add day filter if specified
-        if (req.query.day) {
-          baseQuery.selectedDay = parseInt(req.query.day);
-        }
-      }
-
-      // Get all templates and trainers first
-      let templates, trainers;
+      // Fetch templates with timeout
       try {
-        [templates, trainers] = await Promise.all([
-          Template.find({}).lean().maxTimeMS(5000),
-          User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email').lean().maxTimeMS(5000)
+        templates = await Promise.race([
+          Template.find(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Template fetch timeout')), 5000)
+          )
         ]);
       } catch (error) {
-        logger.error('Error fetching templates and trainers:', error);
-        throw new Error('Failed to fetch templates and trainers');
+        logger.error('Error fetching templates:', error);
+        throw new Error('Failed to fetch templates: ' + error.message);
       }
 
-      if (!templates || !trainers) {
-        throw new Error('Failed to fetch required data');
-      }
-
-      logger.debug('Retrieved templates and trainers', { 
-        templateCount: templates.length, 
-        trainerCount: trainers.length 
-      });
-
-      // Get all schedules in one query
-      let schedules;
+      // Fetch trainers with timeout
       try {
-        schedules = await Schedule.find(baseQuery)
-          .populate('createdBy', 'firstName lastName email')
-          .populate('templateId', 'name days')
-          .lean()
-          .maxTimeMS(30000);
+        trainers = await Promise.race([
+          User.find({ role: 'trainer' }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Trainer fetch timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        logger.error('Error fetching trainers:', error);
+        throw new Error('Failed to fetch trainers: ' + error.message);
+      }
+
+      // Fetch schedules with timeout
+      try {
+        schedules = await Promise.race([
+          Schedule.find(baseQuery)
+            .populate('templateId')
+            .populate('createdBy'),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Schedule fetch timeout')), 5000)
+          )
+        ]);
       } catch (error) {
         logger.error('Error fetching schedules:', error);
-        throw new Error('Failed to fetch schedules');
+        throw new Error('Failed to fetch schedules: ' + error.message);
       }
 
-      if (!schedules) {
-        throw new Error('Failed to fetch schedules');
-      }
-
-      logger.debug('Retrieved schedules', { count: schedules.length });
-
-      // Process statistics based on trainer filter
+      // Process statistics with error handling
       let statistics;
       try {
-        statistics = trainer === 'all'
-          ? processSchedules(schedules)
-          : processSchedules(schedules, trainer);
+        statistics = processSchedules(schedules, req.query.trainer);
       } catch (error) {
         logger.error('Error processing statistics:', error);
-        throw new Error('Failed to process statistics');
-      }
-
-      if (!statistics) {
-        throw new Error('Failed to generate statistics');
+        throw new Error('Failed to process statistics: ' + error.message);
       }
 
       // Add metadata
       try {
-        statistics.trainers = trainers.map(t => ({
-          _id: t._id,
-          name: `${t.firstName} ${t.lastName}`,
-          email: t.email
-        }));
-        statistics.trainings = templates.map(t => ({
-          _id: t._id,
-          name: t.name,
-          days: t.days
-        }));
+        statistics.metadata = {
+          templates: templates.map(t => ({
+            _id: t._id,
+            name: t.name
+          })),
+          trainers: trainers.map(t => ({
+            _id: t._id,
+            name: `${t.firstName} ${t.lastName}`
+          }))
+        };
       } catch (error) {
         logger.error('Error adding metadata:', error);
-        throw new Error('Failed to add metadata to statistics');
+        // Don't throw here, metadata is not critical
+        statistics.metadata = { templates: [], trainers: [] };
       }
 
-      const duration = Date.now() - startTime;
-      logger.debug('Statistics processed successfully', { 
-        duration,
-        scheduleCount: schedules.length,
-        trainer,
-        dateRange 
+      logger.debug('Statistics processed successfully', {
+        userId: req.user._id,
+        scheduleCount: schedules.length
       });
 
       res.json(statistics);
     } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.error('Error processing statistics:', { 
+      logger.error('Error in statistics route:', {
         error: error.message,
-        duration,
-        stack: error.stack
+        stack: error.stack,
+        userId: req.user._id,
+        query: req.query
       });
-      res.status(500).json({
-        error: error.message || 'Internal server error',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
+      
+      // Clean up any partial results
+      templates = [];
+      trainers = [];
+      schedules = [];
+      
+      next(error);
     }
   }
 );
