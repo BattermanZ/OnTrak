@@ -65,4 +65,67 @@ export interface ActivityConflict {
   activity2: Activity;
   type: 'OVERLAP' | 'NO_BREAK';
   day: number;
+}
+
+export interface AdherenceItem {
+  activity: string;
+  onTime: string;
+  delayed: string;
+  averageVariance: string;
+}
+
+export interface ActivityStats {
+  name: string;
+  scheduledDuration: string;
+  averageActualDuration: string;
+  averageVariance: string;
+}
+
+export interface DayStats {
+  activities: ActivityStats[];
+}
+
+export interface DelayedActivity {
+  name: string;
+  averageDelay: string;
+}
+
+export interface EfficientActivity {
+  name: string;
+  averageTimeSaved: string;
+}
+
+export interface StatisticsData {
+  adherence: AdherenceItem[];
+  daySpecificStats: { [key: string]: DayStats };
+  onTimeStartRate: string;
+  totalTrainingDays: number;
+  mostDelayedActivities: DelayedActivity[];
+  mostEfficientActivities: EfficientActivity[];
+  trainers: Trainer[];
+  trainings: Training[];
+}
+
+export interface StatisticsFilters {
+  trainer: string;
+  training: string;
+  day?: number;
+  dateRange: string;
+}
+
+export interface TimeVarianceData {
+  name: string;
+  timeVariance: number;
+}
+
+export interface Trainer {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+export interface Training {
+  _id: string;
+  name: string;
+  days: number;
 } 

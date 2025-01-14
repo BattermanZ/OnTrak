@@ -63,6 +63,83 @@ const createTemplate = async (req, res) => {
   }
 };
 
+// Clone template
+const cloneTemplate = async (req, res) => {
+  try {
+    const sourceTemplate = await Template.findById(req.params.id);
+    if (!sourceTemplate) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    const { name } = req.body;
+    const clonedTemplate = new Template({
+      name: name || `${sourceTemplate.name} (Copy)`,
+      days: sourceTemplate.days,
+      tags: sourceTemplate.tags,
+      createdBy: req.user._id,
+      activities: sourceTemplate.activities
+    });
+
+    const newTemplate = await clonedTemplate.save();
+    const populatedTemplate = await Template.findById(newTemplate._id)
+      .populate('createdBy', 'firstName lastName email');
+
+    res.status(201).json(populatedTemplate);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Import template
+const importTemplate = async (req, res) => {
+  try {
+    const templateData = req.body;
+    
+    // Validate the imported data structure
+    if (!templateData.name || !templateData.days || !Array.isArray(templateData.activities)) {
+      return res.status(400).json({ message: 'Invalid template data structure' });
+    }
+
+    const template = new Template({
+      ...templateData,
+      createdBy: req.user._id,
+      tags: templateData.tags || []
+    });
+
+    const newTemplate = await template.save();
+    const populatedTemplate = await Template.findById(newTemplate._id)
+      .populate('createdBy', 'firstName lastName email');
+
+    res.status(201).json(populatedTemplate);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Export template
+const exportTemplate = async (req, res) => {
+  try {
+    const template = await Template.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName email');
+    
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    // Create a clean version of the template for export
+    const exportData = {
+      name: template.name,
+      days: template.days,
+      tags: template.tags,
+      activities: template.activities
+    };
+
+    res.json(exportData);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Update template
 const updateTemplate = async (req, res) => {
   try {
@@ -97,21 +174,62 @@ const updateTemplate = async (req, res) => {
   }
 };
 
+// Add activities in bulk
+const addActivitiesBulk = async (req, res) => {
+  try {
+    const template = await Template.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({ message: 'Template not found' });
+    }
+
+    const { activities } = req.body;
+    if (!Array.isArray(activities)) {
+      return res.status(400).json({ message: 'Activities must be an array' });
+    }
+
+    // Validate all activities before adding
+    for (const activity of activities) {
+      if (!activity.name || !activity.startTime || !activity.duration || !activity.day) {
+        return res.status(400).json({ 
+          message: 'Each activity must have name, startTime, duration, and day' 
+        });
+      }
+
+      if (activity.day < 1 || activity.day > template.days) {
+        return res.status(400).json({ 
+          message: `Day must be between 1 and ${template.days}` 
+        });
+      }
+
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(activity.startTime)) {
+        return res.status(400).json({ 
+          message: 'Invalid time format. Please use HH:MM format (e.g., 09:00)' 
+        });
+      }
+    }
+
+    template.activities.push(...activities);
+    await template.save();
+
+    const updatedTemplate = await Template.findById(template._id)
+      .populate('createdBy', 'firstName lastName email');
+
+    res.json(updatedTemplate);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
 // Add activity to template
 const addActivity = async (req, res) => {
   try {
-    logger.debug('Adding activity', { templateId: req.params.id, activity: req.body });
-    
     const template = await Template.findById(req.params.id);
     if (!template) {
       return res.status(404).json({ message: 'Template not found' });
     }
 
     const { name, startTime, duration, description, day } = req.body;
-    
-    if (!name || !startTime || !duration || !day) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
 
     // Validate time format
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
@@ -119,33 +237,26 @@ const addActivity = async (req, res) => {
       return res.status(400).json({ message: 'Invalid time format. Please use HH:MM format (e.g., 09:00)' });
     }
 
-    // Validate day is within template days range
+    // Validate day
     if (day < 1 || day > template.days) {
       return res.status(400).json({ message: `Day must be between 1 and ${template.days}` });
     }
 
-    const newActivity = {
-      name: name.trim(),
+    template.activities.push({
+      name,
       startTime,
-      duration: Math.max(1, duration),
-      description: description ? description.trim() : '',
+      duration,
+      description,
       day
-    };
-
-    template.activities.push(newActivity);
-    
-    // Sort activities by day and start time
-    template.activities.sort((a, b) => {
-      if (a.day !== b.day) return a.day - b.day;
-      return a.startTime.localeCompare(b.startTime);
     });
-    
+
     await template.save();
     
-    logger.debug('Activity added successfully', { activity: newActivity });
-    res.status(201).json(newActivity);
+    const updatedTemplate = await Template.findById(template._id)
+      .populate('createdBy', 'firstName lastName email');
+    
+    res.json(updatedTemplate);
   } catch (error) {
-    logger.error('Error adding activity', { error: error.message });
     res.status(400).json({ message: error.message });
   }
 };
@@ -197,20 +308,13 @@ const updateActivity = async (req, res) => {
       day: day || template.activities[activityIndex].day
     };
 
-    // Sort activities by day and start time
-    template.activities.sort((a, b) => {
-      if (a.day !== b.day) return a.day - b.day;
-      return a.startTime.localeCompare(b.startTime);
-    });
-
     await template.save();
     
-    logger.debug('Activity updated successfully', { 
-      activity: template.activities[activityIndex] 
-    });
-    res.json(template.activities[activityIndex]);
+    const updatedTemplate = await Template.findById(template._id)
+      .populate('createdBy', 'firstName lastName email');
+    
+    res.json(updatedTemplate);
   } catch (error) {
-    logger.error('Error updating activity', { error: error.message });
     res.status(400).json({ message: error.message });
   }
 };
@@ -232,7 +336,11 @@ module.exports = {
   getAllTemplates,
   getTemplateById,
   createTemplate,
+  cloneTemplate,
+  importTemplate,
+  exportTemplate,
   updateTemplate,
+  addActivitiesBulk,
   addActivity,
   updateActivity,
   deleteTemplate

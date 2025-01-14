@@ -1,5 +1,4 @@
 import React from 'react';
-import { Container, Box } from '@mui/material';
 import Navigation from './Navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation } from 'react-router-dom';
@@ -22,14 +21,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-      <Box sx={{ bgcolor: 'white', boxShadow: 1, mb: 4, py: 2 }}>
-        <Container maxWidth="lg">
-          <Navigation />
-        </Container>
-      </Box>
+    <div className="min-h-screen bg-gray-50">
+      <Navigation />
       {children}
-    </Box>
+    </div>
   );
 };
 

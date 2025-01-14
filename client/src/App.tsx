@@ -1,34 +1,41 @@
 import React from 'react';
-import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import { ThemeProvider } from '@mui/material/styles';
-import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import CssBaseline from '@mui/material/CssBaseline';
-import theme from './theme';
-import AuthProvider from './contexts/AuthContext';
-import AppRoutes from './routes';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Setup from './pages/Setup';
+import Admin from './pages/Admin';
+import Statistics from './pages/Statistics';
+import Profile from './pages/Profile';
+import { Toaster } from './components/ui/toaster';
 import Layout from './components/Layout';
 
-const queryClient = new QueryClient();
+function AppRoutes() {
+  const { user, loading } = useAuth();
 
-const App = () => {
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
-          <CssBaseline />
-          <BrowserRouter>
-            <AuthProvider>
-              <Layout>
-                <AppRoutes />
-              </Layout>
-            </AuthProvider>
-          </BrowserRouter>
-        </LocalizationProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <Routes>
+      <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+      <Route path="/" element={user ? <Layout><Dashboard /></Layout> : <Navigate to="/login" />} />
+      <Route path="/setup" element={user ? <Layout><Setup /></Layout> : <Navigate to="/login" />} />
+      <Route path="/admin" element={user ? <Layout><Admin /></Layout> : <Navigate to="/login" />} />
+      <Route path="/statistics" element={user ? <Layout><Statistics /></Layout> : <Navigate to="/login" />} />
+      <Route path="/profile" element={user ? <Layout><Profile /></Layout> : <Navigate to="/login" />} />
+    </Routes>
   );
-};
+}
+
+function App() {
+  return (
+    <Router>
+      <AppRoutes />
+      <Toaster />
+    </Router>
+  );
+}
 
 export default App;

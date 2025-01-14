@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Grid } from '@mui/material';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -13,10 +12,20 @@ import {
   Pie,
   ReferenceLine,
 } from 'recharts';
-import { Info as InfoIcon, Download as DownloadIcon } from '@mui/icons-material';
-import { useQuery, useQueries } from 'react-query';
+import { Info as InfoIcon, Download as DownloadIcon } from 'lucide-react';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { schedules } from '../services/api';
 import { logger } from '../utils/logger';
+import type {
+  StatisticsData,
+  StatisticsFilters,
+  TimeVarianceData,
+  AdherenceItem,
+  ActivityStats,
+  DayStats,
+  Training,
+  Trainer
+} from '../types';
 
 // Shadcn components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -26,57 +35,6 @@ import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
 import { Button } from "../components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
-
-interface StatisticsFilters {
-  trainer: string;
-  training: string;
-  dateRange: 'week' | 'month' | 'year' | 'all';
-  day?: number;
-}
-
-interface StatisticsData {
-  adherence: Array<{
-    activity: string;
-    onTime: string;
-    delayed: string;
-    averageVariance: string;
-  }>;
-  daySpecificStats: {
-    [key: string]: {
-      activities: Array<{
-        name: string;
-        scheduledDuration: string;
-        averageActualDuration: string;
-        averageVariance: string;
-      }>;
-    };
-  };
-  onTimeStartRate: string;
-  totalTrainingDays: number;
-  mostDelayedActivities: Array<{
-    name: string;
-    averageDelay: string;
-  }>;
-  mostEfficientActivities: Array<{
-    name: string;
-    averageTimeSaved: string;
-  }>;
-  trainers: Array<{
-    _id: string;
-    name: string;
-    email: string;
-  }>;
-  trainings: Array<{
-    _id: string;
-    name: string;
-    days: number;
-  }>;
-}
-
-interface TimeVarianceData {
-  name: string;
-  timeVariance: number;
-}
 
 const TIMING_COLORS = {
   onTime: '#22c55e',  // green-500
@@ -90,74 +48,34 @@ const CHART_COLORS = {
   neutral: '#3b82f6'    // blue-500
 };
 
-const exportStatisticsToCSV = (statsData: StatisticsData | undefined) => {
-  if (!statsData) return;
-
-  // Prepare the data arrays
+const exportStatisticsToCSV = (statsData: StatisticsData) => {
   const rows = [
-    // Header row
-    ['Category', 'Metric', 'Value'],
-    
-    // Overview stats
-    ['Overview', 'On-Time Start Rate', statsData.onTimeStartRate],
-    ['Overview', 'Total Training Days', statsData.totalTrainingDays.toString()],
-    
-    // Add a blank row
-    [],
-    
-    // Delayed Activities
-    ['Delayed Activities', 'Activity Name', 'Average Delay'],
-    ...statsData.mostDelayedActivities.map(activity => 
-      ['Delayed Activities', activity.name, activity.averageDelay]
-    ),
-    
-    // Add a blank row
-    [],
-    
-    // Efficient Activities
-    ['Efficient Activities', 'Activity Name', 'Average Time Saved'],
-    ...statsData.mostEfficientActivities.map(activity => 
-      ['Efficient Activities', activity.name, activity.averageTimeSaved]
-    ),
-    
-    // Add a blank row
-    [],
-    
-    // Adherence Data
+    // Headers
     ['Adherence', 'Activity', 'On Time', 'Delayed', 'Average Variance'],
-    ...statsData.adherence.map(item => 
+    // Adherence Data
+    ...statsData.adherence.map((item: AdherenceItem) => 
       ['Adherence', item.activity, item.onTime, item.delayed, item.averageVariance]
     )
   ];
 
   // Convert to CSV
   const csvContent = rows
-    .map(row => row.map(cell => `"${cell}"`).join(','))
+    .map(row => row.map((cell: string) => `"${cell}"`).join(','))
     .join('\n');
 
   // Create blob and download
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  
-  // Generate filename with current date
-  const date = new Date().toISOString().split('T')[0];
-  const filename = `training_statistics_${date}.csv`;
-  
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
+  link.href = URL.createObjectURL(blob);
+  link.download = 'training_statistics.csv';
   link.click();
-  document.body.removeChild(link);
-  
-  logger.info('Statistics exported successfully');
 };
 
-const Statistics: React.FC = () => {
+export default function Statistics() {
   const [filters, setFilters] = useState<StatisticsFilters>({
     trainer: 'all',
     training: 'all',
-    dateRange: 'month',
+    dateRange: 'all'
   });
 
   const [selectedTrainer, setSelectedTrainer] = useState<string>('');
@@ -170,152 +88,127 @@ const Statistics: React.FC = () => {
     }));
   }, [selectedTrainer]);
 
-  // Fetch statistics data
-  const { data: statsData } = useQuery<StatisticsData>(
-    ['statistics', filters],
-    async () => {
-      const response = await schedules.getStatistics(filters);
-      return response.data;
-    },
-    {
-      refetchInterval: false,
-      staleTime: 30000, // Consider data fresh for 30 seconds
-      retry: 3, // Retry failed requests 3 times
-      onError: (error) => {
+  const { data: statistics, isLoading, error: queryError } = useQuery<StatisticsData>({
+    queryKey: ['statistics', filters],
+    queryFn: async () => {
+      try {
+        logger.debug('Fetching statistics with filters:', filters);
+        const response = await schedules.getStatistics(filters);
+        logger.debug('Statistics response:', response.data);
+        return response.data;
+      } catch (error) {
         logger.error('Error fetching statistics:', error);
+        throw error;
       }
     }
-  );
+  });
 
   const selectedTraining = useMemo(() => {
-    if (!statsData?.trainings || filters.training === 'all') return null;
-    return statsData.trainings.find(t => t._id === filters.training);
-  }, [statsData, filters.training]);
+    if (!statistics?.trainings || filters.training === 'all') return null;
+    return statistics.trainings.find((t: Training) => t._id === filters.training);
+  }, [statistics, filters.training]);
 
-  // Add a helper function to parse duration strings
-  const parseDuration = useCallback((durationStr: string): number => {
-    const hours = durationStr.match(/(\d+)h/);
-    const minutes = durationStr.match(/(\d+)min/);
-    const isNegative = durationStr.startsWith('-');
-    
-    let totalMinutes = 0;
-    if (hours) totalMinutes += parseInt(hours[1]) * 60;
-    if (minutes) totalMinutes += parseInt(minutes[1]);
-    
-    return isNegative ? -totalMinutes : totalMinutes;
-  }, []);
+  const parseDuration = (durationStr: string): number => {
+    const match = durationStr.match(/(-?\d+)/);
+    return match ? parseInt(match[0]) : 0;
+  };
 
   const timeVarianceData = useMemo(() => {
-    if (!statsData) return [];
+    if (!statistics) return [];
     
     // Single training, single day view
     if (filters.training !== 'all' && filters.day) {
       const key = `${filters.training}-${filters.day}`;
-      const dayData = statsData.daySpecificStats[key]?.activities || [];
-      return dayData.map(activity => ({
+      const dayData = statistics.daySpecificStats[key]?.activities || [];
+      return dayData.map((activity: ActivityStats) => ({
         name: activity.name,
         timeVariance: parseDuration(activity.averageVariance)
       }));
     }
-    
+
     // Single training, all days view
     if (filters.training !== 'all') {
-      const training = statsData.trainings.find(t => t._id === filters.training);
+      const training = statistics.trainings.find((t: Training) => t._id === filters.training);
       if (!training) return [];
       
       return Array.from({ length: training.days }, (_, i) => {
         const dayNumber = i + 1;
         const key = `${filters.training}-${dayNumber}`;
-        const dayData = statsData.daySpecificStats[key]?.activities || [];
-        const totalVariance = dayData.reduce((sum, activity) => {
+        const dayData = statistics.daySpecificStats[key]?.activities || [];
+        const totalVariance = dayData.reduce((sum: number, activity: ActivityStats) => {
           return sum + parseDuration(activity.averageVariance);
         }, 0);
         
         return {
           name: `Day ${dayNumber}`,
-          timeVariance: totalVariance
+          timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
         };
       });
     }
-    
+
     // All trainings view
     if (filters.training === 'all') {
-      return statsData.trainings.map(training => {
-        const totalVariance = Object.entries(statsData.daySpecificStats)
+      return statistics.trainings.map((training: Training) => {
+        const totalVariance = Object.entries(statistics.daySpecificStats)
           .filter(([key]) => key.startsWith(training._id))
-          .reduce((sum, [_, data]) => {
-            return sum + data.activities.reduce((activitySum, activity) => {
+          .reduce((sum: number, [_, data]) => {
+            const typedData = data as DayStats;
+            return sum + typedData.activities.reduce((activitySum: number, activity: ActivityStats) => {
               return activitySum + parseDuration(activity.averageVariance);
             }, 0);
           }, 0);
-        
+
         return {
           name: training.name,
           timeVariance: totalVariance
         };
       });
     }
-    
+
     return [];
-  }, [statsData, filters, parseDuration]);
+  }, [statistics, filters, parseDuration]);
 
   // Fetch trainer-specific statistics
   const trainerQueries = useMemo(() => {
-    if (!statsData || filters.trainer !== 'all') return [];
+    if (!statistics || filters.trainer !== 'all') return { queries: [] };
     
-    return statsData.trainers.map(trainer => ({
-      queryKey: ['statistics', { ...filters, trainer: trainer._id }],
-      queryFn: async () => {
-        const response = await schedules.getStatistics({
-          ...filters,
-          trainer: trainer._id
-        });
-        return response.data;
-      }
-    }));
-  }, [statsData, filters]);
+    return {
+      queries: statistics.trainers.map((trainer: Trainer) => ({
+        queryKey: ['statistics', { ...filters, trainer: trainer._id }],
+        queryFn: async () => {
+          const response = await schedules.getStatistics({
+            ...filters,
+            trainer: trainer._id
+          });
+          return response.data;
+        }
+      }))
+    };
+  }, [statistics, filters]);
 
   const trainerResults = useQueries(trainerQueries);
 
   const trainerVarianceData = useMemo(() => {
-    if (!statsData || filters.trainer !== 'all') return [];
+    if (!statistics || filters.trainer !== 'all') return [];
     
-    return statsData.trainers.map((trainer, index) => {
+    return statistics.trainers.map((trainer: Trainer, index: number) => {
       const trainerStats = trainerResults[index]?.data as StatisticsData | undefined;
       if (!trainerStats) return { name: trainer.name, timeVariance: 0 };
       
-      // Calculate average variance based on the selected view
-      if (filters.training !== 'all') {
-        if (filters.day) {
-          // Single day view
-          const key = `${filters.training}-${filters.day}`;
-          const dayData = trainerStats.daySpecificStats[key]?.activities || [];
-          const totalVariance = dayData.reduce((sum: number, activity: { averageVariance: string }) => {
-            return sum + parseDuration(activity.averageVariance);
-          }, 0);
-          return {
-            name: trainer.name,
-            timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
-          };
-        } else {
-          // All days for specific training
-          const daysData = Object.entries(trainerStats.daySpecificStats)
-            .filter(([key]) => key.startsWith(filters.training))
-            .map(([_, data]: [string, { activities: Array<{ averageVariance: string }> }]) => data.activities)
-            .flat();
-
-          const totalVariance = daysData.reduce((sum: number, activity: { averageVariance: string }) => {
-            return sum + parseDuration(activity.averageVariance);
-          }, 0);
-
-          return {
-            name: trainer.name,
-            timeVariance: daysData.length > 0 ? Math.round(totalVariance / daysData.length) : 0
-          };
-        }
+      if (filters.training !== 'all' && filters.day) {
+        // Single day view
+        const key = `${filters.training}-${filters.day}`;
+        const dayData = trainerStats.daySpecificStats[key]?.activities || [];
+        const totalVariance = dayData.reduce((sum: number, activity: ActivityStats) => {
+          return sum + parseDuration(activity.averageVariance);
+        }, 0);
+        return {
+          name: trainer.name,
+          timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
+        };
       } else {
         // All trainings view - use adherence data
-        const totalVariance = trainerStats.adherence.reduce((sum: number, activity: { averageVariance: string }) => {
+        const totalVariance = trainerStats.adherence.reduce((sum: number, activity: AdherenceItem) => {
           return sum + parseDuration(activity.averageVariance);
         }, 0);
         return {
@@ -326,7 +219,7 @@ const Statistics: React.FC = () => {
         };
       }
     });
-  }, [statsData, filters, trainerResults, parseDuration]);
+  }, [statistics, filters, trainerResults, parseDuration]);
 
   const calculateTimingDistribution = (data: TimeVarianceData[]) => {
     const total = data.length;
@@ -355,12 +248,12 @@ const Statistics: React.FC = () => {
   };
 
   const handleBarClick = (data: { name: string }) => {
-    if (!data || !statsData) return;
+    if (!data || !statistics) return;
 
     // Determine what type of data was clicked based on current view
     if (filters.training === 'all') {
       // Clicking on a training bar
-      const training = statsData.trainings.find(t => t.name === data.name);
+      const training = statistics.trainings.find(t => t.name === data.name);
       if (training) {
         setFilters(prev => ({ ...prev, training: training._id, day: undefined }));
       }
@@ -374,8 +267,8 @@ const Statistics: React.FC = () => {
   };
 
   const handleTrainerBarClick = (data: { name: string }) => {
-    if (!data || !statsData) return;
-    const trainer = statsData.trainers.find(t => t.name === data.name);
+    if (!data || !statistics) return;
+    const trainer = statistics.trainers.find(t => t.name === data.name);
     if (trainer) {
       setSelectedTrainer(trainer._id);
     }
@@ -525,9 +418,14 @@ const Statistics: React.FC = () => {
         </div>
         <Button
           className="bg-green-600 hover:bg-green-700 text-white"
+          disabled={isLoading || !statistics}
           onClick={() => {
             try {
-              exportStatisticsToCSV(statsData);
+              if (!statistics) {
+                logger.error('No statistics data available to export');
+                return;
+              }
+              exportStatisticsToCSV(statistics);
             } catch (error) {
               logger.error('Error exporting statistics:', error);
             }
@@ -538,10 +436,23 @@ const Statistics: React.FC = () => {
         </Button>
       </div>
 
+      {queryError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{queryError instanceof Error ? queryError.message : 'Failed to load statistics'}</span>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+        </div>
+      )}
+
       <Card className="mb-4">
         <CardContent className="pt-6">
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={3}>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
               <Select
                 value={selectedTrainer || 'all'}
                 onValueChange={(value) => setSelectedTrainer(value === 'all' ? '' : value)}
@@ -551,15 +462,15 @@ const Statistics: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Trainers</SelectItem>
-                  {(statsData?.trainers || []).map((trainer) => (
+                  {(statistics?.trainers || []).map((trainer) => (
                     <SelectItem key={trainer._id} value={trainer._id}>
                       {trainer.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Grid>
-            <Grid item xs={12} md={3}>
+            </div>
+            <div>
               <Select
                 value={filters.training}
                 onValueChange={(value) => setFilters({ ...filters, training: value, day: undefined })}
@@ -569,15 +480,15 @@ const Statistics: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Trainings</SelectItem>
-                  {(statsData?.trainings || []).map((training) => (
+                  {(statistics?.trainings || []).map((training) => (
                     <SelectItem key={training._id} value={training._id}>
                       {training.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </Grid>
-            <Grid item xs={12} md={3}>
+            </div>
+            <div>
               <Select
                 value={filters.day?.toString() || 'all'}
                 onValueChange={(value) => setFilters({ 
@@ -598,11 +509,11 @@ const Statistics: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-            </Grid>
-            <Grid item xs={12} md={3}>
+            </div>
+            <div>
               <Select
                 value={filters.dateRange}
-                onValueChange={(value) => setFilters({ ...filters, dateRange: value as any })}
+                onValueChange={(value) => setFilters({ ...filters, dateRange: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Date Range" />
@@ -614,8 +525,8 @@ const Statistics: React.FC = () => {
                   <SelectItem value="all">All Time</SelectItem>
                 </SelectContent>
               </Select>
-            </Grid>
-          </Grid>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -642,9 +553,9 @@ const Statistics: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{statsData?.onTimeStartRate || '0%'}</div>
+            <div className="text-2xl font-bold">{statistics?.onTimeStartRate || '0%'}</div>
             <Progress 
-              value={Math.min(100, Math.max(0, Number(statsData?.onTimeStartRate?.replace('%', '') || '0')))} 
+              value={Math.min(100, Math.max(0, Number(statistics?.onTimeStartRate?.replace('%', '') || '0')))} 
               className="mt-2" 
             />
           </CardContent>
@@ -671,7 +582,7 @@ const Statistics: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{statsData?.totalTrainingDays || '0'} days</div>
+            <div className="text-2xl font-bold">{statistics?.totalTrainingDays || '0'} days</div>
           </CardContent>
         </Card>
       </div>
@@ -710,7 +621,7 @@ const Statistics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[300px]">
-              {(statsData?.mostDelayedActivities || []).map((activity, index) => (
+              {(statistics?.mostDelayedActivities || []).map((activity, index) => (
                 <div key={index} className="flex justify-between items-center py-2">
                   <span>{activity.name}</span>
                   <Badge variant="secondary">Average delay: {activity.averageDelay}</Badge>
@@ -727,7 +638,7 @@ const Statistics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[300px]">
-              {(statsData?.mostEfficientActivities || []).map((activity, index) => (
+              {(statistics?.mostEfficientActivities || []).map((activity, index) => (
                 <div key={index} className="flex justify-between items-center py-2">
                   <span>{activity.name}</span>
                   <Badge variant="secondary">Time saved: {activity.averageTimeSaved}</Badge>
@@ -739,6 +650,4 @@ const Statistics: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default Statistics; 
+} 

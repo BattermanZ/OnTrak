@@ -8,16 +8,19 @@ import {
   LinearProgress,
 } from '@mui/material';
 import { useParams } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { format, parse, addMinutes } from 'date-fns';
 import { schedules } from '../services/api';
 import type { Schedule as ScheduleType, Activity } from '../types/index';
 import type { AxiosResponse } from 'axios';
 
 const Schedule = () => {
-  const { data: schedule } = useQuery('currentSchedule', async () => {
-    const response = await schedules.getCurrent();
-    return response.data;
+  const { data: schedule } = useQuery({
+    queryKey: ['currentSchedule'],
+    queryFn: async () => {
+      const response = await schedules.getCurrent();
+      return response.data;
+    }
   });
 
   if (!schedule) {

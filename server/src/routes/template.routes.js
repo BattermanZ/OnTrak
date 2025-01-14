@@ -15,8 +15,20 @@ router.get('/:id', templateController.getTemplateById);
 // Create template
 router.post('/', templateController.createTemplate);
 
+// Clone template
+router.post('/:id/clone', templateController.cloneTemplate);
+
+// Import template
+router.post('/import', templateController.importTemplate);
+
+// Export template
+router.get('/:id/export', templateController.exportTemplate);
+
 // Update template
 router.put('/:id', templateController.updateTemplate);
+
+// Add activities in bulk
+router.post('/:id/activities/bulk', templateController.addActivitiesBulk);
 
 // Add activity to template
 router.post('/:id/activities', templateController.addActivity);

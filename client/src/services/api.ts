@@ -225,6 +225,14 @@ const templates = {
     api.post(`/templates/${templateId}/activities`, activity),
   updateActivity: (templateId: string, activityId: string, activity: Partial<Activity>) =>
     api.put(`/templates/${templateId}/activities/${activityId}`, activity),
+  clone: (id: string, data: { name?: string }) => 
+    api.post(`/templates/${id}/clone`, data),
+  import: (data: { name: string; days: number; activities: Activity[]; tags?: string[] }) => 
+    api.post('/templates/import', data),
+  export: (id: string) => 
+    api.get(`/templates/${id}/export`),
+  addActivitiesBulk: (templateId: string, data: { activities: Partial<Activity>[] }) =>
+    api.post(`/templates/${templateId}/activities/bulk`, data),
 };
 
 // Schedules API

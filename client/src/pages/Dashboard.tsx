@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSocket } from '../hooks/useSocket';
 import { schedules, templates } from '../services/api';
 import type { Schedule, Activity, Template } from '../types/index';
-import { useQuery, useQueryClient } from 'react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityCard } from '../components/ActivityCard';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import {
@@ -37,19 +37,23 @@ export default function Dashboard() {
   const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
   const [isCancelDayDialogOpen, setIsCancelDayDialogOpen] = useState(false);
 
-  const { data: currentSchedule } = useQuery(['currentSchedule'], () => 
-    schedules.getCurrent().then(res => res.data)
-  );
+  const { data: currentSchedule = {} as Schedule } = useQuery({
+    queryKey: ['currentSchedule'],
+    queryFn: () => schedules.getCurrent().then(res => res.data)
+  });
 
-  const { data: availableTemplates } = useQuery<Template[]>(['templates'], async () => {
-    const response = await templates.getAll();
-    return response.data;
+  const { data: availableTemplates = [] as Template[] } = useQuery({
+    queryKey: ['templates'],
+    queryFn: async () => {
+      const response = await templates.getAll();
+      return response.data;
+    }
   });
 
   useEffect(() => {
     if (socket) {
       socket.on('scheduleUpdate', () => {
-        queryClient.invalidateQueries(['currentSchedule']);
+        queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
       });
     }
   }, [socket, queryClient]);
@@ -61,7 +65,7 @@ export default function Dashboard() {
       setIsStartDayDialogOpen(false);
       setSelectedTemplate(null);
       setSelectedDay(1);
-      queryClient.invalidateQueries(['currentSchedule']);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
     } catch (err) {
       console.error('Error starting day:', err);
       setError(err instanceof Error ? err.message : 'Failed to start day');
@@ -74,7 +78,7 @@ export default function Dashboard() {
     if (!currentActivity) return;
     try {
       await schedules.nextActivity(currentSchedule._id, currentActivity._id);
-      queryClient.invalidateQueries(['currentSchedule']);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
     } catch (err) {
       console.error('Error skipping activity:', err);
       setError(err instanceof Error ? err.message : 'Failed to skip activity');
@@ -87,7 +91,7 @@ export default function Dashboard() {
     if (!currentActivity) return;
     try {
       await schedules.goToPreviousActivity(currentSchedule._id, currentActivity._id);
-      queryClient.invalidateQueries(['currentSchedule']);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
     } catch (err) {
       console.error('Error going to previous activity:', err);
       setError(err instanceof Error ? err.message : 'Failed to go to previous activity');
@@ -114,7 +118,7 @@ export default function Dashboard() {
     try {
       await schedules.closeDay();
       setIsCloseDayDialogOpen(false);
-      queryClient.invalidateQueries(['currentSchedule']);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
     } catch (err) {
       console.error('Error closing day:', err);
       setError(err instanceof Error ? err.message : 'Failed to close day');
@@ -126,7 +130,7 @@ export default function Dashboard() {
       await schedules.cancelDay();
       setIsCancelDayDialogOpen(false);
       setIsStartDayDialogOpen(true);
-      queryClient.invalidateQueries(['currentSchedule']);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
     } catch (error) {
       setError('Failed to cancel day. Please try again.');
     }
@@ -153,7 +157,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-lg shadow-sm">
         <div>
-          {currentSchedule ? (
+          {currentSchedule?.title ? (
             <>
               <h1 className="text-3xl font-bold text-gray-900">
                 {currentSchedule.title.includes(' - Day') 
@@ -169,7 +173,7 @@ export default function Dashboard() {
             </>
           )}
         </div>
-        {!currentSchedule ? (
+        {!currentSchedule?.title ? (
           <Button
             onClick={() => setIsStartDayDialogOpen(true)}
             className="bg-orange-500 hover:bg-orange-600 text-white"
@@ -203,7 +207,7 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {currentSchedule ? (
+      {currentSchedule?.title ? (
         <div className="space-y-8">
           {/* Activity Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
@@ -336,7 +340,7 @@ export default function Dashboard() {
               <Select
                 value={selectedTemplate?._id}
                 onValueChange={(value) => {
-                  const template = availableTemplates?.find(t => t._id === value);
+                  const template = availableTemplates?.find((t: Template) => t._id === value);
                   setSelectedTemplate(template || null);
                 }}
               >
@@ -344,7 +348,7 @@ export default function Dashboard() {
                   <SelectValue placeholder="Select a template" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableTemplates?.map((template) => (
+                  {availableTemplates?.map((template: Template) => (
                     <SelectItem key={template._id} value={template._id}>
                       {template.name}
                     </SelectItem>
