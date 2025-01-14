@@ -35,182 +35,203 @@ const formatDuration = (minutes) => {
 
 const formatPercentage = (value) => `${Math.round(value)}%`;
 
+// Process schedules to get statistics
+const processSchedules = (schedules) => {
+  const statistics = {
+    adherence: [],
+    durations: [],
+    daySpecificStats: {},
+    onTimeStartRate: 0,
+    totalTrainingDays: schedules.length,
+    mostDelayedActivities: [],
+    mostEfficientActivities: []
+  };
+
+  let totalActivities = 0;
+  let onTimeStarts = 0;
+  const activityStats = new Map();
+  const dayStats = new Map();
+
+  schedules.forEach(schedule => {
+    const dayKey = `${schedule.templateId?._id}-${schedule.selectedDay}`;
+    if (!dayStats.has(dayKey)) {
+      dayStats.set(dayKey, {
+        templateId: schedule.templateId?._id,
+        day: schedule.selectedDay,
+        activities: new Map()
+      });
+    }
+    
+    schedule.activities.forEach(activity => {
+      totalActivities++;
+      
+      if (!activityStats.has(activity.name)) {
+        activityStats.set(activity.name, {
+          onTime: 0,
+          delayed: 0,
+          totalTimeVariance: 0,
+          count: 0
+        });
+      }
+      const stats = activityStats.get(activity.name);
+      stats.count++;
+      
+      if (activity.actualStartTime) {
+        const scheduledStart = parseISO(`${schedule.date.toISOString().split('T')[0]}T${activity.startTime}`);
+        const actualStart = new Date(activity.actualStartTime);
+        
+        if (actualStart <= scheduledStart) {
+          stats.onTime++;
+          onTimeStarts++;
+        } else {
+          stats.delayed++;
+        }
+        
+        if (activity.actualEndTime) {
+          const actualDuration = differenceInMinutes(
+            new Date(activity.actualEndTime),
+            new Date(activity.actualStartTime)
+          );
+          const variance = actualDuration - activity.duration;
+          stats.totalTimeVariance += variance;
+
+          const dayActivities = dayStats.get(dayKey).activities;
+          if (!dayActivities.has(activity.name)) {
+            dayActivities.set(activity.name, {
+              timeVariances: [],
+              scheduledDuration: activity.duration
+            });
+          }
+          dayActivities.get(activity.name).timeVariances.push(variance);
+        }
+      }
+    });
+  });
+
+  // Calculate adherence statistics
+  activityStats.forEach((stats, name) => {
+    statistics.adherence.push({
+      activity: name,
+      onTime: formatPercentage((stats.onTime / stats.count) * 100),
+      delayed: formatPercentage((stats.delayed / stats.count) * 100),
+      averageVariance: formatDuration(stats.totalTimeVariance / stats.count)
+    });
+  });
+
+  // Calculate day-specific statistics
+  dayStats.forEach((dayData, key) => {
+    const dayStats = {
+      activities: []
+    };
+
+    dayData.activities.forEach((stats, activityName) => {
+      const averageVariance = stats.timeVariances.reduce((a, b) => a + b, 0) / stats.timeVariances.length;
+      dayStats.activities.push({
+        name: activityName,
+        scheduledDuration: formatDuration(stats.scheduledDuration),
+        averageActualDuration: formatDuration(stats.scheduledDuration + averageVariance),
+        averageVariance: formatDuration(averageVariance)
+      });
+    });
+
+    statistics.daySpecificStats[key] = dayStats;
+  });
+
+  // Calculate most delayed and most efficient activities
+  const delayedActivities = [...activityStats.entries()]
+    .map(([name, stats]) => ({
+      name,
+      averageVariance: stats.totalTimeVariance / stats.count
+    }))
+    .sort((a, b) => b.averageVariance - a.averageVariance)
+    .slice(0, 5)
+    .map(activity => ({
+      name: activity.name,
+      averageDelay: formatDuration(Math.abs(activity.averageVariance))
+    }));
+
+  const efficientActivities = [...activityStats.entries()]
+    .map(([name, stats]) => ({
+      name,
+      averageVariance: stats.totalTimeVariance / stats.count
+    }))
+    .sort((a, b) => a.averageVariance - b.averageVariance)
+    .slice(0, 5)
+    .map(activity => ({
+      name: activity.name,
+      averageTimeSaved: formatDuration(Math.abs(activity.averageVariance))
+    }));
+
+  statistics.mostDelayedActivities = delayedActivities;
+  statistics.mostEfficientActivities = efficientActivities;
+  statistics.onTimeStartRate = formatPercentage((onTimeStarts / totalActivities) * 100);
+
+  return statistics;
+};
+
 // Get statistics
 router.get('/',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
     try {
-      const { trainer, training, dateRange, day } = req.query;
+      const { trainer, training, dateRange } = req.query;
       
-      // Build query
-      const query = {
+      // Build base query
+      const baseQuery = {
         status: 'completed',
         date: getDateFilter(dateRange)
       };
       
-      if (trainer !== 'all') {
-        query.createdBy = trainer;
-      }
-      
       if (training !== 'all') {
-        query.templateId = training;
+        baseQuery.templateId = training;
       }
 
-      // Fetch completed schedules (excluding cancelled ones)
-      const schedules = await Schedule.find(query)
-        .populate('createdBy', 'firstName lastName email')
-        .populate('templateId', 'name days');
+      // Get all templates and trainers first
+      const [templates, trainers] = await Promise.all([
+        Template.find({}),
+        User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email')
+      ]);
 
-      // Get all templates for the filter
-      const templates = await Template.find({});
+      // If specific trainer, just get their stats
+      if (trainer !== 'all') {
+        baseQuery.createdBy = trainer;
+        const schedules = await Schedule.find(baseQuery)
+          .populate('createdBy', 'firstName lastName email')
+          .populate('templateId', 'name days');
 
-      // Get all trainers
-      const trainers = await User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email');
-
-      // Process schedules
-      const statistics = {
-        adherence: [],
-        durations: [],
-        daySpecificStats: {},
-        onTimeStartRate: 0,
-        totalTrainingDays: schedules.length,
-        mostDelayedActivities: [],
-        mostEfficientActivities: [],
-        trainers: trainers.map(t => ({
+        const statistics = processSchedules(schedules);
+        statistics.trainers = trainers.map(t => ({
           _id: t._id,
           name: `${t.firstName} ${t.lastName}`,
           email: t.email
-        })),
-        trainings: templates.map(t => ({
+        }));
+        statistics.trainings = templates.map(t => ({
           _id: t._id,
           name: t.name,
           days: t.days
-        }))
-      };
-
-      let totalActivities = 0;
-      let onTimeStarts = 0;
-      const activityStats = new Map();
-      const dayStats = new Map();
-
-      schedules.forEach(schedule => {
-        const dayKey = `${schedule.templateId?._id}-${schedule.selectedDay}`;
-        if (!dayStats.has(dayKey)) {
-          dayStats.set(dayKey, {
-            templateId: schedule.templateId?._id,
-            day: schedule.selectedDay,
-            activities: new Map()
-          });
-        }
-        
-        schedule.activities.forEach(activity => {
-          totalActivities++;
-          
-          // Track activity stats
-          if (!activityStats.has(activity.name)) {
-            activityStats.set(activity.name, {
-              onTime: 0,
-              delayed: 0,
-              totalTimeVariance: 0,
-              count: 0
-            });
-          }
-          const stats = activityStats.get(activity.name);
-          stats.count++;
-          
-          // Check start time adherence
-          if (activity.actualStartTime) {
-            const scheduledStart = parseISO(`${schedule.date.toISOString().split('T')[0]}T${activity.startTime}`);
-            const actualStart = new Date(activity.actualStartTime);
-            
-            // Consider on time if started at scheduled time or before
-            if (actualStart <= scheduledStart) {
-              stats.onTime++;
-              onTimeStarts++;
-            } else {
-              stats.delayed++;
-            }
-            
-            // Calculate time variance if we have both start and end times
-            if (activity.actualEndTime) {
-              const actualDuration = differenceInMinutes(
-                new Date(activity.actualEndTime),
-                new Date(activity.actualStartTime)
-              );
-              const variance = actualDuration - activity.duration;
-              stats.totalTimeVariance += variance;
-
-              // Track day-specific stats
-              const dayActivities = dayStats.get(dayKey).activities;
-              if (!dayActivities.has(activity.name)) {
-                dayActivities.set(activity.name, {
-                  timeVariances: [],
-                  scheduledDuration: activity.duration
-                });
-              }
-              dayActivities.get(activity.name).timeVariances.push(variance);
-            }
-          }
-        });
-      });
-
-      // Calculate adherence statistics
-      activityStats.forEach((stats, name) => {
-        statistics.adherence.push({
-          activity: name,
-          onTime: formatPercentage((stats.onTime / stats.count) * 100),
-          delayed: formatPercentage((stats.delayed / stats.count) * 100),
-          averageVariance: formatDuration(stats.totalTimeVariance / stats.count)
-        });
-      });
-
-      // Calculate day-specific statistics
-      dayStats.forEach((dayData, key) => {
-        const dayStats = {
-          activities: []
-        };
-
-        dayData.activities.forEach((stats, activityName) => {
-          const averageVariance = stats.timeVariances.reduce((a, b) => a + b, 0) / stats.timeVariances.length;
-          dayStats.activities.push({
-            name: activityName,
-            scheduledDuration: formatDuration(stats.scheduledDuration),
-            averageActualDuration: formatDuration(stats.scheduledDuration + averageVariance),
-            averageVariance: formatDuration(averageVariance)
-          });
-        });
-
-        statistics.daySpecificStats[key] = dayStats;
-      });
-
-      // Calculate most delayed and most efficient activities
-      const delayedActivities = [...activityStats.entries()]
-        .map(([name, stats]) => ({
-          name,
-          averageVariance: stats.totalTimeVariance / stats.count
-        }))
-        .sort((a, b) => b.averageVariance - a.averageVariance)
-        .slice(0, 5)
-        .map(activity => ({
-          name: activity.name,
-          averageDelay: formatDuration(Math.abs(activity.averageVariance))
         }));
 
-      const efficientActivities = [...activityStats.entries()]
-        .map(([name, stats]) => ({
-          name,
-          averageVariance: stats.totalTimeVariance / stats.count
-        }))
-        .sort((a, b) => a.averageVariance - b.averageVariance)
-        .slice(0, 5)
-        .map(activity => ({
-          name: activity.name,
-          averageTimeSaved: formatDuration(Math.abs(activity.averageVariance))
-        }));
+        return res.json(statistics);
+      }
 
-      statistics.mostDelayedActivities = delayedActivities;
-      statistics.mostEfficientActivities = efficientActivities;
-      statistics.onTimeStartRate = formatPercentage((onTimeStarts / totalActivities) * 100);
+      // For all trainers, use aggregation to get schedules in one query
+      const schedules = await Schedule.find(baseQuery)
+        .populate('createdBy', 'firstName lastName email')
+        .populate('templateId', 'name days')
+        .lean()
+        .maxTimeMS(30000); // Set maximum execution time to 30 seconds
+
+      const statistics = processSchedules(schedules);
+      statistics.trainers = trainers.map(t => ({
+        _id: t._id,
+        name: `${t.firstName} ${t.lastName}`,
+        email: t.email
+      }));
+      statistics.trainings = templates.map(t => ({
+        _id: t._id,
+        name: t.name,
+        days: t.days
+      }));
 
       res.json(statistics);
     } catch (error) {

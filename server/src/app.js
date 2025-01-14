@@ -47,8 +47,8 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Body parser
-app.use(express.json({ limit: '10kb' })); // Body limit is 10kb
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // CORS configuration
 const corsOptions = {
@@ -71,7 +71,7 @@ app.use(passport.initialize());
 app.use(morgan('combined', { stream: logger.stream }));
 
 // MongoDB Connection configuration
-const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ontrak';
+const mongoUri = process.env.MONGODB_URI || 'mongodb://mongodb:27017/ontrak';
 
 // MongoDB Connection with retry logic and proper error handling
 const connectWithRetry = async (retries = 5, delay = 5000) => {

@@ -1,20 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Tooltip,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-} from '@mui/material';
+import { Grid } from '@mui/material';
 import {
   BarChart,
   Bar,
@@ -28,11 +13,19 @@ import {
   Pie,
   ReferenceLine,
 } from 'recharts';
-import {
-  Info as InfoIcon,
-} from '@mui/icons-material';
+import { Info as InfoIcon, Download as DownloadIcon } from '@mui/icons-material';
 import { useQuery, useQueries } from 'react-query';
 import { schedules } from '../services/api';
+import { logger } from '../utils/logger';
+
+// Shadcn components
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { ScrollArea } from "../components/ui/scroll-area";
+import { Badge } from "../components/ui/badge";
+import { Progress } from "../components/ui/progress";
+import { Button } from "../components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 
 interface StatisticsFilters {
   trainer: string;
@@ -86,9 +79,78 @@ interface TimeVarianceData {
 }
 
 const TIMING_COLORS = {
-  onTime: '#4CAF50',
-  early: '#2196F3',
-  late: '#EF5350'
+  onTime: '#22c55e',  // green-500
+  early: '#3b82f6',   // blue-500
+  late: '#f43f5e'     // rose-500
+};
+
+const CHART_COLORS = {
+  positive: '#22c55e',  // green-500
+  negative: '#f43f5e',  // rose-500
+  neutral: '#3b82f6'    // blue-500
+};
+
+const exportStatisticsToCSV = (statsData: StatisticsData | undefined) => {
+  if (!statsData) return;
+
+  // Prepare the data arrays
+  const rows = [
+    // Header row
+    ['Category', 'Metric', 'Value'],
+    
+    // Overview stats
+    ['Overview', 'On-Time Start Rate', statsData.onTimeStartRate],
+    ['Overview', 'Total Training Days', statsData.totalTrainingDays.toString()],
+    
+    // Add a blank row
+    [],
+    
+    // Delayed Activities
+    ['Delayed Activities', 'Activity Name', 'Average Delay'],
+    ...statsData.mostDelayedActivities.map(activity => 
+      ['Delayed Activities', activity.name, activity.averageDelay]
+    ),
+    
+    // Add a blank row
+    [],
+    
+    // Efficient Activities
+    ['Efficient Activities', 'Activity Name', 'Average Time Saved'],
+    ...statsData.mostEfficientActivities.map(activity => 
+      ['Efficient Activities', activity.name, activity.averageTimeSaved]
+    ),
+    
+    // Add a blank row
+    [],
+    
+    // Adherence Data
+    ['Adherence', 'Activity', 'On Time', 'Delayed', 'Average Variance'],
+    ...statsData.adherence.map(item => 
+      ['Adherence', item.activity, item.onTime, item.delayed, item.averageVariance]
+    )
+  ];
+
+  // Convert to CSV
+  const csvContent = rows
+    .map(row => row.map(cell => `"${cell}"`).join(','))
+    .join('\n');
+
+  // Create blob and download
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  // Generate filename with current date
+  const date = new Date().toISOString().split('T')[0];
+  const filename = `training_statistics_${date}.csv`;
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  logger.info('Statistics exported successfully');
 };
 
 const Statistics: React.FC = () => {
@@ -117,6 +179,11 @@ const Statistics: React.FC = () => {
     },
     {
       refetchInterval: false,
+      staleTime: 30000, // Consider data fresh for 30 seconds
+      retry: 3, // Retry failed requests 3 times
+      onError: (error) => {
+        logger.error('Error fetching statistics:', error);
+      }
     }
   );
 
@@ -214,7 +281,7 @@ const Statistics: React.FC = () => {
     if (!statsData || filters.trainer !== 'all') return [];
     
     return statsData.trainers.map((trainer, index) => {
-      const trainerStats = trainerResults[index]?.data;
+      const trainerStats = trainerResults[index]?.data as StatisticsData | undefined;
       if (!trainerStats) return { name: trainer.name, timeVariance: 0 };
       
       // Calculate average variance based on the selected view
@@ -232,16 +299,9 @@ const Statistics: React.FC = () => {
           };
         } else {
           // All days for specific training
-          interface ActivityData {
-            activities: Array<{ averageVariance: string }>;
-          }
-          
           const daysData = Object.entries(trainerStats.daySpecificStats)
             .filter(([key]) => key.startsWith(filters.training))
-            .map(([_, data]) => {
-              const typedData = data as ActivityData;
-              return typedData.activities;
-            })
+            .map(([_, data]: [string, { activities: Array<{ averageVariance: string }> }]) => data.activities)
             .flat();
 
           const totalVariance = daysData.reduce((sum: number, activity: { averageVariance: string }) => {
@@ -294,7 +354,7 @@ const Statistics: React.FC = () => {
     ];
   };
 
-  const handleBarClick = (data: any) => {
+  const handleBarClick = (data: { name: string }) => {
     if (!data || !statsData) return;
 
     // Determine what type of data was clicked based on current view
@@ -313,7 +373,7 @@ const Statistics: React.FC = () => {
     }
   };
 
-  const handleTrainerBarClick = (data: any) => {
+  const handleTrainerBarClick = (data: { name: string }) => {
     if (!data || !statsData) return;
     const trainer = statsData.trainers.find(t => t.name === data.name);
     if (trainer) {
@@ -321,397 +381,363 @@ const Statistics: React.FC = () => {
     }
   };
 
-  const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => (
-    <Grid item xs={12}>
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          {title}
-          <Tooltip title="Shows how much time was saved (negative values) or exceeded (positive values) compared to scheduled duration">
-            <IconButton size="small" sx={{ ml: 1 }}>
-              <InfoIcon />
-            </IconButton>
-          </Tooltip>
-        </Typography>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-            <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
-            <XAxis dataKey="name" />
-            <YAxis 
-              label={{ 
-                value: 'Time Variance (minutes)', 
-                angle: -90, 
-                position: 'insideLeft' 
-              }}
-              domain={['auto', 'auto']}
-              tickFormatter={(value) => Math.round(value).toString()}
-            />
-            <RechartsTooltip 
-              formatter={(value: number) => [`${value} minutes`, 'Time Variance']}
-            />
-            <Bar 
-              dataKey="timeVariance" 
-              name="Time Variance"
-              fill="#4CAF50"
-              animationDuration={300}
-              onClick={(data) => isTrainerChart ? handleTrainerBarClick(data) : handleBarClick(data)}
-              onMouseEnter={(data, index) => {
-                const bar = document.querySelector(`#bar-${index}`) as SVGElement;
-                if (bar) {
-                  bar.style.opacity = '0.9';
-                }
-              }}
-              onMouseLeave={(data, index) => {
-                const bar = document.querySelector(`#bar-${index}`) as SVGElement;
-                if (bar) {
-                  bar.style.opacity = '1';
-                }
-              }}
-            >
-              {data.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`}
-                  id={`bar-${index}`}
-                  fill={entry.timeVariance > 0 ? '#EF5350' : '#4CAF50'}
-                  style={{ 
-                    cursor: 'pointer',
-                    transition: 'opacity 0.2s ease-in-out',
-                  }}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </Paper>
-    </Grid>
-  );
+  const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => {
+    const chartTitle = isTrainerChart ? 'Timing Performance by Trainer' : (
+      filters.training === 'all' 
+        ? 'Schedule Accuracy by Program'
+        : filters.day
+          ? 'Activity Timing Analysis'
+          : 'Daily Schedule Accuracy'
+    );
 
-  const renderTimingDistributionCharts = (data: TimeVarianceData[], title: string) => {
+    const tooltipContent = isTrainerChart 
+      ? "How accurately each trainer follows scheduled timings.\n\nCalculation: Average(Σ(actual_end_time - actual_start_time) - scheduled_duration) per trainer across all their sessions"
+      : "How well training programs stay on schedule.\n\nCalculation: Sum(actual_duration - scheduled_duration) for all activities\nNegative = Ahead of schedule, Positive = Behind schedule";
+
     return (
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={filters.trainer === 'all' ? 6 : 12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              {`${title} Timing Distribution`}
-              <Tooltip title="Distribution of activities/days based on their timing performance">
-                <IconButton size="small" sx={{ ml: 1 }}>
-                  <InfoIcon />
-                </IconButton>
-              </Tooltip>
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 300, position: 'relative' }}>
-              <ResponsiveContainer width="100%" height={300}>
+      <div className="w-full">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle>{chartTitle}</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                      <InfoIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm whitespace-pre-line">
+                    <p>{tooltipContent}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={data}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
+                  <XAxis dataKey="name" />
+                  <YAxis 
+                    label={{ 
+                      value: 'Time Variance (minutes)', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      offset: 0,
+                      style: {
+                        textAnchor: 'middle',
+                        fill: '#6b7280', // text-gray-500
+                        fontSize: 12
+                      }
+                    }}
+                    domain={['auto', 'auto']}
+                    tickFormatter={(value) => Math.round(value).toString()}
+                  />
+                  <RechartsTooltip />
+                  <Bar dataKey="timeVariance" onClick={isTrainerChart ? handleTrainerBarClick : handleBarClick}>
+                    {data.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`}
+                        fill={entry.timeVariance > 0 ? CHART_COLORS.negative : CHART_COLORS.positive}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  const renderTimingDistributionCharts = (data: TimeVarianceData[], entityType: string) => {
+    const distributionData = calculateTimingDistribution(data);
+    const chartTitle = entityType === 'Trainer' ? 'Trainer Timing Patterns' : 'Schedule Adherence Distribution';
+    const tooltipContent = entityType === 'Trainer'
+      ? "How each trainer typically manages activity timing.\n\nCalculations:\n- On Time: |actual_start - scheduled_start| ≤ 6 minutes\n- Early: actual_start < scheduled_start - 6 minutes\n- Late: actual_start > scheduled_start + 6 minutes"
+      : "Breakdown of timing performance categories.\n\nCalculations:\n- On Time: |variance| ≤ 10% of scheduled duration\n- Early: variance < -10% of scheduled duration\n- Late: variance > 10% of scheduled duration";
+    
+    return (
+      <div className="w-full">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CardTitle>{chartTitle}</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                      <InfoIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm whitespace-pre-line">
+                    <p>{tooltipContent}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height={400}>
                 <PieChart>
                   <Pie
-                    data={calculateTimingDistribution(data)}
+                    data={distributionData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
-                    animationDuration={300}
-                    label={false}
+                    outerRadius={150}
+                    label={({ name, value }) => `${name}: ${value}`}
                   >
-                    {calculateTimingDistribution(data).map((entry, index) => (
+                    {distributionData.map((entry, index) => (
                       <Cell 
                         key={`cell-${index}`}
-                        fill={Object.values(TIMING_COLORS)[index]}
+                        fill={
+                          entry.name.includes('On Time') ? TIMING_COLORS.onTime :
+                          entry.name.includes('Early') ? TIMING_COLORS.early :
+                          TIMING_COLORS.late
+                        }
                       />
                     ))}
                   </Pie>
-                  <RechartsTooltip 
-                    formatter={(value: any, name: string) => [`${value} (${((Number(value) / data.length) * 100).toFixed(0)}%)`, name]}
-                  />
+                  <RechartsTooltip />
                 </PieChart>
               </ResponsiveContainer>
-              <Box sx={{ 
-                position: 'absolute', 
-                bottom: 0, 
-                display: 'flex', 
-                justifyContent: 'center', 
-                gap: 2,
-                backgroundColor: 'white',
-                p: 1,
-                borderRadius: 1
-              }}>
-                {Object.entries(TIMING_COLORS).map(([key, color]) => (
-                  <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Box sx={{ width: 12, height: 12, backgroundColor: color, borderRadius: '50%' }} />
-                    <Typography variant="caption">{key.charAt(0).toUpperCase() + key.slice(1)}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          </Paper>
-        </Grid>
-        {filters.trainer === 'all' && (
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Trainer Timing Distribution
-                <Tooltip title="Distribution of trainers based on their timing performance">
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: 300, position: 'relative' }}>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={calculateTimingDistribution(trainerVarianceData)}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      animationDuration={300}
-                      label={false}
-                    >
-                      {calculateTimingDistribution(trainerVarianceData).map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`}
-                          fill={Object.values(TIMING_COLORS)[index]}
-                        />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip 
-                      formatter={(value: any, name: string) => [`${value} (${((Number(value) / trainerVarianceData.length) * 100).toFixed(0)}%)`, name]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <Box sx={{ 
-                  position: 'absolute', 
-                  bottom: 0, 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  gap: 2,
-                  backgroundColor: 'white',
-                  p: 1,
-                  borderRadius: 1
-                }}>
-                  {Object.entries(TIMING_COLORS).map(([key, color]) => (
-                    <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Box sx={{ width: 12, height: 12, backgroundColor: color, borderRadius: '50%' }} />
-                      <Typography variant="caption">{key.charAt(0).toUpperCase() + key.slice(1)}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            </Paper>
-          </Grid>
-        )}
-      </Grid>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        {/* Header with navigation */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4" color="#003366">
-            Training Statistics
-          </Typography>
-        </Box>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-lg shadow-sm">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Statistics</h1>
+          <p className="text-gray-600 mt-2">Training performance analysis</p>
+        </div>
+        <Button
+          className="bg-green-600 hover:bg-green-700 text-white"
+          onClick={() => {
+            try {
+              exportStatisticsToCSV(statsData);
+            } catch (error) {
+              logger.error('Error exporting statistics:', error);
+            }
+          }}
+        >
+          <DownloadIcon className="mr-2 h-4 w-4" />
+          Export Data
+        </Button>
+      </div>
 
-        {/* Filters */}
-        <Paper sx={{ p: 3, mb: 4 }}>
+      <Card className="mb-4">
+        <CardContent className="pt-6">
           <Grid container spacing={3}>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
-                <InputLabel>Trainer</InputLabel>
-                <Select
-                  value={selectedTrainer || 'all'}
-                  onChange={(e) => setSelectedTrainer(e.target.value === 'all' ? '' : e.target.value)}
-                >
-                  <MenuItem value="all">All Trainers</MenuItem>
+              <Select
+                value={selectedTrainer || 'all'}
+                onValueChange={(value) => setSelectedTrainer(value === 'all' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Trainer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Trainers</SelectItem>
                   {(statsData?.trainers || []).map((trainer) => (
-                    <MenuItem key={trainer._id} value={trainer._id}>
+                    <SelectItem key={trainer._id} value={trainer._id}>
                       {trainer.name}
-                    </MenuItem>
+                    </SelectItem>
                   ))}
-                </Select>
-              </FormControl>
+                </SelectContent>
+              </Select>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
-                <InputLabel>Training</InputLabel>
-                <Select
-                  value={filters.training}
-                  onChange={(e) => setFilters({ ...filters, training: e.target.value, day: undefined })}
-                >
-                  <MenuItem value="all">All Trainings</MenuItem>
+              <Select
+                value={filters.training}
+                onValueChange={(value) => setFilters({ ...filters, training: value, day: undefined })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Training" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Trainings</SelectItem>
                   {(statsData?.trainings || []).map((training) => (
-                    <MenuItem key={training._id} value={training._id}>
+                    <SelectItem key={training._id} value={training._id}>
                       {training.name}
-                    </MenuItem>
+                    </SelectItem>
                   ))}
-                </Select>
-              </FormControl>
+                </SelectContent>
+              </Select>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
-                <InputLabel>Day</InputLabel>
-                <Select
-                  value={filters.day?.toString() || 'all'}
-                  onChange={(e) => setFilters({ ...filters, day: e.target.value === 'all' ? undefined : Number(e.target.value) })}
-                  disabled={!selectedTraining}
-                >
-                  <MenuItem value="all">All Days</MenuItem>
+              <Select
+                value={filters.day?.toString() || 'all'}
+                onValueChange={(value) => setFilters({ 
+                  ...filters, 
+                  day: value === 'all' ? undefined : parseInt(value) 
+                })}
+                disabled={!selectedTraining}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Day" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Days</SelectItem>
                   {selectedTraining?.days && Array.from({ length: selectedTraining.days }, (_, i) => (
-                    <MenuItem key={i + 1} value={i + 1}>
+                    <SelectItem key={i + 1} value={(i + 1).toString()}>
                       Day {i + 1}
-                    </MenuItem>
+                    </SelectItem>
                   ))}
-                </Select>
-              </FormControl>
+                </SelectContent>
+              </Select>
             </Grid>
             <Grid item xs={12} md={3}>
-              <FormControl fullWidth size="small" sx={{ '& .MuiInputLabel-root': { backgroundColor: 'white', px: 1 } }}>
-                <InputLabel>Date Range</InputLabel>
-                <Select
-                  value={filters.dateRange}
-                  onChange={(e) => setFilters({ ...filters, dateRange: e.target.value as any })}
-                >
-                  <MenuItem value="week">Last Week</MenuItem>
-                  <MenuItem value="month">Last Month</MenuItem>
-                  <MenuItem value="year">Last Year</MenuItem>
-                  <MenuItem value="all">All Time</MenuItem>
-                </Select>
-              </FormControl>
+              <Select
+                value={filters.dateRange}
+                onValueChange={(value) => setFilters({ ...filters, dateRange: value as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Date Range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="week">Last Week</SelectItem>
+                  <SelectItem value="month">Last Month</SelectItem>
+                  <SelectItem value="year">Last Year</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                </SelectContent>
+              </Select>
             </Grid>
           </Grid>
-        </Paper>
+        </CardContent>
+      </Card>
 
-        {/* Summary Statistics */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                On-Time Activity Start Rate
-                <Tooltip title={
-                  "Percentage of activities that started on time or early.\n\n" +
-                  "Formula: (Number of on-time starts / Total activities) × 100\n\n" +
-                  "An activity is considered 'on time' if it started at or before its scheduled start time."
-                }>
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 mb-8 max-w-3xl mx-auto">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Training Punctuality Score</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                      <InfoIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>How often activities start at their scheduled time.</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Calculation:</p>
+                    <p className="text-sm">(Number of on-time activity starts / Total number of activities) × 100</p>
+                    <p className="mt-1 text-sm">On-time = Started within ±10% of scheduled time</p>
+                  </TooltipContent>
                 </Tooltip>
-              </Typography>
-              <Typography variant="h4" color="primary">
-                {statsData?.onTimeStartRate || '0%'}
-              </Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Total Training Days Analysed
-                <Tooltip title={
-                  "Total number of completed training days in the selected period.\n\n" +
-                  "This includes:\n" +
-                  "- All days that have been marked as completed\n" +
-                  "- Days from all trainers (if no specific trainer is selected)\n" +
-                  "- Days from all training types (if no specific training is selected)"
-                }>
-                  <IconButton size="small" sx={{ ml: 1 }}>
-                    <InfoIcon />
-                  </IconButton>
-                </Tooltip>
-              </Typography>
-              <Typography variant="h4" color="primary">
-                {statsData?.totalTrainingDays || '0'} days
-              </Typography>
-            </Paper>
-          </Grid>
-        </Grid>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statsData?.onTimeStartRate || '0%'}</div>
+            <Progress 
+              value={Math.min(100, Math.max(0, Number(statsData?.onTimeStartRate?.replace('%', '') || '0')))} 
+              className="mt-2" 
+            />
+          </CardContent>
+        </Card>
 
-        {/* Time Variance Charts */}
-        <Grid container spacing={4}>
-          {/* Main time variance chart */}
-          {renderTimeVarianceChart(
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Completed Training Sessions</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                      <InfoIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>Number of fully completed training days in the selected period.</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Calculation:</p>
+                    <p className="text-sm">Count of schedules where status = 'completed'</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statsData?.totalTrainingDays || '0'} days</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 mb-8">
+        {renderTimeVarianceChart(
+          timeVarianceData,
+          filters.training === 'all' 
+            ? 'Time Variance by Training'
+            : filters.day
+              ? 'Time Variance by Activity'
+              : 'Time Variance by Day'
+        )}
+        
+        {filters.trainer === 'all' && renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)}
+        
+        <div className="grid gap-4 md:grid-cols-2">
+          {renderTimingDistributionCharts(
             timeVarianceData,
             filters.training === 'all' 
-              ? 'Time Variance by Training'
+              ? 'Training'
               : filters.day
-                ? 'Time Variance by Activity'
-                : 'Time Variance by Day'
+                ? 'Activity'
+                : 'Day'
           )}
           
-          {/* Trainer time variance chart when viewing all trainers */}
-          {filters.trainer === 'all' && (
-            renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)
-          )}
-          
-          {/* Timing distribution pie charts */}
-          <Grid item xs={12}>
-            {renderTimingDistributionCharts(
-              timeVarianceData,
-              filters.training === 'all' 
-                ? 'Training'
-                : filters.day
-                  ? 'Activity'
-                  : 'Day'
-            )}
-          </Grid>
+          {filters.trainer === 'all' && renderTimingDistributionCharts(trainerVarianceData, 'Trainer')}
+        </div>
+      </div>
 
-          {/* Most Delayed and Efficient Activities */}
-          {filters.training !== 'all' && (
-            <>
-              {/* Most Delayed Activities */}
-              <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Most Delayed Activities
-                    <Tooltip title="Activities that consistently run longer than scheduled">
-                      <IconButton size="small" sx={{ ml: 1 }}>
-                        <InfoIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Typography>
-                  <List>
-                    {(statsData?.mostDelayedActivities || []).map((activity, index) => (
-                      <ListItem key={index}>
-                        <ListItemText
-                          primary={activity.name}
-                          secondary={`Average delay: ${activity.averageDelay}`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              </Grid>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Most Delayed Activities</CardTitle>
+            <CardDescription>Activities that consistently run longer than scheduled</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px]">
+              {(statsData?.mostDelayedActivities || []).map((activity, index) => (
+                <div key={index} className="flex justify-between items-center py-2">
+                  <span>{activity.name}</span>
+                  <Badge variant="secondary">Average delay: {activity.averageDelay}</Badge>
+                </div>
+              ))}
+            </ScrollArea>
+          </CardContent>
+        </Card>
 
-              {/* Most Efficient Activities */}
-              <Grid item xs={12} md={6}>
-                <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Most Efficient Activities
-                    <Tooltip title="Activities that are consistently completed faster than scheduled">
-                      <IconButton size="small" sx={{ ml: 1 }}>
-                        <InfoIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </Typography>
-                  <List>
-                    {(statsData?.mostEfficientActivities || []).map((activity, index) => (
-                      <ListItem key={index}>
-                        <ListItemText
-                          primary={activity.name}
-                          secondary={`Average time saved: ${activity.averageTimeSaved}`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              </Grid>
-            </>
-          )}
-        </Grid>
-      </Box>
-    </Container>
+        <Card>
+          <CardHeader>
+            <CardTitle>Most Efficient Activities</CardTitle>
+            <CardDescription>Activities that consistently finish ahead of schedule</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px]">
+              {(statsData?.mostEfficientActivities || []).map((activity, index) => (
+                <div key={index} className="flex justify-between items-center py-2">
+                  <span>{activity.name}</span>
+                  <Badge variant="secondary">Time saved: {activity.averageTimeSaved}</Badge>
+                </div>
+              ))}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 };
 
