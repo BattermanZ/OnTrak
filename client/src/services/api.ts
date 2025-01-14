@@ -248,12 +248,12 @@ const schedules = {
   cancelDay: () => api.post('/schedules/cancel-day'),
   nextActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/next/${activityId}`),
   goToPreviousActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/previous/${activityId}`),
-  getStatistics: (filters: { trainer: string; training: string; dateRange: string }) => api.get('/statistics', { params: filters }),
+  getStatistics: (filters: { trainer: string; training: string; dateRange: string; day?: number }) => api.get('/statistics', { params: filters }),
 };
 
 // Add statistics object
 const statistics = {
-  getStatistics: async (filters: { trainer: string; training: string; dateRange: string }) => {
+  getStatistics: async (filters: { trainer: string; training: string; dateRange: string; day?: number }) => {
     try {
       logger.debug('Fetching statistics', filters);
       const response = await api.get('/statistics', { params: filters });

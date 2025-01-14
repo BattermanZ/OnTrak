@@ -38,12 +38,17 @@ const formatPercentage = (value) => `${Math.round(value)}%`;
 // Process schedules to get statistics
 const processSchedules = (schedules, trainerId = null) => {
   try {
+    // Filter schedules by trainer if specified
+    const filteredSchedules = trainerId && schedules
+      ? schedules.filter(s => s?.createdBy?._id?.toString() === trainerId)
+      : schedules || [];
+
     const statistics = {
       adherence: [],
       durations: [],
       daySpecificStats: {},
       onTimeStartRate: 0,
-      totalTrainingDays: schedules?.length || 0,
+      totalTrainingDays: filteredSchedules.length, // Use filtered schedules count
       mostDelayedActivities: [],
       mostEfficientActivities: []
     };
@@ -52,11 +57,6 @@ const processSchedules = (schedules, trainerId = null) => {
     let onTimeStarts = 0;
     const activityStats = new Map();
     const dayStats = new Map();
-
-    // Filter schedules by trainer if specified
-    const filteredSchedules = trainerId && schedules
-      ? schedules.filter(s => s?.createdBy?._id?.toString() === trainerId)
-      : schedules || [];
 
     filteredSchedules.forEach(schedule => {
       if (!schedule?.templateId?._id || !schedule?.selectedDay) {
@@ -232,6 +232,10 @@ router.get('/',
 
       if (training !== 'all') {
         baseQuery.templateId = training;
+        // Add day filter if specified
+        if (req.query.day) {
+          baseQuery.selectedDay = parseInt(req.query.day);
+        }
       }
 
       // Get all templates and trainers first

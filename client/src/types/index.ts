@@ -109,8 +109,8 @@ export interface StatisticsData {
 export interface StatisticsFilters {
   trainer: string;
   training: string;
-  day?: number;
   dateRange: string;
+  day?: number;
 }
 
 export interface TimeVarianceData {

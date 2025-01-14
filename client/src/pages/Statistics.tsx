@@ -93,7 +93,12 @@ export default function Statistics() {
     queryFn: async () => {
       try {
         logger.debug('Fetching statistics with filters:', filters);
-        const response = await schedules.getStatistics(filters);
+        const response = await schedules.getStatistics({
+          trainer: filters.trainer,
+          training: filters.training,
+          dateRange: filters.dateRange,
+          day: filters.day
+        });
         logger.debug('Statistics response:', response.data);
         return response.data;
       } catch (error) {
