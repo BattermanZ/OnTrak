@@ -46,9 +46,61 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Body parser
+// Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Add request timeout middleware
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    logger.error('Request timeout', { 
+      method: req.method,
+      url: req.url,
+      duration: 30000
+    });
+    res.status(408).json({ message: 'Request timeout' });
+  });
+  next();
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error:', { 
+    error: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method
+  });
+  
+  if (err.name === 'PayloadTooLargeError') {
+    return res.status(413).json({
+      message: 'Request entity too large',
+      details: 'The request payload is too large. Please reduce the amount of data being sent.'
+    });
+  }
+  
+  res.status(err.status || 500).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err : {}
+  });
+});
+
+// Add memory monitoring
+const used = process.memoryUsage();
+setInterval(() => {
+  const currentUsage = process.memoryUsage();
+  const usage = {
+    heapUsed: `${Math.round(currentUsage.heapUsed / 1024 / 1024 * 100) / 100} MB`,
+    heapTotal: `${Math.round(currentUsage.heapTotal / 1024 / 1024 * 100) / 100} MB`,
+    rss: `${Math.round(currentUsage.rss / 1024 / 1024 * 100) / 100} MB`
+  };
+  
+  if (currentUsage.heapUsed > used.heapUsed * 1.5) {
+    logger.warn('High memory usage detected', usage);
+  }
+  
+  logger.debug('Memory usage', usage);
+}, 60000);
 
 // CORS configuration
 const corsOptions = {
@@ -207,4 +259,38 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3456;
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server is running on 0.0.0.0:${PORT}`);
+});
+
+// Add graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Starting graceful shutdown...');
+  server.close(() => {
+    logger.info('HTTP server closed');
+    mongoose.connection.close(false, () => {
+      logger.info('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+  
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    logger.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 30000);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception:', {
+    error: err.message,
+    stack: err.stack
+  });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', {
+    promise,
+    reason: reason instanceof Error ? reason.message : reason,
+    stack: reason instanceof Error ? reason.stack : undefined
+  });
 }); 

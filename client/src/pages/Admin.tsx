@@ -1,38 +1,38 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
-import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Button,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Tooltip,
-  Alert,
-  SelectChangeEvent,
-} from '@mui/material';
-import {
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
+import React, { useState, useEffect } from 'react';
+import { Edit, Trash2, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/api';
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Alert, AlertDescription } from "../components/ui/alert";
 
 interface UserFormData {
   email: string;
@@ -97,7 +97,7 @@ const Admin = () => {
   };
 
   const handleInputChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | SelectChangeEvent
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { name: string; value: string } }
   ) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -136,157 +136,186 @@ const Admin = () => {
   };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        {/* Header with navigation */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4" color="#003366">
-            User Management
-          </Typography>
-        </Box>
+    <div className="container mx-auto p-6">
+      {/* Header with red gradient banner */}
+      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-red-50 to-red-100 p-6 rounded-lg shadow-sm">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+          <p className="text-gray-600 mt-2">Manage system users and permissions</p>
+        </div>
+        <Button
+          onClick={() => handleOpenDialog()}
+          className="bg-red-600 hover:bg-red-700 text-white"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add User
+        </Button>
+      </div>
 
-        {/* Success/Error Messages */}
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
-            {success}
-          </Alert>
-        )}
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
-        )}
+      {/* Success/Error Messages */}
+      {success && (
+        <Alert className="mb-6">
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {/* User List */}
-        <Paper sx={{ mb: 4 }}>
-          <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Users</Typography>
-            <Button
-              startIcon={<AddIcon />}
-              variant="contained"
-              onClick={() => handleOpenDialog()}
-            >
-              Add User
-            </Button>
-          </Box>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Last Login</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+      {/* User List */}
+      <Card>
+        <CardHeader>
+          <CardTitle>System Users</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3">Name</th>
+                  <th scope="col" className="px-6 py-3">Email</th>
+                  <th scope="col" className="px-6 py-3">Role</th>
+                  <th scope="col" className="px-6 py-3">Last Login</th>
+                  <th scope="col" className="px-6 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
                 {users.map((userItem) => (
-                  <TableRow key={userItem._id}>
-                    <TableCell>{`${userItem.firstName} ${userItem.lastName}`}</TableCell>
-                    <TableCell>{userItem.email}</TableCell>
-                    <TableCell sx={{ textTransform: 'capitalize' }}>{userItem.role}</TableCell>
-                    <TableCell>
+                  <tr key={userItem._id} className="bg-white border-b">
+                    <td className="px-6 py-4">{`${userItem.firstName} ${userItem.lastName}`}</td>
+                    <td className="px-6 py-4">{userItem.email}</td>
+                    <td className="px-6 py-4 capitalize">{userItem.role}</td>
+                    <td className="px-6 py-4">
                       {userItem.lastLogin ? new Date(userItem.lastLogin).toLocaleString() : 'Never'}
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Edit">
-                        <IconButton onClick={() => handleOpenDialog(userItem)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton 
-                          onClick={() => handleDeleteUser(userItem._id)}
-                          disabled={userItem._id === currentUser?._id} // Prevent self-deletion
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenDialog(userItem)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit user</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteUser(userItem._id)}
+                              disabled={userItem._id === currentUser?._id}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete user</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Add/Edit User Dialog */}
-        <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-          <DialogTitle>
-            {editingUser ? 'Edit User' : 'Add User'}
-          </DialogTitle>
-          <DialogContent>
-            <Box component="form" noValidate sx={{ mt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    name="firstName"
-                    label="First Name"
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    name="lastName"
-                    label="Last Name"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    name="email"
-                    label="Email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required
-                    type="email"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    name="password"
-                    label={editingUser ? "New Password (leave empty to keep current)" : "Password"}
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    fullWidth
-                    required={!editingUser}
-                    type="password"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Role</InputLabel>
-                    <Select
-                      name="role"
-                      value={formData.role}
-                      onChange={handleInputChange}
-                      label="Role"
-                    >
-                      <MenuItem value="trainer">Trainer</MenuItem>
-                      <MenuItem value="admin">Admin</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button onClick={handleSubmit} variant="contained">
-              {editingUser ? 'Save' : 'Create'}
+      {/* Add/Edit User Dialog */}
+      <Dialog open={openDialog} onOpenChange={(open) => {
+        if (!open) handleCloseDialog();
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
+            <DialogDescription>
+              {editingUser 
+                ? 'Update the user details below.' 
+                : 'Fill in the details to create a new user.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">First Name</label>
+                <Input
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  placeholder="Enter first name"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Last Name</label>
+                <Input
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  placeholder="Enter last name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="Enter email address"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {editingUser ? "New Password (leave empty to keep current)" : "Password"}
+              </label>
+              <Input
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                placeholder={editingUser ? "Enter new password" : "Enter password"}
+                required={!editingUser}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Select
+                name="role"
+                value={formData.role}
+                onValueChange={(value) => handleInputChange({
+                  target: { name: 'role', value }
+                })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="trainer">Trainer</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseDialog}>
+              Cancel
             </Button>
-          </DialogActions>
-        </Dialog>
-      </Box>
-    </Container>
+            <Button onClick={handleSubmit}>
+              {editingUser ? 'Save Changes' : 'Create User'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

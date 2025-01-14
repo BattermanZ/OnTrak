@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
-import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Grid,
-  TextField,
-  Button,
-  Alert,
-} from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../services/api';
+import { User, Settings } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Alert, AlertDescription } from "../components/ui/alert";
 
-const Profile = () => {
+export default function Profile() {
   const { user, updateProfile } = useAuth();
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -80,157 +75,147 @@ const Profile = () => {
   };
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" color="#003366" gutterBottom>
-          Profile
-        </Typography>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header with purple gradient banner */}
+      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-purple-50 to-purple-100 p-6 rounded-lg shadow-sm">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
+          <p className="text-gray-600 mt-2">Manage your account preferences</p>
+        </div>
+        <Settings className="h-8 w-8 text-purple-600" />
+      </div>
 
-        <Grid container spacing={4}>
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                User Information
-              </Typography>
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
-              {success && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  {success}
-                </Alert>
-              )}
-              <form onSubmit={handleProfileUpdate}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="First Name"
-                      value={profileForm.firstName}
-                      onChange={(e) => setProfileForm({
-                        ...profileForm,
-                        firstName: e.target.value
-                      })}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Last Name"
-                      value={profileForm.lastName}
-                      onChange={(e) => setProfileForm({
-                        ...profileForm,
-                        lastName: e.target.value
-                      })}
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Email"
-                      value={user?.email || ''}
-                      disabled
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Role"
-                      value={user?.role || ''}
-                      disabled
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      disabled={loading}
-                      sx={{
-                        bgcolor: '#0066CC',
-                        '&:hover': {
-                          bgcolor: '#004C99',
-                        },
-                      }}
-                    >
-                      {loading ? 'Saving Changes...' : 'Save Changes'}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </form>
-            </Paper>
-          </Grid>
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {success && (
+        <Alert>
+          <AlertDescription>{success}</AlertDescription>
+        </Alert>
+      )}
 
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Change Password
-              </Typography>
-              <form onSubmit={handlePasswordChange}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Current Password"
-                      type="password"
-                      value={passwordForm.currentPassword}
-                      onChange={(e) => setPasswordForm({
-                        ...passwordForm,
-                        currentPassword: e.target.value
-                      })}
-                      required
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="New Password"
-                      type="password"
-                      value={passwordForm.newPassword}
-                      onChange={(e) => setPasswordForm({
-                        ...passwordForm,
-                        newPassword: e.target.value
-                      })}
-                      required
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Confirm New Password"
-                      type="password"
-                      value={passwordForm.confirmNewPassword}
-                      onChange={(e) => setPasswordForm({
-                        ...passwordForm,
-                        confirmNewPassword: e.target.value
-                      })}
-                      required
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      disabled={loading}
-                      sx={{
-                        bgcolor: '#0066CC',
-                        '&:hover': {
-                          bgcolor: '#004C99',
-                        },
-                      }}
-                    >
-                      {loading ? 'Changing Password...' : 'Change Password'}
-                    </Button>
-                  </Grid>
-                </Grid>
-              </form>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Box>
-    </Container>
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              User Information
+            </CardTitle>
+            <CardDescription>Update your personal details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleProfileUpdate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">First Name</label>
+                  <Input
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm({
+                      ...profileForm,
+                      firstName: e.target.value
+                    })}
+                    placeholder="Enter your first name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Last Name</label>
+                  <Input
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm({
+                      ...profileForm,
+                      lastName: e.target.value
+                    })}
+                    placeholder="Enter your last name"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  value={user?.email || ''}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Role</label>
+                <Input
+                  value={user?.role || ''}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+              <Button 
+                type="submit" 
+                disabled={loading}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {loading ? 'Saving Changes...' : 'Save Changes'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Change Password
+            </CardTitle>
+            <CardDescription>Update your account password</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Current Password</label>
+                <Input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    currentPassword: e.target.value
+                  })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Password</label>
+                <Input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    newPassword: e.target.value
+                  })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm New Password</label>
+                <Input
+                  type="password"
+                  value={passwordForm.confirmNewPassword}
+                  onChange={(e) => setPasswordForm({
+                    ...passwordForm,
+                    confirmNewPassword: e.target.value
+                  })}
+                  required
+                />
+              </div>
+              <Button 
+                type="submit" 
+                disabled={loading}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {loading ? 'Changing Password...' : 'Change Password'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
-};
-
-export default Profile; 
+} 

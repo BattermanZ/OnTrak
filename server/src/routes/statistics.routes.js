@@ -36,7 +36,7 @@ const formatDuration = (minutes) => {
 const formatPercentage = (value) => `${Math.round(value)}%`;
 
 // Process schedules to get statistics
-const processSchedules = (schedules) => {
+const processSchedules = (schedules, trainerId = null) => {
   const statistics = {
     adherence: [],
     durations: [],
@@ -52,7 +52,12 @@ const processSchedules = (schedules) => {
   const activityStats = new Map();
   const dayStats = new Map();
 
-  schedules.forEach(schedule => {
+  // Filter schedules by trainer if specified
+  const filteredSchedules = trainerId 
+    ? schedules.filter(s => s.createdBy?._id.toString() === trainerId)
+    : schedules;
+
+  filteredSchedules.forEach(schedule => {
     const dayKey = `${schedule.templateId?._id}-${schedule.selectedDay}`;
     if (!dayStats.has(dayKey)) {
       dayStats.set(dayKey, {
@@ -110,12 +115,14 @@ const processSchedules = (schedules) => {
 
   // Calculate adherence statistics
   activityStats.forEach((stats, name) => {
-    statistics.adherence.push({
-      activity: name,
-      onTime: formatPercentage((stats.onTime / stats.count) * 100),
-      delayed: formatPercentage((stats.delayed / stats.count) * 100),
-      averageVariance: formatDuration(stats.totalTimeVariance / stats.count)
-    });
+    if (stats.count > 0) {
+      statistics.adherence.push({
+        activity: name,
+        onTime: formatPercentage((stats.onTime / stats.count) * 100),
+        delayed: formatPercentage((stats.delayed / stats.count) * 100),
+        averageVariance: formatDuration(stats.totalTimeVariance / stats.count)
+      });
+    }
   });
 
   // Calculate day-specific statistics
@@ -125,56 +132,68 @@ const processSchedules = (schedules) => {
     };
 
     dayData.activities.forEach((stats, activityName) => {
-      const averageVariance = stats.timeVariances.reduce((a, b) => a + b, 0) / stats.timeVariances.length;
-      dayStats.activities.push({
-        name: activityName,
-        scheduledDuration: formatDuration(stats.scheduledDuration),
-        averageActualDuration: formatDuration(stats.scheduledDuration + averageVariance),
-        averageVariance: formatDuration(averageVariance)
-      });
+      if (stats.timeVariances.length > 0) {
+        const averageVariance = stats.timeVariances.reduce((a, b) => a + b, 0) / stats.timeVariances.length;
+        dayStats.activities.push({
+          name: activityName,
+          scheduledDuration: formatDuration(stats.scheduledDuration),
+          averageActualDuration: formatDuration(stats.scheduledDuration + averageVariance),
+          averageVariance: formatDuration(averageVariance)
+        });
+      }
     });
 
     statistics.daySpecificStats[key] = dayStats;
   });
 
   // Calculate most delayed and most efficient activities
-  const delayedActivities = [...activityStats.entries()]
-    .map(([name, stats]) => ({
-      name,
-      averageVariance: stats.totalTimeVariance / stats.count
-    }))
-    .sort((a, b) => b.averageVariance - a.averageVariance)
-    .slice(0, 5)
-    .map(activity => ({
-      name: activity.name,
-      averageDelay: formatDuration(Math.abs(activity.averageVariance))
-    }));
+  if (activityStats.size > 0) {
+    const delayedActivities = [...activityStats.entries()]
+      .filter(([_, stats]) => stats.count > 0)
+      .map(([name, stats]) => ({
+        name,
+        averageVariance: stats.totalTimeVariance / stats.count
+      }))
+      .sort((a, b) => b.averageVariance - a.averageVariance)
+      .slice(0, 5)
+      .map(activity => ({
+        name: activity.name,
+        averageDelay: formatDuration(Math.abs(activity.averageVariance))
+      }));
 
-  const efficientActivities = [...activityStats.entries()]
-    .map(([name, stats]) => ({
-      name,
-      averageVariance: stats.totalTimeVariance / stats.count
-    }))
-    .sort((a, b) => a.averageVariance - b.averageVariance)
-    .slice(0, 5)
-    .map(activity => ({
-      name: activity.name,
-      averageTimeSaved: formatDuration(Math.abs(activity.averageVariance))
-    }));
+    const efficientActivities = [...activityStats.entries()]
+      .filter(([_, stats]) => stats.count > 0)
+      .map(([name, stats]) => ({
+        name,
+        averageVariance: stats.totalTimeVariance / stats.count
+      }))
+      .sort((a, b) => a.averageVariance - b.averageVariance)
+      .slice(0, 5)
+      .map(activity => ({
+        name: activity.name,
+        averageTimeSaved: formatDuration(Math.abs(activity.averageVariance))
+      }));
 
-  statistics.mostDelayedActivities = delayedActivities;
-  statistics.mostEfficientActivities = efficientActivities;
-  statistics.onTimeStartRate = formatPercentage((onTimeStarts / totalActivities) * 100);
+    statistics.mostDelayedActivities = delayedActivities;
+    statistics.mostEfficientActivities = efficientActivities;
+  }
+
+  statistics.onTimeStartRate = totalActivities > 0 
+    ? formatPercentage((onTimeStarts / totalActivities) * 100)
+    : '0%';
 
   return statistics;
 };
 
-// Get statistics
+// Get statistics with error handling and timeouts
 router.get('/',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
+    const startTime = Date.now();
     try {
       const { trainer, training, dateRange } = req.query;
+      
+      logger.debug('Statistics request received', { trainer, training, dateRange });
       
       // Build base query
       const baseQuery = {
@@ -188,40 +207,30 @@ router.get('/',
 
       // Get all templates and trainers first
       const [templates, trainers] = await Promise.all([
-        Template.find({}),
-        User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email')
+        Template.find({}).lean().maxTimeMS(5000),
+        User.find({ role: { $in: ['trainer', 'admin'] } }, 'firstName lastName email').lean().maxTimeMS(5000)
       ]);
 
-      // If specific trainer, just get their stats
-      if (trainer !== 'all') {
-        baseQuery.createdBy = trainer;
-        const schedules = await Schedule.find(baseQuery)
-          .populate('createdBy', 'firstName lastName email')
-          .populate('templateId', 'name days');
+      logger.debug('Retrieved templates and trainers', { 
+        templateCount: templates.length, 
+        trainerCount: trainers.length 
+      });
 
-        const statistics = processSchedules(schedules);
-        statistics.trainers = trainers.map(t => ({
-          _id: t._id,
-          name: `${t.firstName} ${t.lastName}`,
-          email: t.email
-        }));
-        statistics.trainings = templates.map(t => ({
-          _id: t._id,
-          name: t.name,
-          days: t.days
-        }));
-
-        return res.json(statistics);
-      }
-
-      // For all trainers, use aggregation to get schedules in one query
+      // Get all schedules in one query
       const schedules = await Schedule.find(baseQuery)
         .populate('createdBy', 'firstName lastName email')
         .populate('templateId', 'name days')
         .lean()
-        .maxTimeMS(30000); // Set maximum execution time to 30 seconds
+        .maxTimeMS(30000);
 
-      const statistics = processSchedules(schedules);
+      logger.debug('Retrieved schedules', { count: schedules.length });
+
+      // Process statistics based on trainer filter
+      const statistics = trainer === 'all'
+        ? processSchedules(schedules)
+        : processSchedules(schedules, trainer);
+
+      // Add metadata
       statistics.trainers = trainers.map(t => ({
         _id: t._id,
         name: `${t.firstName} ${t.lastName}`,
@@ -233,9 +242,22 @@ router.get('/',
         days: t.days
       }));
 
+      const duration = Date.now() - startTime;
+      logger.debug('Statistics processed successfully', { 
+        duration,
+        scheduleCount: schedules.length,
+        trainer,
+        dateRange 
+      });
+
       res.json(statistics);
     } catch (error) {
-      logger.error('Error fetching statistics:', error);
+      const duration = Date.now() - startTime;
+      logger.error('Error processing statistics:', { 
+        error: error.message,
+        duration,
+        stack: error.stack
+      });
       next(error);
     }
   }

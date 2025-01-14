@@ -381,9 +381,9 @@ export default function Setup() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
           <Input
             className="pl-10"
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search templates..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         <div className="relative w-72">
@@ -463,8 +463,8 @@ export default function Setup() {
           <Card 
             key={template._id} 
             className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
-            onClick={() => {
-              setSelectedTemplate(template);
+                      onClick={() => {
+                        setSelectedTemplate(template);
               setIsPreviewDialogOpen(true);
             }}
           >
@@ -512,11 +512,11 @@ export default function Setup() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            setSelectedTemplate(template);
-                            setTemplateForm({
-                              name: template.name,
-                              days: template.days,
+                      onClick={() => {
+                        setSelectedTemplate(template);
+                        setTemplateForm({
+                          name: template.name,
+                          days: template.days,
                               tags: template.tags || []
                             });
                             setIsEditDialogOpen(true);
@@ -690,7 +690,7 @@ export default function Setup() {
                         <div
                           key={tag}
                           className="px-3 py-2 cursor-pointer hover:bg-gray-100"
-                          onClick={() => {
+            onClick={() => {
                             if (templateForm.tags.length < 5) {
                               setTemplateForm(prev => ({
                                 ...prev,
