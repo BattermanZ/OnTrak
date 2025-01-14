@@ -222,8 +222,7 @@ export default function Setup() {
 
       // Update the template with the filtered activities
       await templateApi.update(selectedTemplate._id, {
-        name: selectedTemplate.name,
-        days: selectedTemplate.days,
+        ...selectedTemplate,
         activities: updatedActivities
       });
 
@@ -240,7 +239,13 @@ export default function Setup() {
       if (updatedTemplate) {
         setSelectedTemplate(updatedTemplate);
       }
+
+      toast({
+        title: "Success",
+        description: "Activity deleted successfully",
+      });
     } catch (err) {
+      console.error('Error deleting activity:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete activity');
     }
   };
@@ -438,12 +443,34 @@ export default function Setup() {
         .map(line => line.trim())
         .filter(line => line)
         .map(line => {
-          const [name, startTime, duration, day, description = ''] = line.split(',').map(s => s.trim());
+          const [name, startTime, duration, day, description = ''] = line.split(';').map(s => s.trim());
+          
+          // Validate required fields
+          if (!name || !startTime || !duration || !day) {
+            throw new Error('Each line must have name, startTime, duration, and day');
+          }
+
+          // Validate time format
+          const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+          if (!timeRegex.test(startTime)) {
+            throw new Error(`Invalid time format for activity "${name}". Use HH:MM format (e.g., 09:00)`);
+          }
+
+          // Validate duration and day are numbers
+          const durationNum = parseInt(duration);
+          const dayNum = parseInt(day);
+          if (isNaN(durationNum) || durationNum <= 0) {
+            throw new Error(`Invalid duration for activity "${name}". Must be a positive number`);
+          }
+          if (isNaN(dayNum) || dayNum <= 0 || dayNum > selectedTemplate.days) {
+            throw new Error(`Invalid day for activity "${name}". Must be between 1 and ${selectedTemplate.days}`);
+          }
+
           return {
             name,
             startTime,
-            duration: parseInt(duration),
-            day: parseInt(day),
+            duration: durationNum,
+            day: dayNum,
             description
           };
         });
@@ -601,14 +628,17 @@ export default function Setup() {
                       <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
                       <p className="text-sm text-gray-500">Created by {template.createdBy?.firstName} {template.createdBy?.lastName}</p>
                     </div>
-                    <div className="flex -space-x-3 -mr-2">
+                    <div className="flex -space-x-3 -mr-2" onClick={e => e.stopPropagation()}>
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleCloneTemplate(template)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloneTemplate(template);
+                              }}
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -622,7 +652,10 @@ export default function Setup() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleExportTemplate(template)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportTemplate(template);
+                              }}
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -636,8 +669,9 @@ export default function Setup() {
                             <Button
                               variant="ghost"
                               size="sm"
-                      onClick={() => {
-                        setSelectedTemplate(template);
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTemplate(template);
                                 setTemplateForm({
                                   name: template.name,
                                   days: template.days,
@@ -658,7 +692,8 @@ export default function Setup() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTemplate(template);
                                 setIsDeleteDialogOpen(true);
                               }}
@@ -671,14 +706,17 @@ export default function Setup() {
                       </TooltipProvider>
                     </div>
                   </div>
-                  <div className="flex flex-col w-full">
+                  <div className="flex flex-col w-full" onClick={e => e.stopPropagation()}>
                     {template.tags?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-2">
                         {template.tags.map((tag) => (
                           <Badge 
                             key={tag} 
                             className={`text-xs cursor-pointer ${getTagColor(tag)}`}
-                            onClick={(e) => handleTagClick(tag, e)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTagClick(tag, e);
+                            }}
                           >
                             {tag}
                           </Badge>
@@ -710,11 +748,14 @@ export default function Setup() {
                             <div
                               key={activity._id}
                               className="p-2 bg-gray-50 rounded-md mb-2 hover:bg-gray-100 cursor-pointer"
-                              onClick={(e) => handleActivityClick(template, activity, e)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleActivityClick(template, activity, e);
+                              }}
                             >
                               <div className="flex justify-between items-center">
                                 <span className="font-medium">{activity.name}</span>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                                   <span className="text-sm text-gray-500">{activity.startTime}</span>
                                   <Badge variant="outline" className="ml-2">
                                     {activity.duration}m
@@ -724,6 +765,7 @@ export default function Setup() {
                                     size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      setSelectedTemplate(template);
                                       setSelectedActivity(activity);
                                       setIsDeleteActivityDialogOpen(true);
                                     }}
@@ -997,7 +1039,7 @@ export default function Setup() {
             setSelectedTemplate(null);
           }
         }}>
-          <DialogContent>
+          <DialogContent onClick={e => e.stopPropagation()}>
             <DialogHeader>
               <DialogTitle>Delete Template</DialogTitle>
               <DialogDescription>
@@ -1005,13 +1047,23 @@ export default function Setup() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setIsDeleteDialogOpen(false);
-                setSelectedTemplate(null);
-              }}>
+              <Button 
+                variant="outline" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDeleteDialogOpen(false);
+                  setSelectedTemplate(null);
+                }}
+              >
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDeleteTemplate}>
+              <Button 
+                variant="destructive" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteTemplate(e);
+                }}
+              >
                 Delete Template
               </Button>
             </DialogFooter>
@@ -1169,18 +1221,18 @@ export default function Setup() {
             <DialogHeader>
               <DialogTitle>Add Multiple Activities</DialogTitle>
               <DialogDescription>
-                Enter one activity per line in the format: name, startTime, duration, day, description (optional)
+                Enter one activity per line in the format: name; startTime; duration; day; description (optional)
                 <br />
-                Example: Morning Standup, 09:00, 30, 1, Daily team sync
+                Example: Morning Standup; 09:00; 30; 1; Daily team sync
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <Textarea
                 value={bulkActivities}
                 onChange={handleBulkActivitiesChange}
-                placeholder="Morning Standup, 09:00, 30, 1, Daily team sync
-Code Review, 10:00, 60, 1, Team code review session
-Lunch Break, 12:00, 60, 1"
+                placeholder="Morning Standup; 09:00; 30; 1; Daily team sync
+Code Review; 10:00; 60; 1; Team code review session
+Lunch Break; 12:00; 60; 1"
                 className="h-[200px] font-mono"
               />
             </div>
