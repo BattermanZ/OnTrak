@@ -70,24 +70,118 @@ app.use(passport.initialize());
 // Setup request logging
 app.use(morgan('combined', { stream: logger.stream }));
 
-// MongoDB Connection
+// MongoDB Connection configuration
 const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ontrak';
 
-mongoose.connect(mongoUri).then(() => {
-  logger.info('Connected to MongoDB');
-}).catch((error) => {
-  logger.error('MongoDB connection error:', error);
-  process.exit(1);
+// MongoDB Connection with retry logic and proper error handling
+const connectWithRetry = async (retries = 5, delay = 5000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await mongoose.connect(mongoUri);
+      logger.info('Connected to MongoDB');
+      return;
+    } catch (error) {
+      logger.error('MongoDB connection error:', error);
+      if (i === retries - 1) {
+        logger.error('Max retries reached, exiting...');
+        process.exit(1);
+      }
+      logger.info(`Retrying in ${delay/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
+connectWithRetry();
+
+// Handle MongoDB connection errors
+mongoose.connection.on('error', err => {
+  logger.error('MongoDB connection error:', err);
+  setTimeout(() => connectWithRetry(), 5000);
 });
 
-// Socket.io connection handling
+mongoose.connection.on('disconnected', () => {
+  logger.warn('MongoDB disconnected. Attempting to reconnect...');
+  setTimeout(() => connectWithRetry(), 5000);
+});
+
+// Socket.io connection handling with error handling and memory leak prevention
+const connectedSockets = new Set();
+
 io.on('connection', (socket) => {
-  logger.debug('New client connected', { socketId: socket.id });
+  connectedSockets.add(socket.id);
+  logger.debug('New client connected', { 
+    socketId: socket.id,
+    activeConnections: connectedSockets.size 
+  });
   
+  // Handle socket errors
+  socket.on('error', (error) => {
+    logger.error('Socket error:', { socketId: socket.id, error: error.message });
+  });
+
   socket.on('disconnect', () => {
-    logger.debug('Client disconnected', { socketId: socket.id });
+    connectedSockets.delete(socket.id);
+    logger.debug('Client disconnected', { 
+      socketId: socket.id,
+      activeConnections: connectedSockets.size 
+    });
   });
 });
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  // Give time for logging before exit
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+process.on('unhandledRejection', (error) => {
+  logger.error('Unhandled Rejection:', error);
+  // Give time for logging before exit
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+// Graceful shutdown
+const gracefulShutdown = async () => {
+  logger.info('Received shutdown signal. Starting graceful shutdown...');
+  
+  // Close all socket connections
+  for (const socketId of connectedSockets) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket) {
+      socket.disconnect(true);
+    }
+  }
+  
+  // Close Socket.IO server
+  await new Promise(resolve => io.close(resolve));
+  logger.info('Closed all socket connections');
+  
+  // Close MongoDB connection
+  await mongoose.connection.close();
+  logger.info('Closed MongoDB connection');
+  
+  // Close Express server
+  server.close(() => {
+    logger.info('Closed Express server');
+    process.exit(0);
+  });
+  
+  // Force exit if graceful shutdown takes too long
+  setTimeout(() => {
+    logger.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+// Listen for shutdown signals
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // API Routes
 app.use('/api/auth', require('./routes/auth.routes'));
