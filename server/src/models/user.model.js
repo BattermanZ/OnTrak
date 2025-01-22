@@ -25,6 +25,11 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  timezone: {
+    type: String,
+    enum: ['Amsterdam', 'Manila', 'Curacao'],
+    default: 'Amsterdam'
+  },
   role: {
     type: String,
     enum: ['admin', 'trainer'],

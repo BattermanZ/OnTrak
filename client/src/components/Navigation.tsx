@@ -34,16 +34,19 @@ const Navigation = () => {
 
   const handleLogoutConfirm = async () => {
     try {
-      await logout();
       setIsLogoutDialogOpen(false);
+      await logout();
       setIsSuccessDialogOpen(true);
-      // Redirect after 2 seconds
+      
+      // Navigate to login page after a short delay
       setTimeout(() => {
         setIsSuccessDialogOpen(false);
-        navigate('/login');
-      }, 2000);
+        navigate('/login', { replace: true });
+      }, 1500);
     } catch (error) {
       console.error('Logout failed:', error);
+      // Even if logout fails, redirect to login
+      navigate('/login', { replace: true });
     }
   };
 
@@ -88,16 +91,16 @@ const Navigation = () => {
                     {item.label}
                   </TabsTrigger>
                 ))}
-                <TabsTrigger
-                  value="logout"
-                  onClick={handleLogoutClick}
-                  className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-destructive hover:text-destructive-foreground text-red-600 gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Logout
-                </TabsTrigger>
               </TabsList>
             </Tabs>
+            <Button
+              variant="ghost"
+              onClick={handleLogoutClick}
+              className="text-red-600 hover:text-red-700 hover:bg-red-100 gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </div>

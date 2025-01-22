@@ -95,6 +95,12 @@ const auth = {
     try {
       logger.debug('Attempting login', { email: data.email });
       const response = await api.post('/auth/login', data);
+      // Store the token
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        // Set the default Authorization header for future requests
+        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      }
       logger.info('Login successful');
       return response;
     } catch (error) {
@@ -116,6 +122,10 @@ const auth = {
   getCurrentUser: async () => {
     try {
       logger.debug('Fetching current user');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token found');
+      }
       const response = await api.get('/auth/me');
       logger.debug('Current user fetched successfully');
       return response;
@@ -126,7 +136,7 @@ const auth = {
   },
   updateProfile: async (data: Partial<User>) => {
     try {
-      logger.debug('Updating user profile');
+      logger.debug('Updating user profile', { timezone: data.timezone });
       const response = await api.put('/auth/profile', data);
       logger.info('Profile updated successfully');
       return response;
@@ -138,10 +148,18 @@ const auth = {
   logout: async () => {
     try {
       logger.debug('Attempting logout');
+      // Make the logout request
       const response = await api.post('/auth/logout');
+      // Clear the token from localStorage
+      localStorage.removeItem('token');
+      // Remove the Authorization header
+      delete api.defaults.headers.common['Authorization'];
       logger.info('Logout successful');
       return response;
     } catch (error) {
+      // Even if the request fails, we still want to clear local auth state
+      localStorage.removeItem('token');
+      delete api.defaults.headers.common['Authorization'];
       logger.error('Logout failed', error);
       throw error;
     }
@@ -170,7 +188,7 @@ const auth = {
   },
   updateUser: async (userId: string, data: Partial<User>) => {
     try {
-      logger.debug('Updating user', { userId });
+      logger.debug('Updating user', { userId, timezone: data.timezone });
       const response = await api.put(`/auth/users/${userId}`, data);
       logger.info('User updated successfully');
       return response;

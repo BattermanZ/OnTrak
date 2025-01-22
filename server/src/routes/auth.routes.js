@@ -188,7 +188,8 @@ router.put('/profile',
   [
     body('firstName').optional().trim().notEmpty(),
     body('lastName').optional().trim().notEmpty(),
-    body('password').optional().isLength({ min: 6 })
+    body('password').optional().isLength({ min: 6 }),
+    body('timezone').optional().isIn(['Amsterdam', 'Manila', 'Curacao'])
   ],
   async (req, res, next) => {
     try {
@@ -197,12 +198,13 @@ router.put('/profile',
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { firstName, lastName, password } = req.body;
+      const { firstName, lastName, password, timezone } = req.body;
       const user = req.user;
 
       if (firstName) user.firstName = firstName;
       if (lastName) user.lastName = lastName;
       if (password) user.password = password;
+      if (timezone) user.timezone = timezone;
 
       await user.save();
 
@@ -266,7 +268,7 @@ router.put('/users/:id',
   async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { email, password, firstName, lastName, role } = req.body;
+      const { email, password, firstName, lastName, role, timezone } = req.body;
 
       const user = await User.findById(id);
       if (!user) {
@@ -286,6 +288,9 @@ router.put('/users/:id',
       if (lastName) user.lastName = lastName;
       if (password) user.password = password;
       if (role) user.role = role;
+      if (timezone && ['Amsterdam', 'Manila', 'Curacao'].includes(timezone)) {
+        user.timezone = timezone;
+      }
 
       await user.save();
 

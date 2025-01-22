@@ -52,55 +52,180 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Add request timeout middleware
 app.use((req, res, next) => {
-  req.setTimeout(30000, () => {
-    logger.error('Request timeout', { 
-      method: req.method,
-      url: req.url,
-      duration: 30000
-    });
-    res.status(408).json({ message: 'Request timeout' });
+  const timeout = 30000;
+  req.setTimeout(timeout, () => {
+    const err = new Error('Request timeout');
+    err.status = 408;
+    next(err);
+  });
+  res.setTimeout(timeout, () => {
+    const err = new Error('Response timeout');
+    err.status = 503;
+    next(err);
   });
   next();
 });
 
-// Global error handler
+// Global error handler with detailed logging
 app.use((err, req, res, next) => {
-  logger.error('Unhandled error:', { 
+  const status = err.status || 500;
+  const errorResponse = {
+    message: err.message || 'Internal server error',
+    status,
+    timestamp: new Date().toISOString()
+  };
+
+  // Log error with context
+  logger.error('Request error:', {
     error: err.message,
     stack: err.stack,
+    status,
+    method: req.method,
     url: req.url,
-    method: req.method
+    query: req.query,
+    body: req.body,
+    user: req.user ? req.user._id : 'anonymous',
+    ip: req.ip
   });
-  
-  if (err.name === 'PayloadTooLargeError') {
-    return res.status(413).json({
-      message: 'Request entity too large',
-      details: 'The request payload is too large. Please reduce the amount of data being sent.'
-    });
+
+  // Add error details in development
+  if (process.env.NODE_ENV === 'development') {
+    errorResponse.stack = err.stack;
+    errorResponse.code = err.code;
   }
-  
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err : {}
+
+  res.status(status).json(errorResponse);
+});
+
+// Add memory monitoring with alerts
+const monitorMemory = () => {
+  const used = process.memoryUsage();
+  const memoryThresholdMB = 1024; // 1GB threshold
+
+  setInterval(() => {
+    const currentUsage = process.memoryUsage();
+    const usage = {
+      heapUsed: `${Math.round(currentUsage.heapUsed / 1024 / 1024 * 100) / 100} MB`,
+      heapTotal: `${Math.round(currentUsage.heapTotal / 1024 / 1024 * 100) / 100} MB`,
+      rss: `${Math.round(currentUsage.rss / 1024 / 1024 * 100) / 100} MB`,
+      external: `${Math.round(currentUsage.external / 1024 / 1024 * 100) / 100} MB`
+    };
+
+    // Log regular memory usage
+    logger.debug('Memory usage', usage);
+
+    // Check for memory leaks
+    if (currentUsage.heapUsed > used.heapUsed * 1.5) {
+      logger.warn('Potential memory leak detected', usage);
+    }
+
+    // Alert on high memory usage
+    if (currentUsage.heapUsed / 1024 / 1024 > memoryThresholdMB) {
+      logger.error('Critical memory usage detected', {
+        ...usage,
+        threshold: `${memoryThresholdMB} MB`
+      });
+
+      // Force garbage collection if available (use with caution)
+      if (global.gc) {
+        logger.info('Forcing garbage collection');
+        global.gc();
+      }
+    }
+  }, 60000); // Check every minute
+};
+
+// Start memory monitoring
+monitorMemory();
+
+// Enhanced process-level error handling
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', {
+    error: error.message,
+    stack: error.stack,
+    type: error.name
+  });
+
+  // Attempt to perform cleanup
+  try {
+    gracefulShutdown('uncaught exception');
+  } catch (cleanupError) {
+    logger.error('Error during cleanup after uncaught exception:', cleanupError);
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection:', {
+    reason: reason instanceof Error ? reason.message : reason,
+    stack: reason instanceof Error ? reason.stack : undefined,
+    promise: promise
   });
 });
 
-// Add memory monitoring
-const used = process.memoryUsage();
-setInterval(() => {
-  const currentUsage = process.memoryUsage();
-  const usage = {
-    heapUsed: `${Math.round(currentUsage.heapUsed / 1024 / 1024 * 100) / 100} MB`,
-    heapTotal: `${Math.round(currentUsage.heapTotal / 1024 / 1024 * 100) / 100} MB`,
-    rss: `${Math.round(currentUsage.rss / 1024 / 1024 * 100) / 100} MB`
-  };
-  
-  if (currentUsage.heapUsed > used.heapUsed * 1.5) {
-    logger.warn('High memory usage detected', usage);
+// Enhanced graceful shutdown
+const gracefulShutdown = async (signal) => {
+  let exitCode = 0;
+  const shutdownTimeout = 30000; // 30 seconds
+  let forcedShutdownTimeout;
+
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+
+  // Start force shutdown timeout
+  forcedShutdownTimeout = setTimeout(() => {
+    logger.error('Forced shutdown initiated after timeout');
+    process.exit(1);
+  }, shutdownTimeout);
+
+  try {
+    // Close all socket connections
+    logger.info('Closing socket connections...');
+    for (const socketId of connectedSockets) {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.disconnect(true);
+      }
+    }
+    await new Promise(resolve => io.close(resolve));
+    logger.info('Socket connections closed');
+
+    // Close database connection
+    logger.info('Closing database connection...');
+    await mongoose.connection.close(false);
+    logger.info('Database connection closed');
+
+    // Close HTTP server
+    logger.info('Closing HTTP server...');
+    await new Promise((resolve, reject) => {
+      server.close(err => {
+        if (err) {
+          logger.error('Error closing HTTP server:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+    logger.info('HTTP server closed');
+
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+    exitCode = 1;
+  } finally {
+    // Clear the force shutdown timeout
+    clearTimeout(forcedShutdownTimeout);
+    
+    // Final cleanup
+    logger.info(`Graceful shutdown completed with exit code ${exitCode}`);
+    process.exit(exitCode);
   }
-  
-  logger.debug('Memory usage', usage);
-}, 60000);
+};
+
+// Register shutdown handlers
+const shutdownSignals = ['SIGTERM', 'SIGINT', 'SIGUSR2'];
+shutdownSignals.forEach(signal => {
+  process.on(signal, () => gracefulShutdown(signal));
+});
 
 // CORS configuration
 const corsOptions = {
@@ -181,66 +306,12 @@ io.on('connection', (socket) => {
   });
 });
 
-// Handle uncaught exceptions and unhandled rejections
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  // Give time for logging before exit
-  setTimeout(() => {
-    process.exit(1);
-  }, 1000);
-});
-
-process.on('unhandledRejection', (error) => {
-  logger.error('Unhandled Rejection:', error);
-  // Give time for logging before exit
-  setTimeout(() => {
-    process.exit(1);
-  }, 1000);
-});
-
-// Graceful shutdown
-const gracefulShutdown = async () => {
-  logger.info('Received shutdown signal. Starting graceful shutdown...');
-  
-  // Close all socket connections
-  for (const socketId of connectedSockets) {
-    const socket = io.sockets.sockets.get(socketId);
-    if (socket) {
-      socket.disconnect(true);
-    }
-  }
-  
-  // Close Socket.IO server
-  await new Promise(resolve => io.close(resolve));
-  logger.info('Closed all socket connections');
-  
-  // Close MongoDB connection
-  await mongoose.connection.close();
-  logger.info('Closed MongoDB connection');
-  
-  // Close Express server
-  server.close(() => {
-    logger.info('Closed Express server');
-    process.exit(0);
-  });
-  
-  // Force exit if graceful shutdown takes too long
-  setTimeout(() => {
-    logger.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
-};
-
-// Listen for shutdown signals
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
-
 // API Routes
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 app.use('/api/logs', require('./routes/logs.routes'));
-app.use('/api/statistics', statisticsRoutes);
+app.use('/api/statistics', passport.authenticate('jwt', { session: false }), statisticsRoutes);
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../../client/build')));

@@ -4,6 +4,7 @@ export interface User {
   firstName: string;
   lastName: string;
   role: 'admin' | 'trainer';
+  timezone?: 'Amsterdam' | 'Manila' | 'Curacao';
   lastLogin?: string;
 }
 

@@ -40,6 +40,7 @@ interface UserFormData {
   firstName: string;
   lastName: string;
   role: 'admin' | 'trainer';
+  timezone: 'Amsterdam' | 'Manila' | 'Curacao';
 }
 
 const initialFormData: UserFormData = {
@@ -48,6 +49,7 @@ const initialFormData: UserFormData = {
   firstName: '',
   lastName: '',
   role: 'trainer',
+  timezone: 'Amsterdam',
 };
 
 const Admin = () => {
@@ -80,6 +82,7 @@ const Admin = () => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        timezone: user.timezone || 'Amsterdam',
       });
       setEditingUser(user);
     } else {
@@ -102,124 +105,90 @@ const Admin = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value,
+      [name]: value
     }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setError('');
+      setSuccess('');
+      
       if (editingUser) {
         await auth.updateUser(editingUser._id, formData);
-        setSuccess('User updated successfully');
       } else {
         await auth.createUser(formData);
-        setSuccess('User created successfully');
       }
+      
+      await fetchUsers();
       handleCloseDialog();
-      fetchUsers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save user');
-    }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
-    try {
-      await auth.deleteUser(userId);
-      setSuccess('User deleted successfully');
-      fetchUsers();
-    } catch (err) {
-      setError('Failed to delete user');
+      setSuccess(editingUser ? 'User updated successfully' : 'User created successfully');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to save user');
     }
   };
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Header with red gradient banner */}
-      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-red-50 to-red-100 p-6 rounded-lg shadow-sm">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-2">Manage system users and permissions</p>
-        </div>
-        <Button
-          onClick={() => handleOpenDialog()}
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add User
-        </Button>
-      </div>
-
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert className="mb-6">
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* User List */}
+    <div className="container mx-auto py-8">
       <Card>
         <CardHeader>
-          <CardTitle>System Users</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>User Management</CardTitle>
+            <Button onClick={() => handleOpenDialog()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {success && (
+            <Alert className="mb-4">
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
           <div className="relative overflow-x-auto">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left text-gray-500">
               <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
                   <th scope="col" className="px-6 py-3">Name</th>
                   <th scope="col" className="px-6 py-3">Email</th>
                   <th scope="col" className="px-6 py-3">Role</th>
-                  <th scope="col" className="px-6 py-3">Last Login</th>
-                  <th scope="col" className="px-6 py-3 text-right">Actions</th>
+                  <th scope="col" className="px-6 py-3">Timezone</th>
+                  <th scope="col" className="px-6 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((userItem) => (
+                {users.map(userItem => (
                   <tr key={userItem._id} className="bg-white border-b">
                     <td className="px-6 py-4">{`${userItem.firstName} ${userItem.lastName}`}</td>
                     <td className="px-6 py-4">{userItem.email}</td>
-                    <td className="px-6 py-4 capitalize">{userItem.role}</td>
+                    <td className="px-6 py-4">{userItem.role}</td>
+                    <td className="px-6 py-4">{userItem.timezone || 'Amsterdam'}</td>
                     <td className="px-6 py-4">
-                      {userItem.lastLogin ? new Date(userItem.lastLogin).toLocaleString() : 'Never'}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenDialog(userItem)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit user</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(userItem._id)}
-                              disabled={userItem._id === currentUser?._id}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete user</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <div className="flex gap-2">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => handleOpenDialog(userItem)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit User</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -229,28 +198,34 @@ const Admin = () => {
         </CardContent>
       </Card>
 
-      {/* Add/Edit User Dialog */}
-      <Dialog open={openDialog} onOpenChange={(open) => {
-        if (!open) handleCloseDialog();
-      }}>
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingUser ? 'Edit User' : 'Add User'}</DialogTitle>
             <DialogDescription>
-              {editingUser 
-                ? 'Update the user details below.' 
-                : 'Fill in the details to create a new user.'}
+              {editingUser ? 'Update user details' : 'Create a new user account'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  required={!editingUser}
+                  disabled={!!editingUser}
+                />
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">First Name</label>
                 <Input
                   name="firstName"
                   value={formData.firstName}
                   onChange={handleInputChange}
-                  placeholder="Enter first name"
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -259,60 +234,66 @@ const Admin = () => {
                   name="lastName"
                   value={formData.lastName}
                   onChange={handleInputChange}
-                  placeholder="Enter last name"
+                  required
                 />
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Role</label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value) => handleInputChange({
+                    target: { name: 'role', value }
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trainer">Trainer</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Timezone</label>
+                <Select
+                  value={formData.timezone}
+                  onValueChange={(value) => handleInputChange({
+                    target: { name: 'timezone', value }
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Amsterdam">Amsterdam</SelectItem>
+                    <SelectItem value="Manila">Manila</SelectItem>
+                    <SelectItem value="Curacao">Curaçao</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {!editingUser && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Password</label>
+                  <Input
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required={!editingUser}
+                  />
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="Enter email address"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {editingUser ? "New Password (leave empty to keep current)" : "Password"}
-              </label>
-              <Input
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder={editingUser ? "Enter new password" : "Enter password"}
-                required={!editingUser}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Role</label>
-              <Select
-                name="role"
-                value={formData.role}
-                onValueChange={(value) => handleInputChange({
-                  target: { name: 'role', value }
-                })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trainer">Trainer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmit}>
-              {editingUser ? 'Save Changes' : 'Create User'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCloseDialog}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingUser ? 'Update' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

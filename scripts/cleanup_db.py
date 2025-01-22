@@ -1,26 +1,50 @@
 from pymongo import MongoClient
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Connect to MongoDB
 client = MongoClient('mongodb://localhost:27017/')
 db = client['ontrak']
 
 # List all collections before cleanup
-print("Collections before cleanup:")
+logger.info("Collections before cleanup:")
 collections = db.list_collection_names()
 for collection in collections:
-    print(f"- {collection}: {db[collection].count_documents({})} documents")
+    logger.info(f"- {collection}: {db[collection].count_documents({})} documents")
 
-# Drop all collections
+# Save admin user before cleanup
+admin_user = db.users.find_one({"role": "admin"})
+if not admin_user:
+    logger.warning("No admin user found!")
+    
+# Drop all collections except users
 for collection in collections:
-    db[collection].drop()
+    if collection != 'users':
+        logger.info(f"Dropping collection: {collection}")
+        db[collection].drop()
 
-print("\nAll collections have been dropped.")
+# Clear users collection except admin
+if admin_user:
+    logger.info("Clearing users collection while preserving admin account")
+    db.users.delete_many({"role": {"$ne": "admin"}})
+else:
+    logger.info("Dropping users collection (no admin found)")
+    db.users.drop()
 
 # Verify cleanup
-print("\nCollections after cleanup:")
+logger.info("\nCollections after cleanup:")
 collections = db.list_collection_names()
 if not collections:
-    print("No collections remaining - cleanup successful!")
+    logger.info("No collections remaining!")
 else:
     for collection in collections:
-        print(f"- {collection}: {db[collection].count_documents({})} documents") 
+        count = db[collection].count_documents({})
+        logger.info(f"- {collection}: {count} documents")
+        if collection == 'users':
+            admin_count = db.users.count_documents({"role": "admin"})
+            logger.info(f"  - Admin users: {admin_count}")
+
+logger.info("\nCleanup completed successfully!") 

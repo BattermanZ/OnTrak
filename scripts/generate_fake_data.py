@@ -1,239 +1,331 @@
-import pymongo
-from datetime import datetime, timedelta
+#!/usr/bin/env python3
+import os
+import sys
 import random
+from datetime import datetime, timedelta
+from typing import List, Dict
+import pymongo
+from pymongo import MongoClient
 from bson import ObjectId
 import bcrypt
+import logging
 
-# MongoDB connection
-client = pymongo.MongoClient("mongodb://localhost:27017/")
-db = client["ontrak"]
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Trainer personality types for time management with more extreme variations
-PERSONALITY_TYPES = {
-    "Early Bird": {
-        "early_prob": 0.7,
-        "on_time_prob": 0.2,
-        "late_prob": 0.1,
-        "base_variance": (-45, -15),  # Much earlier
-        "variance_multiplier": (0.8, 1.2)  # Variation in their consistency
+# Constants
+WORKDAY_START = "09:00"
+WORKDAY_END = "17:30"
+LUNCH_DURATION = 30  # minutes
+MIN_ACTIVITY_DURATION = 30  # minutes
+MAX_ACTIVITY_DURATION = 120  # minutes
+
+# Trainer personality types with variance ranges in minutes
+TRAINER_TYPES = {
+    'Early Bird': {'variance_range': (-10, 0)},    # Always starts early
+    'Punctual': {'variance_range': (-5, 5)},       # Mostly on time
+    'Rusher': {'variance_range': (-5, 10)},        # Slightly variable
+    'Relaxed': {'variance_range': (0, 15)},        # Tends to run late
+    'Procrastinator': {'variance_range': (5, 20)}, # Usually late
+    'Chaotic': {'variance_range': (-15, 15)}       # Highly variable
+}
+
+# Activity types with descriptions
+ACTIVITY_TYPES = {
+    'Customer Interaction': {
+        'chat_descriptions': [
+            ('Live Chat Handling', 'Learn to manage customer conversations effectively in a chat environment. See guide: https://support.example.com/chat-guide'),
+            ('Multi-Chat Management', 'Master handling multiple customer chats simultaneously. Reference: https://support.example.com/multi-chat'),
+            ('Chat Etiquette', 'Professional communication standards for chat support. Guidelines: https://support.example.com/chat-etiquette')
+        ],
+        'call_descriptions': [
+            ('Call Handling Basics', 'Master the fundamentals of professional call handling. Manual: https://support.example.com/call-basics'),
+            ('Voice Modulation', 'Learn proper voice control and tone. Guide: https://support.example.com/voice-guide'),
+            ('Call Control', 'Techniques for maintaining productive customer calls. Tips: https://support.example.com/call-control')
+        ]
     },
-    "Procrastinator": {
-        "early_prob": 0.1,
-        "on_time_prob": 0.2,
-        "late_prob": 0.7,
-        "base_variance": (15, 45),  # Much later
-        "variance_multiplier": (0.9, 1.4)  # More variation when late
+    'Technical Skills': {
+        'chat_descriptions': [
+            ('Typing Speed Training', 'Improve typing efficiency and accuracy. Practice here: https://support.example.com/typing'),
+            ('Shortcut Management', 'Learn essential keyboard shortcuts. Reference: https://support.example.com/shortcuts'),
+            ('Template Usage', 'Effective use of response templates. Library: https://support.example.com/templates')
+        ],
+        'call_descriptions': [
+            ('Phone System Training', 'Understanding the call center system. Manual: https://support.example.com/phone-system'),
+            ('Call Transfer Protocol', 'Proper procedures for transferring calls. Guide: https://support.example.com/transfers'),
+            ('Hold Management', 'Best practices for putting calls on hold. Reference: https://support.example.com/hold-guide')
+        ]
     },
-    "Perfectionist": {
-        "early_prob": 0.1,
-        "on_time_prob": 0.3,
-        "late_prob": 0.6,
-        "base_variance": (10, 30),  # Takes longer due to attention to detail
-        "variance_multiplier": (1.0, 1.3)
+    'Soft Skills': {
+        'chat_descriptions': [
+            ('Written Communication', 'Enhance written communication skills. Resources: https://support.example.com/writing'),
+            ('Emoji Usage Guidelines', 'Professional use of emojis in customer service. Guide: https://support.example.com/emoji-guide'),
+            ('Chat Tone', 'Maintaining appropriate tone in written support. Tips: https://support.example.com/chat-tone')
+        ],
+        'call_descriptions': [
+            ('Verbal Communication', 'Effective verbal communication techniques. Guide: https://support.example.com/verbal'),
+            ('Active Listening', 'Developing active listening skills. Tips: https://support.example.com/listening'),
+            ('Voice Tone', 'Managing voice tone for better customer experience. Reference: https://support.example.com/voice-tone')
+        ]
     },
-    "Rusher": {
-        "early_prob": 0.6,
-        "on_time_prob": 0.3,
-        "late_prob": 0.1,
-        "base_variance": (-30, -10),  # Rushes through activities
-        "variance_multiplier": (0.6, 0.9)  # Consistently faster
-    },
-    "Chaotic": {
-        "early_prob": 0.33,
-        "on_time_prob": 0.34,
-        "late_prob": 0.33,
-        "base_variance": (-60, 60),  # Extreme variations
-        "variance_multiplier": (0.5, 1.5)  # Very inconsistent
+    'Procedures': {
+        'chat_descriptions': [
+            ('Escalation Process', 'Understanding when and how to escalate chats. Protocol: https://support.example.com/chat-escalation'),
+            ('Chat Queue Management', 'Managing multiple customers in queue. Guide: https://support.example.com/chat-queue'),
+            ('Response Times', 'Meeting response time standards. Metrics: https://support.example.com/response-times')
+        ],
+        'call_descriptions': [
+            ('Call Routing', 'Understanding call routing procedures. Manual: https://support.example.com/routing'),
+            ('Queue Management', 'Managing calls in queue effectively. Guide: https://support.example.com/queue'),
+            ('Response Scripts', 'Using response scripts appropriately. Library: https://support.example.com/scripts')
+        ]
     }
 }
 
-# Activities that tend to take longer or shorter than scheduled
-ACTIVITY_BIASES = {
-    "Team Building Exercise": {"variance_multiplier": (1.2, 1.5)},  # Always takes longer
-    "Code Review": {"variance_multiplier": (1.1, 1.4)},  # Usually takes longer
-    "Coffee Break": {"variance_multiplier": (0.8, 1.2)},  # Variable duration
-    "Daily Standup": {"variance_multiplier": (0.7, 0.9)},  # Usually shorter
-    "Documentation": {"variance_multiplier": (1.3, 1.6)},  # Takes much longer
-    "Testing": {"variance_multiplier": (1.2, 1.4)},  # Takes longer
-    "Deployment": {"variance_multiplier": (0.5, 1.5)},  # Very unpredictable
-}
+def connect_to_mongodb():
+    """Connect to MongoDB and return database instance."""
+    try:
+        client = MongoClient('mongodb://localhost:27017/')
+        db = client.ontrak
+        return db
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        sys.exit(1)
 
-def create_fake_trainer(personality_type, used_emails):
-    """Create a fake trainer with a specific personality type"""
-    first_names = ["Alex", "Jordan", "Sam", "Taylor", "Morgan", "Casey", "Jamie", "Riley", "Avery", "Quinn"]
-    last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
-    
-    # Keep trying until we get a unique email
-    while True:
+def create_trainer(personality_type: str, db) -> ObjectId:
+    """Create a trainer with specified personality type."""
+    try:
+        # Generate realistic names
+        first_names = ['James', 'Emma', 'Michael', 'Sarah', 'David', 'Lisa', 'John', 'Maria', 'Robert', 'Anna']
+        last_names = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']
+        
         first_name = random.choice(first_names)
         last_name = random.choice(last_names)
         email = f"{first_name.lower()}.{last_name.lower()}@example.com"
         
-        if email not in used_emails:
-            used_emails.add(email)
-            break
-    
-    # Hash password using bcrypt
-    password = "password123"  # Default password for testing
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    
-    trainer = {
-        "_id": ObjectId(),
-        "email": email,
-        "password": hashed,
-        "firstName": first_name,
-        "lastName": last_name,
-        "role": "trainer",
-        "active": True,
-        "lastLogin": datetime.now(),
-        "createdAt": datetime.now(),
-        "updatedAt": datetime.now(),
-        "personality": personality_type
-    }
-    return trainer
-
-def get_time_variance(trainer_personality, activity_name, scheduled_duration):
-    """Generate time variance based on trainer personality, activity, and duration"""
-    personality = PERSONALITY_TYPES[trainer_personality]
-    prob = random.random()
-    
-    # Get base variance based on personality probability
-    if prob < personality["early_prob"]:
-        # Early completion
-        base_variance = random.uniform(personality["base_variance"][0], min(-1, personality["base_variance"][1]))
-    elif prob < personality["early_prob"] + personality["on_time_prob"]:
-        # On time (-5 to +5 minutes)
-        base_variance = random.uniform(-5, 5)
-    else:
-        # Late completion
-        base_variance = random.uniform(max(1, personality["base_variance"][0]), personality["base_variance"][1])
-    
-    # Apply personality-based multiplier
-    personality_multiplier = random.uniform(*personality["variance_multiplier"])
-    variance = base_variance * personality_multiplier
-    
-    # Apply activity-specific bias if it exists
-    if activity_name in ACTIVITY_BIASES:
-        activity_multiplier = random.uniform(*ACTIVITY_BIASES[activity_name]["variance_multiplier"])
-        variance *= activity_multiplier
-    
-    # Scale variance based on activity duration (longer activities can have more variance)
-    duration_scale = max(1, scheduled_duration / 30)  # Scale factor based on 30-minute baseline
-    scaled_variance = int(variance * duration_scale)
-    
-    # Add some random noise to prevent too uniform results
-    noise = random.randint(-5, 5)
-    
-    return scaled_variance + noise
-
-def create_training_session(trainer, template, start_date, day_number):
-    """Create a training session with actual start and end times"""
-    session = {
-        "_id": ObjectId(),
-        "title": f"{template['name']} - Day {day_number}",
-        "date": start_date,
-        "templateId": template["_id"],
-        "selectedDay": day_number,
-        "activities": [],
-        "activeActivityIndex": 0,
-        "status": "completed",
-        "createdBy": trainer["_id"],
-        "createdAt": start_date,
-        "updatedAt": start_date
-    }
-    
-    # Filter activities for selected day
-    day_activities = [a for a in template["activities"] if a["day"] == day_number]
-    
-    if not day_activities:
-        print(f"Warning: No activities found for day {day_number}")
+        # Hash password
+        salt = bcrypt.gensalt()
+        password = bcrypt.hashpw('password123'.encode('utf-8'), salt)
+        
+        trainer = {
+            'email': email,
+            'firstName': first_name,
+            'lastName': last_name,
+            'password': password,
+            'role': 'trainer',
+            'personality': personality_type,
+            'active': True,
+            'createdAt': datetime.now(),
+            'lastLogin': datetime.now()
+        }
+        
+        result = db.users.insert_one(trainer)
+        logger.info(f"Created trainer: {first_name} {last_name} ({personality_type})")
+        return result.inserted_id
+    except Exception as e:
+        logger.error(f"Failed to create trainer: {e}")
         return None
+
+def parse_time(time_str: str) -> datetime:
+    """Convert time string to datetime object."""
+    hour, minute = map(int, time_str.split(':'))
+    now = datetime.now()
+    return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+def generate_activity_time(start_time: datetime, min_duration: int, max_duration: int) -> tuple:
+    """Generate random activity duration and end time."""
+    # Calculate remaining time until end of day
+    end_time = parse_time(WORKDAY_END)
+    remaining_minutes = int((end_time - start_time).total_seconds() / 60)
     
-    # Track cumulative delay for the day
-    cumulative_delay = timedelta(minutes=0)
+    # If less than minimum duration left, return minimum duration
+    if remaining_minutes < min_duration:
+        duration = min_duration
+    else:
+        # Use the minimum between max_duration and remaining time
+        adjusted_max = min(max_duration, remaining_minutes)
+        duration = random.randint(min_duration, adjusted_max)
     
-    for activity in day_activities:
-        try:
-            scheduled_start = datetime.strptime(activity["startTime"], "%H:%M").time()
-            scheduled_start_dt = datetime.combine(start_date.date(), scheduled_start)
+    end_time = start_time + timedelta(minutes=duration)
+    return duration, end_time
+
+def create_training_template(name: str, num_days: int, training_type: str, db) -> ObjectId:
+    """Create training template with specified number of days."""
+    try:
+        template = {
+            'name': name,
+            'description': f'{name} - {num_days} day training program',
+            'tags': ['customer-service', training_type],
+            'days': num_days,  # Add total number of days
+            'activities': [],  # Activities will be moved here
+            'createdAt': datetime.utcnow(),
+            'updatedAt': datetime.utcnow()
+        }
+
+        current_time = parse_time(WORKDAY_START)
+        end_time = parse_time(WORKDAY_END)
+        
+        for day in range(num_days):
+            day_current_time = current_time
             
-            # Generate variance based on trainer's personality and activity
-            variance = get_time_variance(
-                trainer["personality"],
-                activity["name"],
-                activity["duration"]
+            # Number of activities for this day
+            num_activities = random.randint(6, 12)
+            
+            for _ in range(num_activities):
+                # Ensure we don't exceed workday end time
+                if day_current_time >= end_time:
+                    break
+                    
+                # Generate activity duration and end time
+                duration, activity_end = generate_activity_time(
+                    day_current_time, 
+                    MIN_ACTIVITY_DURATION, 
+                    min(MAX_ACTIVITY_DURATION, int((end_time - day_current_time).total_seconds() / 60))
+                )
+                
+                # Select random activity type and description
+                activity_category = random.choice(list(ACTIVITY_TYPES.keys()))
+                descriptions = ACTIVITY_TYPES[activity_category][f'{training_type.lower()}_descriptions']
+                title, description = random.choice(descriptions)
+                
+                activity = {
+                    'name': title,
+                    'startTime': day_current_time.strftime('%H:%M'),
+                    'duration': duration,
+                    'description': description,
+                    'day': day + 1,
+                    'isActive': True
+                }
+                
+                template['activities'].append(activity)
+                day_current_time = activity_end + timedelta(minutes=5)  # 5-minute break between activities
+        
+        result = db.templates.insert_one(template)
+        logger.info(f"Created template: {name} with {len(template['activities'])} activities")
+        return result.inserted_id
+    except Exception as e:
+        logger.error(f"Failed to create template: {e}")
+        return None
+
+def calculate_actual_times(scheduled_time: str, trainer_personality: str, schedule_date: datetime) -> tuple:
+    """Calculate actual start/end times based on personality."""
+    variance_range = TRAINER_TYPES[trainer_personality]['variance_range']
+    variance = random.randint(*variance_range)
+    
+    # Convert scheduled_time to datetime using schedule_date
+    hour, minute = map(int, scheduled_time.split(':'))
+    scheduled_dt = schedule_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    actual_start = scheduled_dt + timedelta(minutes=variance)
+    
+    return actual_start.isoformat()
+
+def generate_completed_training(trainer_id: ObjectId, template_id: ObjectId, db) -> bool:
+    """Generate a completed training instance with all activities marked complete."""
+    try:
+        template = db.templates.find_one({'_id': template_id})
+        trainer = db.users.find_one({'_id': trainer_id})
+        
+        if not template or not trainer:
+            logger.error("Template or trainer not found")
+            return False
+        
+        # Start date is random within last 60 days (not future)
+        start_date = datetime.now() - timedelta(days=random.randint(1, 60))
+        
+        # First create the schedule as active with first activity in progress
+        schedule = {
+            'templateId': template_id,
+            'trainerId': trainer_id,
+            'createdBy': trainer_id,  # Set createdBy to the trainer
+            'title': template['name'],
+            'date': start_date,
+            'status': 'active',
+            'activities': [],
+            'activeActivityIndex': 0
+        }
+        
+        # Process activities sequentially as they would happen in real training
+        current_time = start_date
+        for i, activity in enumerate(template['activities']):
+            # Calculate actual start time based on trainer personality
+            actual_start = calculate_actual_times(
+                activity['startTime'],
+                trainer['personality'],
+                start_date
             )
+            actual_start_dt = datetime.fromisoformat(actual_start)
             
-            # Calculate actual times, considering cumulative delay
-            actual_start = scheduled_start_dt + cumulative_delay
-            actual_duration = max(1, activity["duration"] + variance)
-            actual_end = actual_start + timedelta(minutes=actual_duration)
+            # Calculate actual end time (duration may vary slightly)
+            duration_variance = random.randint(-5, 10)  # -5 to +10 minutes variance
+            actual_duration = activity['duration'] + duration_variance
+            actual_end_dt = actual_start_dt + timedelta(minutes=actual_duration)
             
-            # Update cumulative delay for next activity
-            scheduled_end = scheduled_start_dt + timedelta(minutes=activity["duration"])
-            cumulative_delay = actual_end - scheduled_end
+            activity_copy = activity.copy()
+            activity_copy.update({
+                'completed': True,
+                'isActive': False,
+                'status': 'completed',
+                'actualStartTime': actual_start,
+                'actualEndTime': actual_end_dt.isoformat()
+            })
             
-            session_activity = {
-                "_id": ObjectId(),
-                "name": activity["name"],
-                "startTime": activity["startTime"],
-                "duration": activity["duration"],
-                "description": activity.get("description", ""),
-                "day": activity["day"],
-                "completed": True,
-                "isActive": False,
-                "actualStartTime": actual_start,
-                "actualEndTime": actual_end
-            }
-            session["activities"].append(session_activity)
-        except Exception as e:
-            print(f"Error processing activity {activity.get('name', 'unknown')}: {str(e)}")
-            continue
-    
-    return session if session["activities"] else None
+            schedule['activities'].append(activity_copy)
+            current_time = actual_end_dt + timedelta(minutes=random.randint(2, 5))  # Small break between activities
+        
+        # Mark the schedule as completed
+        schedule['status'] = 'completed'
+        schedule['activeActivityIndex'] = len(schedule['activities']) - 1  # Last activity
+        
+        result = db.schedules.insert_one(schedule)
+        logger.info(f"Created completed training schedule: {template['name']}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to generate completed training: {e}")
+        return False
 
 def main():
-    try:
-        # Clear existing data
-        db.users.delete_many({"role": "trainer"})
-        db.schedules.delete_many({})
-        
-        # Get the template for 14-Day Development Sprint
-        template = db.templates.find_one({"name": "14-Day Development Sprint"})
-        if not template:
-            print("Error: 14-Day Development Sprint template not found")
-            return
-        
-        # Create trainers with different personalities
-        trainers = []
-        used_emails = set()
-        for personality in PERSONALITY_TYPES.keys():
-            trainer = create_fake_trainer(personality, used_emails)
-            db.users.insert_one({k: v for k, v in trainer.items() if k != "personality"})
-            trainers.append(trainer)
-        
-        # Generate training sessions
-        base_start_date = datetime.now() - timedelta(days=70)  # Start from 70 days ago
-        sessions_created = 0
-        
-        for trainer in trainers:
-            # Create 5 full trainings per trainer
-            trainer_start_date = base_start_date
-            for training_num in range(5):
-                for day in range(1, template["days"] + 1):
-                    session = create_training_session(trainer, template, trainer_start_date, day)
-                    if session:
-                        db.schedules.insert_one(session)
-                        sessions_created += 1
-                    trainer_start_date += timedelta(days=1)
-                trainer_start_date += timedelta(days=2)  # Add a 2-day gap between trainings
-        
-        print(f"Successfully created {len(trainers)} trainers")
-        print(f"Successfully created {sessions_created} training sessions")
-        
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+    """Main function to generate all required data."""
+    db = connect_to_mongodb()
+    
+    # Create training templates
+    chat_template = create_training_template(
+        "Chat Support Training",
+        random.randint(10, 20),
+        "chat",
+        db
+    )
+    
+    call_template = create_training_template(
+        "Call Center Training",
+        random.randint(10, 20),
+        "call",
+        db
+    )
+    
+    if not chat_template or not call_template:
+        logger.error("Failed to create templates")
+        return
+    
+    # Create trainers
+    trainer_ids = []
+    for personality_type in TRAINER_TYPES.keys():
+        trainer_id = create_trainer(personality_type, db)
+        if trainer_id:
+            trainer_ids.append(trainer_id)
+    
+    if len(trainer_ids) != len(TRAINER_TYPES):
+        logger.error("Failed to create all trainers")
+        return
+    
+    # Generate completed trainings
+    for trainer_id in trainer_ids:
+        for template_id in [chat_template, call_template]:
+            for _ in range(5):
+                if not generate_completed_training(trainer_id, template_id, db):
+                    logger.error(f"Failed to generate training for trainer {trainer_id}")
+
+    logger.info("Data generation completed successfully")
 
 if __name__ == "__main__":
     main() 

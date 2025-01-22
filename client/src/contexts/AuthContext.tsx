@@ -8,6 +8,7 @@ interface User {
   firstName: string;
   lastName: string;
   role: 'admin' | 'trainer';
+  timezone: 'Amsterdam' | 'Manila' | 'Curacao';
   lastLogin?: string;
 }
 
@@ -65,10 +66,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     try {
       const response = await auth.login({ email, password });
-      localStorage.setItem('token', response.data.token);
       setUser(response.data.user as User);
     } catch (error) {
-      localStorage.removeItem('token');
       setUser(null);
       throw error;
     }
@@ -81,14 +80,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfile = async (data: Partial<Omit<User, 'role' | '_id'>>) => {
-    const response = await auth.updateProfile(data);
-    setUser(response.data as User);
+    try {
+      const response = await auth.updateProfile(data);
+      setUser(response.data.user as User);
+    } catch (error) {
+      // If it's an auth error, clear the user state
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        setUser(null);
+      }
+      throw error;
+    }
   };
 
   const logout = async () => {
-    localStorage.removeItem('token');
-    setUser(null);
+    try {
+      await auth.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      setUser(null);
+    }
   };
+
+  // Add an effect to handle token expiration or removal
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('token');
+      if (!token && user) {
+        setUser(null);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile }}>

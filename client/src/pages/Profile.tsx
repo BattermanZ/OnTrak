@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../co
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -15,6 +22,7 @@ export default function Profile() {
   const [profileForm, setProfileForm] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
+    timezone: user?.timezone || 'Amsterdam',
   });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -75,142 +83,61 @@ export default function Profile() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header with purple gradient banner */}
-      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-purple-50 to-purple-100 p-6 rounded-lg shadow-sm">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="text-gray-600 mt-2">Manage your account preferences</p>
-        </div>
-        <Settings className="h-8 w-8 text-purple-600" />
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid gap-6">
+    <div className="container mx-auto py-8">
+      <div className="grid gap-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              User Information
-            </CardTitle>
-            <CardDescription>Update your personal details</CardDescription>
+            <CardTitle>Profile Settings</CardTitle>
+            <CardDescription>Update your profile information</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleProfileUpdate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">First Name</label>
-                  <Input
-                    value={profileForm.firstName}
-                    onChange={(e) => setProfileForm({
-                      ...profileForm,
-                      firstName: e.target.value
-                    })}
-                    placeholder="Enter your first name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Last Name</label>
-                  <Input
-                    value={profileForm.lastName}
-                    onChange={(e) => setProfileForm({
-                      ...profileForm,
-                      lastName: e.target.value
-                    })}
-                    placeholder="Enter your last name"
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <label className="text-sm font-medium">First Name</label>
                 <Input
-                  value={user?.email || ''}
-                  disabled
-                  className="bg-gray-50"
+                  type="text"
+                  name="firstName"
+                  value={profileForm.firstName}
+                  onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Role</label>
+                <label className="text-sm font-medium">Last Name</label>
                 <Input
-                  value={user?.role || ''}
-                  disabled
-                  className="bg-gray-50"
-                />
-              </div>
-              <Button 
-                type="submit" 
-                disabled={loading}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                {loading ? 'Saving Changes...' : 'Save Changes'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Change Password
-            </CardTitle>
-            <CardDescription>Update your account password</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Current Password</label>
-                <Input
-                  type="password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) => setPasswordForm({
-                    ...passwordForm,
-                    currentPassword: e.target.value
-                  })}
-                  required
+                  type="text"
+                  name="lastName"
+                  value={profileForm.lastName}
+                  onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">New Password</label>
-                <Input
-                  type="password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) => setPasswordForm({
-                    ...passwordForm,
-                    newPassword: e.target.value
-                  })}
-                  required
-                />
+                <label className="text-sm font-medium">Timezone</label>
+                <Select
+                  value={profileForm.timezone}
+                  onValueChange={(value) => setProfileForm({ ...profileForm, timezone: value as 'Amsterdam' | 'Manila' | 'Curacao' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a timezone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Amsterdam">Amsterdam</SelectItem>
+                    <SelectItem value="Manila">Manila</SelectItem>
+                    <SelectItem value="Curacao">Curaçao</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Confirm New Password</label>
-                <Input
-                  type="password"
-                  value={passwordForm.confirmNewPassword}
-                  onChange={(e) => setPasswordForm({
-                    ...passwordForm,
-                    confirmNewPassword: e.target.value
-                  })}
-                  required
-                />
-              </div>
-              <Button 
-                type="submit" 
-                disabled={loading}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                {loading ? 'Changing Password...' : 'Change Password'}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              {success && (
+                <Alert>
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Updating...' : 'Update Profile'}
               </Button>
             </form>
           </CardContent>
