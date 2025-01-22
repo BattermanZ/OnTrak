@@ -162,23 +162,43 @@ const processSchedules = (schedules) => {
         const scheduledDuration = activity.duration;
         const durationVariance = actualDuration - scheduledDuration;
 
-        // For Training Punctuality Score: early start or within ±10% of scheduled start
+        // Log raw activity data
+        console.log('Raw activity data:', {
+          name: activity.name,
+          startTime: activity.startTime,
+          duration: activity.duration,
+          actualStartTime: activity.actualStartTime,
+          actualEndTime: activity.actualEndTime,
+          completed: activity.completed
+        });
+
+        // Log calculated values
+        console.log('Activity timing calculations:', {
+          name: activity.name,
+          scheduledDuration,
+          actualDuration,
+          durationVariance,
+          isEfficient: durationVariance < 0,
+          isDelayed: durationVariance > 0
+        });
+
+        // For Training Punctuality Score: any early start OR within 10% of scheduled start if late
         const punctualityThreshold = Math.max(5, scheduledDuration * 0.1);
-        if (Math.abs(startVariance) <= punctualityThreshold) {
+        if (startVariance < 0 || Math.abs(startVariance) <= punctualityThreshold) {
           onTimeStarts++;
         }
 
         // For adherence array
         statistics.adherence.push({
           activity: activity.name,
-          onTime: Math.abs(startVariance) <= punctualityThreshold ? "1" : "0",
-          delayed: Math.abs(startVariance) > punctualityThreshold ? "1" : "0",
+          onTime: (startVariance < 0 || Math.abs(startVariance) <= punctualityThreshold) ? "1" : "0",
+          delayed: (startVariance > 0 && Math.abs(startVariance) > punctualityThreshold) ? "1" : "0",
           averageVariance: durationVariance.toString()
         });
 
         // Update activity stats
         stats.totalTimeVariance += durationVariance;
-        if (Math.abs(startVariance) <= punctualityThreshold) {
+        if (startVariance < 0 || Math.abs(startVariance) <= punctualityThreshold) {
           stats.onTime++;
         } else {
           stats.delayed++;
@@ -235,6 +255,21 @@ const processSchedules = (schedules) => {
 
     // Add to most delayed/efficient activities
     const averageDelay = averageActualDuration - averageScheduledDuration;
+    
+    console.log('Final activity stats:', {
+      activity: name,
+      averageActualDuration,
+      averageScheduledDuration,
+      averageDelay,
+      count: stats.count,
+      totalActualDuration: stats.totalActualDuration,
+      totalScheduledDuration: stats.totalDuration,
+      isEfficient: averageDelay < 0,
+      isDelayed: averageDelay > 0,
+      onTimeCount: stats.onTime,
+      delayedCount: stats.delayed
+    });
+
     if (averageDelay > 0) {
       statistics.mostDelayedActivities.push({
         name,
@@ -249,6 +284,10 @@ const processSchedules = (schedules) => {
       });
     }
   });
+
+  // Log final arrays
+  console.log('Most efficient activities:', statistics.mostEfficientActivities);
+  console.log('Most delayed activities:', statistics.mostDelayedActivities);
 
   // Sort delayed activities by average delay (descending)
   statistics.mostDelayedActivities.sort((a, b) => {
