@@ -129,4 +129,5 @@ export interface Training {
   _id: string;
   name: string;
   days: number;
+  timeVariance?: number;
 } 

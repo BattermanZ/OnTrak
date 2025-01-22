@@ -119,12 +119,18 @@ export default function Statistics() {
   };
 
   const timeVarianceData = useMemo(() => {
-    if (!statistics) return [];
+    console.log('Statistics data:', statistics);
+    if (!statistics) {
+      console.log('No statistics data available');
+      return [];
+    }
     
     // Single training, single day view
     if (filters.training !== 'all' && filters.day) {
+      console.log('Single training, single day view');
       const key = `${filters.training}-${filters.day}`;
       const dayData = statistics.daySpecificStats[key]?.activities || [];
+      console.log('Day data:', dayData);
       return dayData.map((activity: ActivityStats) => ({
         name: activity.name,
         timeVariance: parseDuration(activity.averageVariance)
@@ -133,13 +139,16 @@ export default function Statistics() {
 
     // Single training, all days view
     if (filters.training !== 'all') {
+      console.log('Single training, all days view');
       const training = statistics.trainings.find((t: Training) => t._id === filters.training);
+      console.log('Selected training:', training);
       if (!training) return [];
       
       return Array.from({ length: training.days }, (_, i) => {
         const dayNumber = i + 1;
         const key = `${filters.training}-${dayNumber}`;
         const dayData = statistics.daySpecificStats[key]?.activities || [];
+        console.log(`Day ${dayNumber} data:`, dayData);
         const totalVariance = dayData.reduce((sum: number, activity: ActivityStats) => {
           return sum + parseDuration(activity.averageVariance);
         }, 0);
@@ -153,20 +162,15 @@ export default function Statistics() {
 
     // All trainings view
     if (filters.training === 'all') {
+      console.log('All trainings view');
+      console.log('Available trainings:', statistics.trainings);
       return statistics.trainings.map((training: Training) => {
-        const totalVariance = Object.entries(statistics.daySpecificStats)
-          .filter(([key]) => key.startsWith(training._id))
-          .reduce((sum: number, [_, data]) => {
-            const typedData = data as DayStats;
-            return sum + typedData.activities.reduce((activitySum: number, activity: ActivityStats) => {
-              return activitySum + parseDuration(activity.averageVariance);
-            }, 0);
-          }, 0);
-
-        return {
+        const result = {
           name: training.name,
-          timeVariance: totalVariance
+          timeVariance: training.timeVariance || 0
         };
+        console.log(`Training ${training.name} data:`, result);
+        return result;
       });
     }
 
@@ -280,6 +284,7 @@ export default function Statistics() {
   };
 
   const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => {
+    console.log('Rendering chart with data:', data);
     const chartTitle = isTrainerChart ? 'Timing Performance by Trainer' : (
       filters.training === 'all' 
         ? 'Schedule Accuracy by Program'

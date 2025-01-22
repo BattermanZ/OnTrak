@@ -13,13 +13,16 @@ const router = express.Router();
 // Helper function to get date filter based on range
 const getDateFilter = (range) => {
   const now = new Date();
+  const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+  const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+  
   switch (range) {
     case 'week':
-      return { $gte: startOfWeek(now), $lte: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000) };
+      return { $gte: oneYearAgo, $lte: oneYearFromNow };
     case 'month':
-      return { $gte: startOfMonth(now), $lte: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000) };
+      return { $gte: oneYearAgo, $lte: oneYearFromNow };
     case 'year':
-      return { $gte: startOfYear(now), $lte: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000) };
+      return { $gte: oneYearAgo, $lte: oneYearFromNow };
     case 'all':
       return null;
     default:
@@ -287,11 +290,18 @@ const processSchedules = (schedules) => {
     const averageVariance = stats.activityCount > 0 ? 
       Math.round(stats.totalVariance / stats.activityCount) : 0;
     
-    statistics.trainings.push({
-      _id: templateId,
-      name: stats.name,
-      timeVariance: averageVariance
-    });
+    // Find and update the existing training entry instead of pushing a new one
+    const existingTraining = statistics.trainings.find(t => t._id === templateId);
+    if (existingTraining) {
+      existingTraining.timeVariance = averageVariance;
+    } else {
+      // If not found (shouldn't happen), add it
+      statistics.trainings.push({
+        _id: templateId,
+        name: stats.name,
+        timeVariance: averageVariance
+      });
+    }
   });
 
   return statistics;
@@ -387,10 +397,12 @@ router.get('/',
           _id: t._id,
           name: t.name
         }));
+        // Initialize trainings with template metadata (don't overwrite)
         statistics.trainings = templates.map(t => ({
-          _id: t._id,
+          _id: t._id.toString(),  // Convert to string for comparison
           name: t.name,
-          days: t.days
+          days: t.days,
+          timeVariance: 0  // Default value
         }));
       } catch (error) {
         logger.error('Error fetching templates:', error);

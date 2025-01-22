@@ -21,6 +21,25 @@ LUNCH_DURATION = 30  # minutes
 MIN_ACTIVITY_DURATION = 30  # minutes
 MAX_ACTIVITY_DURATION = 120  # minutes
 
+# Day variance factors (in minutes) - some days run early, some late
+DAY_VARIANCE = {
+    1: {'range': (-5, 5), 'description': 'First day - mostly on time'},
+    2: {'range': (-15, -5), 'description': 'Second day - tends to run early'},
+    3: {'range': (5, 15), 'description': 'Third day - tends to run late'},
+    4: {'range': (-10, 0), 'description': 'Fourth day - slightly early'},
+    5: {'range': (0, 10), 'description': 'Fifth day - slightly late'},
+    6: {'range': (-20, -10), 'description': 'Sixth day - runs very early'},
+    7: {'range': (10, 20), 'description': 'Seventh day - runs very late'},
+    8: {'range': (-5, 5), 'description': 'Eighth day - mostly on time'},
+    9: {'range': (5, 15), 'description': 'Ninth day - tends to run late'},
+    10: {'range': (-15, -5), 'description': 'Tenth day - tends to run early'},
+    11: {'range': (0, 10), 'description': 'Day 11 - slightly late'},
+    12: {'range': (-10, 0), 'description': 'Day 12 - slightly early'},
+    13: {'range': (5, 15), 'description': 'Day 13 - tends to run late'},
+    14: {'range': (-5, 5), 'description': 'Day 14 - mostly on time'},
+    15: {'range': (-15, -5), 'description': 'Day 15 - tends to run early'}
+}
+
 # Trainer personality types with variance ranges in minutes
 TRAINER_TYPES = {
     'Early Bird': {'variance_range': (-10, 0)},    # Always starts early
@@ -107,7 +126,7 @@ def create_trainer(personality_type: str, db) -> ObjectId:
         # Hash password
         salt = bcrypt.gensalt()
         password = bcrypt.hashpw('password123'.encode('utf-8'), salt)
-        
+    
         trainer = {
             'email': email,
             'firstName': first_name,
@@ -150,15 +169,16 @@ def generate_activity_time(start_time: datetime, min_duration: int, max_duration
     end_time = start_time + timedelta(minutes=duration)
     return duration, end_time
 
-def create_training_template(name: str, num_days: int, training_type: str, db) -> ObjectId:
+def create_training_template(name: str, num_days: int, training_type: str, trainer_id: ObjectId, db) -> ObjectId:
     """Create training template with specified number of days."""
     try:
         template = {
             'name': name,
             'description': f'{name} - {num_days} day training program',
             'tags': ['customer-service', training_type],
-            'days': num_days,  # Add total number of days
-            'activities': [],  # Activities will be moved here
+            'days': num_days,
+            'activities': [],
+            'createdBy': trainer_id,
             'createdAt': datetime.utcnow(),
             'updatedAt': datetime.utcnow()
         }
@@ -166,13 +186,16 @@ def create_training_template(name: str, num_days: int, training_type: str, db) -
         current_time = parse_time(WORKDAY_START)
         end_time = parse_time(WORKDAY_END)
         
+        # Keep track of used activity names
+        used_names = set()
+        
         for day in range(num_days):
             day_current_time = current_time
             
             # Number of activities for this day
             num_activities = random.randint(6, 12)
             
-            for _ in range(num_activities):
+            for activity_num in range(num_activities):
                 # Ensure we don't exceed workday end time
                 if day_current_time >= end_time:
                     break
@@ -189,13 +212,21 @@ def create_training_template(name: str, num_days: int, training_type: str, db) -
                 descriptions = ACTIVITY_TYPES[activity_category][f'{training_type.lower()}_descriptions']
                 title, description = random.choice(descriptions)
                 
+                # Ensure unique name by adding a number if needed
+                base_name = title
+                counter = 1
+                while title in used_names:
+                    title = f"{base_name} ({counter})"
+                    counter += 1
+                used_names.add(title)
+                
                 activity = {
                     'name': title,
                     'startTime': day_current_time.strftime('%H:%M'),
                     'duration': duration,
                     'description': description,
                     'day': day + 1,
-                    'isActive': True
+                    'isActive': False
                 }
                 
                 template['activities'].append(activity)
@@ -208,20 +239,45 @@ def create_training_template(name: str, num_days: int, training_type: str, db) -
         logger.error(f"Failed to create template: {e}")
         return None
 
-def calculate_actual_times(scheduled_time: str, trainer_personality: str, schedule_date: datetime) -> tuple:
-    """Calculate actual start/end times based on personality."""
-    variance_range = TRAINER_TYPES[trainer_personality]['variance_range']
-    variance = random.randint(*variance_range)
+def calculate_actual_times(scheduled_time: str, trainer_personality: str, schedule_date: datetime, day: int, duration: int) -> tuple:
+    """Calculate actual start/end times based on personality and day variance."""
+    # Get trainer personality variance
+    trainer_variance_range = TRAINER_TYPES[trainer_personality]['variance_range']
+    trainer_variance = random.randint(*trainer_variance_range)
+    
+    # Get day-specific variance
+    day_variance_range = DAY_VARIANCE.get(day, {'range': (-5, 5)})['range']
+    day_variance = random.randint(*day_variance_range)
+    
+    # Combine variances (both trainer personality and day-specific factors)
+    start_variance = trainer_variance + day_variance
+    
+    # Calculate duration variance (between -10% and +20% of scheduled duration)
+    min_duration_variance = max(-int(duration * 0.1), -15)  # Cap negative variance at -15 minutes
+    max_duration_variance = min(int(duration * 0.2), 30)    # Cap positive variance at +30 minutes
+    
+    # Adjust variance based on trainer personality
+    if trainer_personality == 'Early Bird':
+        max_duration_variance = min(max_duration_variance, 15)  # Early birds tend to finish on time
+    elif trainer_personality == 'Procrastinator':
+        min_duration_variance = max(0, min_duration_variance)   # Procrastinators never finish early
+    elif trainer_personality == 'Chaotic':
+        min_duration_variance = min_duration_variance * 2       # Chaotic trainers have wider variance
+        max_duration_variance = max_duration_variance * 2
+    
+    duration_variance = random.randint(min_duration_variance, max_duration_variance)
+    actual_duration = max(duration + duration_variance, int(duration * 0.5))  # Ensure at least 50% of scheduled duration
     
     # Convert scheduled_time to datetime using schedule_date
     hour, minute = map(int, scheduled_time.split(':'))
     scheduled_dt = schedule_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    actual_start = scheduled_dt + timedelta(minutes=variance)
+    actual_start = scheduled_dt + timedelta(minutes=start_variance)
+    actual_end = actual_start + timedelta(minutes=actual_duration)
     
-    return actual_start.isoformat()
+    return actual_start.isoformat(), actual_end.isoformat()
 
 def generate_completed_training(trainer_id: ObjectId, template_id: ObjectId, db) -> bool:
-    """Generate a completed training instance with all activities marked complete."""
+    """Generate a completed training instance with activities processed sequentially."""
     try:
         template = db.templates.find_one({'_id': template_id})
         trainer = db.users.find_one({'_id': trainer_id})
@@ -230,102 +286,110 @@ def generate_completed_training(trainer_id: ObjectId, template_id: ObjectId, db)
             logger.error("Template or trainer not found")
             return False
         
-        # Start date is random within last 60 days (not future)
-        start_date = datetime.now() - timedelta(days=random.randint(1, 60))
-        
-        # First create the schedule as active with first activity in progress
-        schedule = {
-            'templateId': template_id,
-            'trainerId': trainer_id,
-            'createdBy': trainer_id,  # Set createdBy to the trainer
-            'title': template['name'],
-            'date': start_date,
-            'status': 'active',
-            'activities': [],
-            'activeActivityIndex': 0
-        }
-        
-        # Process activities sequentially as they would happen in real training
-        current_time = start_date
-        for i, activity in enumerate(template['activities']):
-            # Calculate actual start time based on trainer personality
-            actual_start = calculate_actual_times(
-                activity['startTime'],
-                trainer['personality'],
-                start_date
-            )
-            actual_start_dt = datetime.fromisoformat(actual_start)
+        # For each day in the template
+        for day in range(1, template['days'] + 1):
+            # Start date is random within last 60 days (not future)
+            start_date = datetime.now() - timedelta(days=random.randint(1, 60))
             
-            # Calculate actual end time (duration may vary slightly)
-            duration_variance = random.randint(-5, 10)  # -5 to +10 minutes variance
-            actual_duration = activity['duration'] + duration_variance
-            actual_end_dt = actual_start_dt + timedelta(minutes=actual_duration)
+            # Get activities for this day
+            day_activities = [a for a in template['activities'] if a['day'] == day]
             
-            activity_copy = activity.copy()
-            activity_copy.update({
-                'completed': True,
-                'isActive': False,
+            if not day_activities:
+                logger.warning(f"No activities found for day {day}")
+                continue
+            
+            # Create schedule for this day
+            schedule = {
+                'templateId': template_id,
+                'trainerId': trainer_id,
+                'createdBy': trainer_id,
+                'title': f"{template['name']} - Day {day}",
+                'date': start_date,
                 'status': 'completed',
-                'actualStartTime': actual_start,
-                'actualEndTime': actual_end_dt.isoformat()
-            })
+                'activities': [],
+                'day': day
+            }
             
-            schedule['activities'].append(activity_copy)
-            current_time = actual_end_dt + timedelta(minutes=random.randint(2, 5))  # Small break between activities
+            # Process activities sequentially
+            current_time = start_date
+            for i, activity in enumerate(day_activities):
+                # Calculate actual start and end times based on trainer personality and day variance
+                actual_start, actual_end = calculate_actual_times(
+                    activity['startTime'],
+                    trainer['personality'],
+                    start_date,
+                    day,
+                    activity['duration']
+                )
+                
+                activity_copy = activity.copy()
+                activity_copy.update({
+                    'status': 'completed',
+                    'isActive': False,
+                    'completed': True,
+                    'actualStartTime': actual_start,
+                    'actualEndTime': actual_end
+                })
+                
+                schedule['activities'].append(activity_copy)
+            
+            result = db.schedules.insert_one(schedule)
+            logger.info(f"Created completed training schedule: {template['name']} - Day {day}")
         
-        # Mark the schedule as completed
-        schedule['status'] = 'completed'
-        schedule['activeActivityIndex'] = len(schedule['activities']) - 1  # Last activity
-        
-        result = db.schedules.insert_one(schedule)
-        logger.info(f"Created completed training schedule: {template['name']}")
         return True
     except Exception as e:
         logger.error(f"Failed to generate completed training: {e}")
         return False
 
 def main():
-    """Main function to generate all required data."""
-    db = connect_to_mongodb()
-    
-    # Create training templates
-    chat_template = create_training_template(
-        "Chat Support Training",
-        random.randint(10, 20),
-        "chat",
-        db
-    )
-    
-    call_template = create_training_template(
-        "Call Center Training",
-        random.randint(10, 20),
-        "call",
-        db
-    )
-    
-    if not chat_template or not call_template:
-        logger.error("Failed to create templates")
-        return
-    
-    # Create trainers
-    trainer_ids = []
-    for personality_type in TRAINER_TYPES.keys():
-        trainer_id = create_trainer(personality_type, db)
-        if trainer_id:
-            trainer_ids.append(trainer_id)
-    
-    if len(trainer_ids) != len(TRAINER_TYPES):
-        logger.error("Failed to create all trainers")
-        return
-    
-    # Generate completed trainings
-    for trainer_id in trainer_ids:
-        for template_id in [chat_template, call_template]:
-            for _ in range(5):
-                if not generate_completed_training(trainer_id, template_id, db):
-                    logger.error(f"Failed to generate training for trainer {trainer_id}")
+    try:
+        # Connect to MongoDB
+        client = MongoClient('mongodb://localhost:27017/')
+        db = client['ontrak']
+        
+        # Create trainers with different personality types
+        trainer_ids = {}
+        for personality in TRAINER_TYPES.keys():
+            trainer_id = create_trainer(personality, db)
+            if trainer_id:
+                trainer_ids[personality] = trainer_id
+        
+        # Create templates, each created by a random trainer
+        templates = {
+            'chat': create_training_template(
+                'Chat Support Training',
+                10,
+                'chat',
+                random.choice(list(trainer_ids.values())),
+                db
+            ),
+            'call': create_training_template(
+                'Call Center Training',
+                15,
+                'call',
+                random.choice(list(trainer_ids.values())),
+                db
+            )
+        }
+        
+        # Generate 5 complete training sessions for each trainer and each template
+        for personality, trainer_id in trainer_ids.items():
+            logger.info(f"Generating trainings for {personality} trainer")
+            for template_name, template_id in templates.items():
+                if template_id:
+                    logger.info(f"Generating {template_name} trainings")
+                    for i in range(5):  # 5 complete training sessions
+                        if generate_completed_training(trainer_id, template_id, db):
+                            logger.info(f"Completed {template_name} training session {i+1}/5 for {personality} trainer")
+                        else:
+                            logger.error(f"Failed to generate {template_name} training session {i+1} for {personality} trainer")
+        
+        logger.info("Data generation completed successfully!")
+        
+    except Exception as e:
+        logger.error(f"Failed to generate data: {e}")
+    finally:
+        client.close()
 
-    logger.info("Data generation completed successfully")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main() 
