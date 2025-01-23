@@ -45,7 +45,8 @@ const TIMING_COLORS = {
 const CHART_COLORS = {
   positive: '#22c55e',  // green-500
   negative: '#f43f5e',  // rose-500
-  neutral: '#3b82f6'    // blue-500
+  neutral: '#3b82f6',   // blue-500
+  onTimePositive: '#fb923c'  // orange-400
 };
 
 const exportStatisticsToCSV = (statsData: StatisticsData) => {
@@ -232,22 +233,22 @@ export default function Statistics() {
     }
     
     // All trainings or single training (all days) view
-    return statistics.trainers.map((trainer: Trainer, index: number) => {
+    const trainerData = statistics.trainers.map((trainer: Trainer, index: number) => {
       const trainerStats = trainerResults[index]?.data as StatisticsData | undefined;
-      if (!trainerStats) return { name: trainer.name, timeVariance: 0 };
-      
-      if (!trainerStats.adherence) return { name: trainer.name, timeVariance: 0 };
+      if (!trainerStats?.adherence?.length) return null;
       
       const totalVariance = trainerStats.adherence.reduce((sum: number, activity: AdherenceItem) => {
         return sum + parseDuration(activity.averageVariance);
       }, 0);
+
       return {
         name: trainer.name,
-        timeVariance: trainerStats.adherence.length > 0 
-          ? Math.round(totalVariance / trainerStats.adherence.length)
-          : 0
+        timeVariance: Math.round(totalVariance / trainerStats.adherence.length)
       };
     });
+
+    // Filter out trainers with no data
+    return trainerData.filter((data): data is TimeVarianceData => data !== null);
   }, [statistics, filters, trainerResults, parseDuration]);
 
   const calculateTimingDistribution = (data: TimeVarianceData[]) => {
@@ -343,7 +344,15 @@ export default function Statistics() {
                 <BarChart data={data}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                   <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
-                  <XAxis dataKey="name" />
+                  <XAxis 
+                    dataKey="name" 
+                    interval={0}
+                    angle={data.length > 5 ? -35 : 0}
+                    textAnchor="middle"
+                    height={data.length > 5 ? 120 : 40}
+                    tickMargin={10}
+                    dx={data.length > 5 ? 15 : 0}
+                  />
                   <YAxis 
                     label={{ 
                       value: 'Time Variance (minutes)', 
@@ -357,19 +366,35 @@ export default function Statistics() {
                       }
                     }}
                     domain={[
-                      (dataMin: number) => Math.min(0, dataMin),
-                      (dataMax: number) => Math.max(0, dataMax)
+                      (dataMin: number) => Math.floor(Math.min(0, dataMin) / 5) * 5,
+                      (dataMax: number) => Math.ceil(Math.max(0, dataMax) / 5) * 5
                     ]}
                     tickFormatter={(value) => Math.round(value).toString()}
                   />
                   <RechartsTooltip />
                   <Bar dataKey="timeVariance" onClick={isTrainerChart ? handleTrainerBarClick : handleBarClick}>
-                    {data.map((entry: TimeVarianceData, index: number) => (
-                      <Cell 
-                        key={`cell-${index}`}
-                        fill={entry.timeVariance > 0 ? CHART_COLORS.negative : CHART_COLORS.positive}
-                      />
-                    ))}
+                    {data.map((entry: TimeVarianceData, index: number) => {
+                      // Calculate if the variance is within 10% of scheduled duration
+                      const scheduledDuration = 60; // Default duration in minutes
+                      const variancePercentage = Math.abs(entry.timeVariance / scheduledDuration) * 100;
+                      const isOnTime = variancePercentage <= 10;
+                      
+                      let fillColor;
+                      if (entry.timeVariance <= 0) {
+                        fillColor = CHART_COLORS.positive;
+                      } else if (isOnTime) {
+                        fillColor = CHART_COLORS.onTimePositive;
+                      } else {
+                        fillColor = CHART_COLORS.negative;
+                      }
+                      
+                      return (
+                        <Cell 
+                          key={`cell-${index}`}
+                          fill={fillColor}
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -495,11 +520,14 @@ export default function Statistics() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Trainers</SelectItem>
-                  {(statistics?.trainers || []).map((trainer) => (
-                    <SelectItem key={trainer._id} value={trainer._id}>
-                      {trainer.name}
-                    </SelectItem>
-                  ))}
+                  {trainerVarianceData.map((trainer) => {
+                    const trainerInfo = statistics?.trainers.find(t => t.name === trainer.name);
+                    return trainerInfo && (
+                      <SelectItem key={trainerInfo._id} value={trainerInfo._id}>
+                        {trainerInfo.name}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -528,18 +556,24 @@ export default function Statistics() {
                   ...filters, 
                   day: value === 'all' ? undefined : parseInt(value) 
                 })}
-                disabled={!selectedTraining}
+                disabled={filters.training === 'all'}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Day" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Days</SelectItem>
-                  {selectedTraining?.days && Array.from({ length: selectedTraining.days }, (_, i) => (
-                    <SelectItem key={i + 1} value={(i + 1).toString()}>
-                      Day {i + 1}
-                    </SelectItem>
-                  ))}
+                  {filters.training !== 'all' && statistics?.metadata?.templates && 
+                    (() => {
+                      const selectedTraining = statistics.trainings.find(t => t._id === filters.training);
+                      const template = statistics.metadata.templates.find(t => t.name === selectedTraining?.name);
+                      return template && Array.from({ length: template.days }, (_, i) => (
+                        <SelectItem key={i + 1} value={(i + 1).toString()}>
+                          Day {i + 1}
+                        </SelectItem>
+                      ));
+                    })()
+                  }
                 </SelectContent>
               </Select>
             </div>
@@ -649,7 +683,15 @@ export default function Statistics() {
                 <BarChart data={timeVarianceData}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                   <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
-                  <XAxis dataKey="name" />
+                  <XAxis 
+                    dataKey="name" 
+                    interval={0}
+                    angle={timeVarianceData.length > 3 ? -45 : 0}
+                    textAnchor={timeVarianceData.length > 3 ? "end" : "middle"}
+                    height={timeVarianceData.length > 3 ? 100 : 60}
+                    tickMargin={timeVarianceData.length > 3 ? 25 : 5}
+                    dx={timeVarianceData.length > 3 ? 10 : 0}
+                  />
                   <YAxis 
                     label={{ 
                       value: 'Time Variance (minutes)', 
@@ -663,19 +705,35 @@ export default function Statistics() {
                       }
                     }}
                     domain={[
-                      (dataMin: number) => Math.min(0, dataMin),
-                      (dataMax: number) => Math.max(0, dataMax)
+                      (dataMin: number) => Math.floor(Math.min(0, dataMin) / 5) * 5,
+                      (dataMax: number) => Math.ceil(Math.max(0, dataMax) / 5) * 5
                     ]}
                     tickFormatter={(value) => Math.round(value).toString()}
                   />
                   <RechartsTooltip />
                   <Bar dataKey="timeVariance" onClick={handleBarClick}>
-                    {timeVarianceData.map((entry: TimeVarianceData, index: number) => (
-                      <Cell 
-                        key={`cell-${index}`}
-                        fill={entry.timeVariance > 0 ? CHART_COLORS.negative : CHART_COLORS.positive}
-                      />
-                    ))}
+                    {timeVarianceData.map((entry: TimeVarianceData, index: number) => {
+                      // Calculate if the variance is within 10% of scheduled duration
+                      const scheduledDuration = 60; // Default duration in minutes
+                      const variancePercentage = Math.abs(entry.timeVariance / scheduledDuration) * 100;
+                      const isOnTime = variancePercentage <= 10;
+                      
+                      let fillColor;
+                      if (entry.timeVariance <= 0) {
+                        fillColor = CHART_COLORS.positive;
+                      } else if (isOnTime) {
+                        fillColor = CHART_COLORS.onTimePositive;
+                      } else {
+                        fillColor = CHART_COLORS.negative;
+                      }
+                      
+                      return (
+                        <Cell 
+                          key={`cell-${index}`}
+                          fill={fillColor}
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
