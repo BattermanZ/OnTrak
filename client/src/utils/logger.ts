@@ -1,3 +1,5 @@
+import { debounce } from 'lodash';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -12,6 +14,9 @@ class Logger {
   private logBuffer: LogEntry[] = [];
   private readonly bufferSize = 100;
   private readonly logFile = '../../logs/frontend.log';
+  private queue: string[] = [];
+  private isErrored: boolean = false;
+  private errorTimeout: number | null = null;
 
   private constructor() {
     window.addEventListener('beforeunload', () => {
@@ -67,54 +72,71 @@ class Logger {
     }
   }
 
-  private log(level: LogLevel, message: string, data?: any) {
-    const entry: LogEntry = {
-      timestamp: this.getTimestamp(),
-      level,
-      message,
-      data
-    };
+  private debouncedFlushLogs = debounce(async () => {
+    if (this.queue.length === 0 || this.isErrored) return;
 
-    // Add to buffer
-    this.logBuffer.push(entry);
-    if (this.logBuffer.length >= this.bufferSize) {
-      this.flushLogs();
-    }
+    try {
+      const logs = this.queue.join('\n');
+      this.queue = [];
+      
+      const response = await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logs })
+      });
 
-    // Also log to console in development
-    if (process.env.NODE_ENV === 'development') {
-      const logMessage = `${entry.timestamp} [${level.toUpperCase()}] ${message}`;
-      switch (level) {
-        case 'debug':
-          console.log(logMessage, data || '');
-          break;
-        case 'info':
-          console.info(logMessage, data || '');
-          break;
-        case 'warn':
-          console.warn(logMessage, data || '');
-          break;
-        case 'error':
-          console.error(logMessage, data || '');
-          break;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+    } catch (error) {
+      // Set error state and clear after timeout
+      this.isErrored = true;
+      if (this.errorTimeout) {
+        clearTimeout(this.errorTimeout);
+      }
+      this.errorTimeout = window.setTimeout(() => {
+        this.isErrored = false;
+        this.errorTimeout = null;
+      }, 5000) as unknown as number;
+
+      // Don't log this error to prevent loops
+      console.warn('Failed to send logs to server:', error);
+    }
+  }, 1000);
+
+  private formatLogMessage(level: string, message: string, data?: any): string {
+    const timestamp = new Date().toISOString();
+    const dataStr = data ? ` ${JSON.stringify(data)}` : '';
+    return `${timestamp} [${level}] ${message}${dataStr}`;
+  }
+
+  public log(level: string, message: string, data?: any) {
+    const logMessage = this.formatLogMessage(level, message, data);
+    
+    // Always log to console
+    console.log(logMessage);
+    
+    // Only queue if not in error state
+    if (!this.isErrored) {
+      this.queue.push(logMessage);
+      this.debouncedFlushLogs();
     }
   }
 
   public debug(message: string, data?: any) {
-    this.log('debug', message, data);
+    this.log('DEBUG', message, data);
   }
 
   public info(message: string, data?: any) {
-    this.log('info', message, data);
+    this.log('INFO', message, data);
   }
 
   public warn(message: string, data?: any) {
-    this.log('warn', message, data);
+    this.log('WARN', message, data);
   }
 
   public error(message: string, data?: any) {
-    this.log('error', message, data);
+    this.log('ERROR', message, data);
   }
 }
 

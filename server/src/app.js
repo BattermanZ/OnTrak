@@ -38,13 +38,36 @@ app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 // Cookie parser
 app.use(cookieParser());
 
-// Rate limiting
+// Rate limiting configuration
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, // 200 requests per minute
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
-app.use('/api/', limiter);
+
+// Apply rate limiting to all routes except logs in development
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/', limiter);
+} else {
+  // Apply rate limiting to all API routes except /api/logs
+  app.use('/api/', (req, res, next) => {
+    if (req.path.startsWith('/logs')) {
+      return next();
+    }
+    return limiter(req, res, next);
+  });
+}
+
+// Separate rate limiter for logs endpoint
+const logsLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 1000, // 1000 requests per minute for logs
+  message: 'Too many log requests, please try again later.',
+});
+
+app.use('/api/logs', logsLimiter);
 
 // Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
@@ -229,7 +252,7 @@ shutdownSignals.forEach(signal => {
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: ['http://localhost:3000', process.env.CLIENT_URL].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
