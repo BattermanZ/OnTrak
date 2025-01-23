@@ -77,9 +77,20 @@ export interface AdherenceItem {
 
 export interface ActivityStats {
   name: string;
-  scheduledDuration: string;
-  averageActualDuration: string;
-  averageVariance: string;
+  timeVariance: number;
+  averageDelay?: string;
+  averageTimeSaved?: string;
+}
+
+export interface DailyStats {
+  day: number;
+  timeVariance: number;
+  name: string;
+  activities: ActivityStats[];
+  trainers: {
+    name: string;
+    timeVariance: number;
+  }[];
 }
 
 export interface DayStats {
@@ -97,14 +108,20 @@ export interface EfficientActivity {
 }
 
 export interface StatisticsData {
-  adherence: AdherenceItem[];
-  daySpecificStats: { [key: string]: DayStats };
-  onTimeStartRate: string;
   totalTrainingDays: number;
-  mostDelayedActivities: DelayedActivity[];
-  mostEfficientActivities: EfficientActivity[];
+  adherence: AdherenceItem[];
+  onTimeStartRate: string;
+  averageDelay: string;
+  daySpecificStats?: { [key: string]: DayStats };
+  mostDelayedActivities: ActivityStats[];
+  mostEfficientActivities: ActivityStats[];
   trainers: Trainer[];
   trainings: Training[];
+  metadata: {
+    templates: Template[];
+    trainers: Trainer[];
+  };
+  dailyStats: DailyStats[];
 }
 
 export interface StatisticsFilters {

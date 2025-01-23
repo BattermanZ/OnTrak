@@ -22,7 +22,7 @@ import type {
   TimeVarianceData,
   AdherenceItem,
   ActivityStats,
-  DayStats,
+  DailyStats,
   Training,
   Trainer
 } from '../types';
@@ -124,47 +124,12 @@ export default function Statistics() {
       console.log('No statistics data available');
       return [];
     }
-    
-    // Single training, single day view
-    if (filters.training !== 'all' && filters.day) {
-      console.log('Single training, single day view');
-      const key = `${filters.training}-${filters.day}`;
-      const dayData = statistics.daySpecificStats[key]?.activities || [];
-      console.log('Day data:', dayData);
-      return dayData.map((activity: ActivityStats) => ({
-        name: activity.name,
-        timeVariance: parseDuration(activity.averageVariance)
-      }));
-    }
-
-    // Single training, all days view
-    if (filters.training !== 'all') {
-      console.log('Single training, all days view');
-      const training = statistics.trainings.find((t: Training) => t._id === filters.training);
-      console.log('Selected training:', training);
-      if (!training) return [];
-      
-      return Array.from({ length: training.days }, (_, i) => {
-        const dayNumber = i + 1;
-        const key = `${filters.training}-${dayNumber}`;
-        const dayData = statistics.daySpecificStats[key]?.activities || [];
-        console.log(`Day ${dayNumber} data:`, dayData);
-        const totalVariance = dayData.reduce((sum: number, activity: ActivityStats) => {
-          return sum + parseDuration(activity.averageVariance);
-        }, 0);
-        
-        return {
-          name: `Day ${dayNumber}`,
-          timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
-        };
-      });
-    }
 
     // All trainings view
     if (filters.training === 'all') {
       console.log('All trainings view');
       console.log('Available trainings:', statistics.trainings);
-      return statistics.trainings.map((training: Training) => {
+      return (statistics.trainings || []).map((training: Training) => {
         const result = {
           name: training.name,
           timeVariance: training.timeVariance || 0
@@ -174,12 +139,60 @@ export default function Statistics() {
       });
     }
 
-    return [];
-  }, [statistics, filters, parseDuration]);
+    // Single training, specific day view
+    if (filters.day) {
+      console.log('Single training, specific day view');
+      if (!statistics.dailyStats) {
+        console.log('No daily stats available');
+        return [];
+      }
+      
+      const dayStats = statistics.dailyStats.find(d => d.day === filters.day);
+      if (!dayStats?.activities) {
+        console.log('No activity stats available for selected day');
+        return [];
+      }
+      
+      console.log('Day stats:', dayStats);
+      return dayStats.activities.map((activity: ActivityStats) => ({
+        name: activity.name,
+        timeVariance: activity.timeVariance
+      }));
+    }
+
+    // Single training view - show daily stats
+    console.log('Single training view');
+    if (!statistics.dailyStats) {
+      console.log('No daily stats available');
+      return [];
+    }
+    console.log('Daily stats:', statistics.dailyStats);
+    
+    return statistics.dailyStats.map((day) => ({
+      name: `Day ${day.day}`,
+      timeVariance: day.timeVariance
+    }));
+  }, [statistics, filters.training, filters.day]);
+
+  // Chart title based on view
+  const chartTitle = useMemo(() => {
+    if (!statistics?.trainings) return 'Schedule Accuracy';
+    
+    if (filters.training === 'all') {
+      return 'Schedule Accuracy by Program';
+    }
+    const selectedTrainingName = statistics.trainings.find(
+      t => t._id === filters.training
+    )?.name;
+    if (filters.day) {
+      return `Activity Timing Analysis - ${selectedTrainingName || 'Selected Training'} (Day ${filters.day})`;
+    }
+    return `Daily Schedule Accuracy - ${selectedTrainingName || 'Selected Training'}`;
+  }, [filters.training, filters.day, statistics?.trainings]);
 
   // Fetch trainer-specific statistics
   const trainerQueries = useMemo(() => {
-    if (!statistics || filters.trainer !== 'all') return { queries: [] };
+    if (!statistics?.trainers || filters.trainer !== 'all') return { queries: [] };
     
     return {
       queries: statistics.trainers.map((trainer: Trainer) => ({
@@ -198,35 +211,42 @@ export default function Statistics() {
   const trainerResults = useQueries(trainerQueries);
 
   const trainerVarianceData = useMemo(() => {
-    if (!statistics || filters.trainer !== 'all') return [];
+    if (!statistics?.trainers || filters.trainer !== 'all') return [];
     
+    // Single training, specific day view
+    if (filters.training !== 'all' && filters.day) {
+      console.log('Single day view - showing trainer performance');
+      if (!statistics.dailyStats) {
+        console.log('No daily stats available');
+        return [];
+      }
+      
+      const dayStats = statistics.dailyStats.find(d => d.day === filters.day);
+      if (!dayStats?.trainers) {
+        console.log('No trainer stats available for selected day');
+        return [];
+      }
+      
+      console.log('Day trainer stats:', dayStats.trainers);
+      return dayStats.trainers;
+    }
+    
+    // All trainings or single training (all days) view
     return statistics.trainers.map((trainer: Trainer, index: number) => {
       const trainerStats = trainerResults[index]?.data as StatisticsData | undefined;
       if (!trainerStats) return { name: trainer.name, timeVariance: 0 };
       
-      if (filters.training !== 'all' && filters.day) {
-        // Single day view
-        const key = `${filters.training}-${filters.day}`;
-        const dayData = trainerStats.daySpecificStats[key]?.activities || [];
-        const totalVariance = dayData.reduce((sum: number, activity: ActivityStats) => {
-          return sum + parseDuration(activity.averageVariance);
-        }, 0);
-        return {
-          name: trainer.name,
-          timeVariance: dayData.length > 0 ? Math.round(totalVariance / dayData.length) : 0
-        };
-      } else {
-        // All trainings view - use adherence data
-        const totalVariance = trainerStats.adherence.reduce((sum: number, activity: AdherenceItem) => {
-          return sum + parseDuration(activity.averageVariance);
-        }, 0);
-        return {
-          name: trainer.name,
-          timeVariance: trainerStats.adherence.length > 0 
-            ? Math.round(totalVariance / trainerStats.adherence.length)
-            : 0
-        };
-      }
+      if (!trainerStats.adherence) return { name: trainer.name, timeVariance: 0 };
+      
+      const totalVariance = trainerStats.adherence.reduce((sum: number, activity: AdherenceItem) => {
+        return sum + parseDuration(activity.averageVariance);
+      }, 0);
+      return {
+        name: trainer.name,
+        timeVariance: trainerStats.adherence.length > 0 
+          ? Math.round(totalVariance / trainerStats.adherence.length)
+          : 0
+      };
     });
   }, [statistics, filters, trainerResults, parseDuration]);
 
@@ -319,7 +339,7 @@ export default function Statistics() {
           </CardHeader>
           <CardContent>
             <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                   <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
@@ -332,16 +352,19 @@ export default function Statistics() {
                       offset: 0,
                       style: {
                         textAnchor: 'middle',
-                        fill: '#6b7280', // text-gray-500
+                        fill: '#6b7280',
                         fontSize: 12
                       }
                     }}
-                    domain={['auto', 'auto']}
+                    domain={[
+                      (dataMin: number) => Math.min(0, dataMin),
+                      (dataMax: number) => Math.max(0, dataMax)
+                    ]}
                     tickFormatter={(value) => Math.round(value).toString()}
                   />
                   <RechartsTooltip />
                   <Bar dataKey="timeVariance" onClick={isTrainerChart ? handleTrainerBarClick : handleBarClick}>
-                    {data.map((entry, index) => (
+                    {data.map((entry: TimeVarianceData, index: number) => (
                       <Cell 
                         key={`cell-${index}`}
                         fill={entry.timeVariance > 0 ? CHART_COLORS.negative : CHART_COLORS.positive}
@@ -598,29 +621,90 @@ export default function Statistics() {
       </div>
 
       <div className="grid gap-4 mb-8">
-        {renderTimeVarianceChart(
+        {/* Schedule Accuracy Chart */}
+        <Card className="col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>{chartTitle}</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                      <InfoIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p>Average time variance in minutes for each {filters.training === 'all' ? 'training program' : 'day'}.</p>
+                    <p className="mt-2 text-sm text-muted-foreground">Calculation:</p>
+                    <p className="text-sm">Positive values indicate activities took longer than scheduled.</p>
+                    <p className="text-sm">Negative values indicate activities were completed faster than scheduled.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={timeVarianceData}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                  <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
+                  <XAxis dataKey="name" />
+                  <YAxis 
+                    label={{ 
+                      value: 'Time Variance (minutes)', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      offset: 0,
+                      style: {
+                        textAnchor: 'middle',
+                        fill: '#6b7280',
+                        fontSize: 12
+                      }
+                    }}
+                    domain={[
+                      (dataMin: number) => Math.min(0, dataMin),
+                      (dataMax: number) => Math.max(0, dataMax)
+                    ]}
+                    tickFormatter={(value) => Math.round(value).toString()}
+                  />
+                  <RechartsTooltip />
+                  <Bar dataKey="timeVariance" onClick={handleBarClick}>
+                    {timeVarianceData.map((entry: TimeVarianceData, index: number) => (
+                      <Cell 
+                        key={`cell-${index}`}
+                        fill={entry.timeVariance > 0 ? CHART_COLORS.negative : CHART_COLORS.positive}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Timing Performance by Trainer chart in its own container */}
+      {filters.trainer === 'all' && (
+        <div className="mb-8">
+          {renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)}
+        </div>
+      )}
+      
+      {/* Pie charts in a two-column grid below */}
+      <div className="grid gap-4 md:grid-cols-2 mb-8">
+        {/* Schedule Adherence Distribution */}
+        {renderTimingDistributionCharts(
           timeVarianceData,
           filters.training === 'all' 
-            ? 'Time Variance by Training'
+            ? 'Training'
             : filters.day
-              ? 'Time Variance by Activity'
-              : 'Time Variance by Day'
+              ? 'Activity'
+              : 'Day'
         )}
         
-        {filters.trainer === 'all' && renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)}
-        
-        <div className="grid gap-4 md:grid-cols-2">
-          {renderTimingDistributionCharts(
-            timeVarianceData,
-            filters.training === 'all' 
-              ? 'Training'
-              : filters.day
-                ? 'Activity'
-                : 'Day'
-          )}
-          
-          {filters.trainer === 'all' && renderTimingDistributionCharts(trainerVarianceData, 'Trainer')}
-        </div>
+        {/* Trainer Timing Patterns */}
+        {filters.trainer === 'all' && renderTimingDistributionCharts(trainerVarianceData, 'Trainer')}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
