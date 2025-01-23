@@ -320,17 +320,17 @@ export default function Statistics() {
 
   const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => {
     console.log('Rendering chart with data:', data);
-    const chartTitle = isTrainerChart ? 'Timing Performance by Trainer' : (
+    const chartTitle = isTrainerChart ? 'Time Management by Trainer' : (
       debouncedFilters.training === 'all' 
-        ? 'Schedule Accuracy by Program'
+        ? 'Program Timing Overview'
         : debouncedFilters.day
-          ? 'Activity Timing Analysis'
-          : 'Daily Schedule Accuracy'
+          ? 'Activity Timing Details'
+          : 'Daily Progress Overview'
     );
 
     const tooltipContent = isTrainerChart 
-      ? "How accurately each trainer follows scheduled timings.\n\nCalculation: Average(Σ(actual_end_time - actual_start_time) - scheduled_duration) per trainer across all their sessions"
-      : "How well training programs stay on schedule.\n\nCalculation: Sum(actual_duration - scheduled_duration) for all activities\nNegative = Ahead of schedule, Positive = Behind schedule";
+      ? "Shows how well each trainer manages their time during sessions.\n\nGreen bars mean the trainer typically finishes activities early or on time.\nOrange bars mean activities take slightly longer than planned.\nRed bars mean activities take significantly longer than planned."
+      : "Shows how well each program or activity stays on schedule.\n\nGreen bars: Activities finished early or on time\nOrange bars: Slightly behind schedule\nRed bars: Significantly behind schedule\n\nNegative numbers mean ahead of schedule, positive numbers mean behind schedule.";
 
     return (
       <div className="w-full">
@@ -422,10 +422,10 @@ export default function Statistics() {
 
   const renderTimingDistributionCharts = (data: TimeVarianceData[], entityType: string) => {
     const distributionData = calculateTimingDistribution(data);
-    const chartTitle = entityType === 'Trainer' ? 'Trainer Timing Patterns' : 'Schedule Adherence Distribution';
+    const chartTitle = entityType === 'Trainer' ? 'Trainer Punctuality Overview' : 'Overall Timing Performance';
     const tooltipContent = entityType === 'Trainer'
-      ? "How each trainer typically manages activity timing.\n\nCalculations:\n- On Time: |actual_start - scheduled_start| ≤ 6 minutes\n- Early: actual_start < scheduled_start - 6 minutes\n- Late: actual_start > scheduled_start + 6 minutes"
-      : "Breakdown of timing performance categories.\n\nCalculations:\n- On Time: |variance| ≤ 10% of scheduled duration\n- Early: variance < -10% of scheduled duration\n- Late: variance > 10% of scheduled duration";
+      ? "Shows how often trainers start their activities on time, early, or late.\n\nOn Time: Started within 6 minutes of scheduled time\nEarly: Started more than 6 minutes before scheduled time\nLate: Started more than 6 minutes after scheduled time"
+      : "Shows the overall timing performance across all activities.\n\nOn Time: Activities completed within expected duration (±10%)\nEarly: Activities completed much faster than expected\nLate: Activities took much longer than expected";
     
     return (
       <div className="w-full">

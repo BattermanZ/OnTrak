@@ -26,8 +26,11 @@ import { Button } from '../components/ui/button';
 import ReactMarkdown from 'react-markdown';
 // @ts-ignore
 import remarkGfm from 'remark-gfm';
+import { convertFromAmsterdamTime } from '../utils/timezone';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const socket = useSocket();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +155,11 @@ export default function Dashboard() {
     )
   };
 
+  const formatActivityTime = (time: string) => {
+    if (!user?.timezone) return time;
+    return convertFromAmsterdamTime(time, user.timezone);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -273,7 +281,7 @@ export default function Dashboard() {
                     }`}
                   >
                     <div className="w-20 shrink-0 font-medium text-gray-900 pt-1">
-                      {activity.startTime}
+                      {formatActivityTime(activity.startTime)}
                     </div>
                     <div className="flex-1 min-w-0 flex items-start justify-between gap-4">
                       <div className="flex items-start space-x-3 min-w-0 flex-1">

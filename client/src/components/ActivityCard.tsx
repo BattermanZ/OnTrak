@@ -12,6 +12,8 @@ import ReactMarkdown from 'react-markdown';
 // @ts-ignore
 import remarkGfm from 'remark-gfm';
 import { Badge } from "./ui/badge";
+import { useAuth } from '../contexts/AuthContext';
+import { convertFromAmsterdamTime } from '../utils/timezone';
 
 interface ActivityCardProps {
   title: string;
@@ -44,6 +46,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   isCompleted,
   onProgressUpdate,
 }) => {
+  const { user } = useAuth();
   const leftCardRef = React.useRef<HTMLDivElement>(null);
   const rightCardRef = React.useRef<HTMLDivElement>(null);
 
@@ -100,8 +103,9 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
       const updateProgress = () => {
         const now = new Date();
         
-        // Get scheduled start and end times
-        const scheduledStartTime = parse(activity.startTime, 'HH:mm', new Date());
+        // Get scheduled start and end times in user's timezone
+        const localStartTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
+        const scheduledStartTime = parse(localStartTime, 'HH:mm', new Date());
         const scheduledEndTime = addMinutes(scheduledStartTime, activity.duration);
         
         // Use actual start time if available
@@ -149,7 +153,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         clearInterval(intervalId);
       }
     };
-  }, [isActive, activity, onProgressUpdate]);
+  }, [isActive, activity, onProgressUpdate, user?.timezone]);
 
   if (!activity) {
     return (
@@ -170,7 +174,9 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
     );
   }
 
-  const startTime = parse(activity.startTime, 'HH:mm', new Date());
+  // Convert times to user's timezone
+  const localStartTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
+  const startTime = parse(localStartTime, 'HH:mm', new Date());
   const endTime = addMinutes(startTime, activity.duration);
   const endTimeString = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`;
 
@@ -202,7 +208,7 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
             <h3 className="text-xl font-semibold text-gray-900 mb-2">{activity.name}</h3>
             <div className="flex items-center gap-2 text-gray-600">
               <Clock className="h-4 w-4" />
-              <span>{`${activity.startTime} - ${endTimeString}`}</span>
+              <span>{`${localStartTime} - ${endTimeString}`}</span>
               <Badge variant="secondary">{activity.duration}min</Badge>
             </div>
             {activity.description && (

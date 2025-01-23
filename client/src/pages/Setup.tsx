@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Copy, Download, ListPlus, Upload } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { convertFromAmsterdamTime, convertToAmsterdamTime } from '../utils/timezone';
 
 import {
   Card,
@@ -39,13 +41,18 @@ import { Calendar, Clock } from "lucide-react";
 import { Textarea } from "../components/ui/textarea";
 import { toast } from "../components/ui/use-toast";
 
+// Add type definition back
+type ActivityWithDisplay = Activity & { displayTime: string };
+type TemplateWithDisplayTimes = Omit<Template, 'activities'> & { activities: ActivityWithDisplay[] };
+
 export default function Setup() {
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const { user } = useAuth();
+  const [templates, setTemplates] = useState<TemplateWithDisplayTimes[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateWithDisplayTimes | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: '',
     days: 1,
@@ -60,7 +67,7 @@ export default function Setup() {
   });
   const [calculatedEndTime, setCalculatedEndTime] = useState<string>('');
   const [isDeleteActivityDialogOpen, setIsDeleteActivityDialogOpen] = useState(false);
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityWithDisplay | null>(null);
   const [isAddActivityDialogOpen, setIsAddActivityDialogOpen] = useState(false);
   const [isEditActivityDialogOpen, setIsEditActivityDialogOpen] = useState(false);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
@@ -75,27 +82,47 @@ export default function Setup() {
   const [isBulkActivityDialogOpen, setIsBulkActivityDialogOpen] = useState(false);
   const [bulkActivities, setBulkActivities] = useState('');
 
+  const fetchTemplates = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await templateApi.getAll();
+      console.log('User timezone:', user?.timezone);
+      console.log('Raw template data:', response.data);
+      const templatesWithLocalTime: TemplateWithDisplayTimes[] = response.data.map((template: Template) => {
+        console.log('Processing template:', template.name);
+        const processed = {
+          ...template,
+          activities: template.activities.map((activity: Activity) => {
+            console.log('Processing activity:', activity.name);
+            console.log('Original startTime:', activity.startTime);
+            const displayTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
+            console.log('Converted displayTime:', displayTime);
+            return {
+              ...activity,
+              displayTime
+            };
+          })
+        };
+        console.log('Processed template:', processed);
+        return processed;
+      });
+      setTemplates(templatesWithLocalTime);
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred while fetching templates');
+    }
+  }, [user?.timezone]);
+
   useEffect(() => {
     fetchTemplates();
-  }, []);
+  }, [fetchTemplates]);
 
-  const formatTimeInput = (input: string) => {
-    // Remove any non-digit characters
-    const digits = input.replace(/\D/g, '');
-    
-    if (digits.length >= 4) {
-      const hours = digits.slice(0, 2);
-      const minutes = digits.slice(2, 4);
-      return `${hours}:${minutes}`;
-    }
-    return digits;
-  };
-
-  const calculateEndTime = (startTime: string, durationMinutes: number) => {
+  const calculateEndTime = useCallback((startTime: string, durationMinutes: number) => {
     if (!startTime || !startTime.match(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
       return '';
     }
     
+    // Use the time as is since it's already in the user's timezone (displayTime)
     const [hours, minutes] = startTime.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes + durationMinutes;
     
@@ -103,23 +130,12 @@ export default function Setup() {
     const endMinutes = totalMinutes % 60;
     
     return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   useEffect(() => {
     const endTime = calculateEndTime(activityForm.startTime, activityForm.duration);
     setCalculatedEndTime(endTime);
-  }, [activityForm.startTime, activityForm.duration]);
-
-  const fetchTemplates = async () => {
-    try {
-      setError(null);
-      const response = await templateApi.getAll();
-      setTemplates(response.data);
-    } catch (err) {
-      console.error('Error fetching templates:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching templates');
-    }
-  };
+  }, [activityForm.startTime, activityForm.duration, calculateEndTime]);
 
   const handleDeleteTemplate = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -163,13 +179,36 @@ export default function Setup() {
     }
   };
 
-  const handleAddActivity = async () => {
-    if (!selectedTemplate) return;
+  const handleAddActivity = async (e: React.MouseEvent) => {
+    e.preventDefault();
     try {
-      setError(null);
-      await templateApi.addActivity(selectedTemplate._id, activityForm);
+      if (!selectedTemplate?._id || !user?.timezone) return;
+
+      // Convert time to Amsterdam time before saving
+      const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
+      console.log('Adding activity with times:', {
+        userTime: activityForm.startTime,
+        amsterdamTime,
+        userTimezone: user.timezone
+      });
+
+      await templateApi.update(selectedTemplate._id, {
+        name: selectedTemplate.name,
+        days: selectedTemplate.days,
+        activities: [
+          ...selectedTemplate.activities,
+          {
+            ...activityForm,
+            startTime: amsterdamTime,
+            displayTime: activityForm.startTime, // Keep display time in user's timezone
+            _id: '', // This will be assigned by the server
+            actualStartTime: null,
+            actualEndTime: null
+          }
+        ]
+      });
+
       setIsAddActivityDialogOpen(false);
-      setSelectedTemplate(null);
       setActivityForm({
         name: '',
         startTime: '',
@@ -187,12 +226,21 @@ export default function Setup() {
   const handleEditActivity = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
-      if (!selectedTemplate?._id || !selectedActivity?._id) return;
+      if (!selectedTemplate?._id || !selectedActivity?._id || !user?.timezone) return;
       
-      const updatedActivity: Activity = {
+      // Convert time to Amsterdam time before saving
+      const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
+      console.log('Converting to Amsterdam time:', {
+        userTime: activityForm.startTime,
+        amsterdamTime,
+        userTimezone: user.timezone
+      });
+      
+      const updatedActivity: ActivityWithDisplay = {
         ...selectedActivity,
         ...activityForm,
-        _id: selectedActivity._id
+        startTime: amsterdamTime,
+        displayTime: activityForm.startTime // Keep display time in user's timezone
       };
 
       await templateApi.update(selectedTemplate._id, {
@@ -250,16 +298,17 @@ export default function Setup() {
     }
   };
 
-  const handleActivityClick = (template: Template, activity: Activity, e: React.MouseEvent) => {
+  const handleActivityClick = (template: TemplateWithDisplayTimes, activity: ActivityWithDisplay, e: React.MouseEvent) => {
     e.preventDefault();
     setSelectedTemplate(template);
     setSelectedActivity(activity);
+    // Use displayTime directly since it's already in user's timezone
     setActivityForm({
       name: activity.name,
-      startTime: activity.startTime,
+      startTime: activity.displayTime,
       duration: activity.duration,
-      day: activity.day,
-      description: activity.description || ''
+      description: activity.description || '',
+      day: activity.day
     });
     setIsEditActivityDialogOpen(true);
   };
@@ -360,13 +409,13 @@ export default function Setup() {
   };
 
   // Update the templates filtering logic
-  const filteredTemplates = templates.filter(template => 
+  const filteredTemplates = templates.filter((template: TemplateWithDisplayTimes) => 
     template.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
     (selectedFilterTags.length === 0 || 
      selectedFilterTags.every(tag => template.tags?.includes(tag)))
   );
 
-  const handleCloneTemplate = async (template: Template) => {
+  const handleCloneTemplate = async (template: TemplateWithDisplayTimes) => {
     try {
       setError(null);
       await templateApi.clone(template._id, {
@@ -383,7 +432,7 @@ export default function Setup() {
     }
   };
 
-  const handleExportTemplate = async (template: Template) => {
+  const handleExportTemplate = async (template: TemplateWithDisplayTimes) => {
     try {
       setError(null);
       const response = await templateApi.export(template._id);
@@ -435,57 +484,55 @@ export default function Setup() {
   };
 
   const handleBulkActivityAdd = async () => {
-    try {
-      setError(null);
-      if (!selectedTemplate) return;
+    if (!selectedTemplate || !user?.timezone) return;
 
-      const activities = bulkActivities.split('\n')
-        .map(line => line.trim())
-        .filter(line => line)
+    try {
+      const activities = bulkActivities
+        .split('\n')
+        .filter(line => line.trim())
         .map(line => {
           const [name, startTime, duration, day, description = ''] = line.split(';').map(s => s.trim());
-          
-          // Validate required fields
-          if (!name || !startTime || !duration || !day) {
-            throw new Error('Each line must have name, startTime, duration, and day');
-          }
-
-          // Validate time format
-          const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-          if (!timeRegex.test(startTime)) {
-            throw new Error(`Invalid time format for activity "${name}". Use HH:MM format (e.g., 09:00)`);
-          }
-
-          // Validate duration and day are numbers
-          const durationNum = parseInt(duration);
-          const dayNum = parseInt(day);
-          if (isNaN(durationNum) || durationNum <= 0) {
-            throw new Error(`Invalid duration for activity "${name}". Must be a positive number`);
-          }
-          if (isNaN(dayNum) || dayNum <= 0 || dayNum > selectedTemplate.days) {
-            throw new Error(`Invalid day for activity "${name}". Must be between 1 and ${selectedTemplate.days}`);
-          }
-
+          // Convert time to Amsterdam time before saving
+          const amsterdamTime = convertToAmsterdamTime(startTime, user.timezone);
+          console.log('Processing bulk activity:', {
+            name,
+            userTime: startTime,
+            amsterdamTime,
+            userTimezone: user.timezone
+          });
           return {
             name,
-            startTime,
-            duration: durationNum,
-            day: dayNum,
-            description
-          };
+            startTime: amsterdamTime,
+            displayTime: startTime, // Keep display time in user's timezone
+            duration: parseInt(duration),
+            day: parseInt(day),
+            description,
+            _id: '', // This will be assigned by the server
+            actualStartTime: null,
+            actualEndTime: null
+          } as ActivityWithDisplay;
         });
 
-      await templateApi.addActivitiesBulk(selectedTemplate._id, { activities });
+      await templateApi.update(selectedTemplate._id, {
+        name: selectedTemplate.name,
+        days: selectedTemplate.days,
+        activities: [
+          ...selectedTemplate.activities,
+          ...activities
+        ]
+      });
+
       setIsBulkActivityDialogOpen(false);
       setBulkActivities('');
       await fetchTemplates();
+
       toast({
         title: "Success",
-        description: "Activities added successfully",
+        description: `Added ${activities.length} activities to the template.`,
       });
     } catch (err) {
-      console.error('Error adding activities:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred while adding activities');
+      console.error('Error adding bulk activities:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add activities');
     }
   };
 
@@ -496,6 +543,32 @@ export default function Setup() {
 
   const handleBulkActivitiesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setBulkActivities(e.target.value);
+  };
+
+  // Add formatTimeInput function
+  const formatTimeInput = (value: string): string => {
+    // Remove any non-digit characters
+    const digits = value.replace(/\D/g, '');
+    
+    // Handle empty input
+    if (!digits) return '';
+    
+    // Handle hours
+    if (digits.length <= 2) {
+      const hours = parseInt(digits);
+      if (hours > 23) return '23';
+      return digits;
+    }
+    
+    // Handle hours and minutes
+    const hours = parseInt(digits.slice(0, 2));
+    const minutes = parseInt(digits.slice(2));
+    
+    // Validate hours and minutes
+    const validHours = hours > 23 ? '23' : digits.slice(0, 2).padStart(2, '0');
+    const validMinutes = minutes > 59 ? '59' : digits.slice(2, 4).padStart(2, '0');
+    
+    return `${validHours}:${validMinutes}`;
   };
 
   return (
@@ -756,7 +829,9 @@ export default function Setup() {
                               <div className="flex justify-between items-center">
                                 <span className="font-medium">{activity.name}</span>
                                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                  <span className="text-sm text-gray-500">{activity.startTime}</span>
+                                  <span className="text-sm text-gray-500">
+                                    {activity.displayTime}
+                                  </span>
                                   <Badge variant="outline" className="ml-2">
                                     {activity.duration}m
                                   </Badge>
@@ -1126,7 +1201,7 @@ export default function Setup() {
                     <div className="space-y-2">
                       {selectedTemplate.activities
                         .filter(activity => activity.day === dayIndex + 1)
-                        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                        .sort((a, b) => a.displayTime.localeCompare(b.displayTime))
                         .map(activity => (
                           <div
                             key={activity._id}
@@ -1137,7 +1212,7 @@ export default function Setup() {
                               <div className="min-w-0 flex-1">
                                 <p className="font-medium">{activity.name}</p>
                                 <p className="text-sm text-muted-foreground">
-                                  {activity.startTime} - {calculateEndTime(activity.startTime, activity.duration)} ({activity.duration} min)
+                                  {activity.displayTime} - {calculateEndTime(activity.displayTime, activity.duration)}
                                 </p>
                                 {activity.description && (
                                   <p className="text-sm text-gray-600 mt-2 break-words">
