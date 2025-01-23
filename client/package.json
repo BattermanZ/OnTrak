@@ -71,6 +71,7 @@
     "@radix-ui/react-scroll-area": "^1.2.2",
     "@radix-ui/react-tabs": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.4",
+    "@types/lodash": "^4.17.14",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "autoprefixer": "^10.4.20",

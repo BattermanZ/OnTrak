@@ -124,10 +124,10 @@ def create_trainer(personality_type: str, db) -> ObjectId:
         email = f"{first_name.lower()}.{last_name.lower()}@example.com"
         
         # Hash password
-        salt = bcrypt.gensalt()
+    salt = bcrypt.gensalt()
         password = bcrypt.hashpw('password123'.encode('utf-8'), salt)
-        
-        trainer = {
+    
+    trainer = {
             'email': email,
             'firstName': first_name,
             'lastName': last_name,
@@ -337,7 +337,7 @@ def generate_completed_training(trainer_id: ObjectId, template_id: ObjectId, db)
             logger.info(f"Created completed training schedule: {template['name']} - Day {day}")
         
         return True
-    except Exception as e:
+        except Exception as e:
         logger.error(f"Failed to generate completed training: {e}")
         return False
 

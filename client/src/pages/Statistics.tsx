@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   BarChart,
   Bar,
@@ -16,13 +16,13 @@ import { Info as InfoIcon, Download as DownloadIcon } from 'lucide-react';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { schedules } from '../services/api';
 import { logger } from '../utils/logger';
+import debounce from 'lodash/debounce';
 import type {
   StatisticsData,
   StatisticsFilters,
   TimeVarianceData,
   AdherenceItem,
   ActivityStats,
-  DailyStats,
   Training,
   Trainer
 } from '../types';
@@ -80,6 +80,16 @@ export default function Statistics() {
   });
 
   const [selectedTrainer, setSelectedTrainer] = useState<string>('');
+  const [debouncedFilters, setDebouncedFilters] = useState(filters);
+
+  // Debounce filter changes
+  useEffect(() => {
+    const handler = debounce(() => {
+      setDebouncedFilters(filters);
+    }, 300);
+    handler();
+    return () => handler.cancel();
+  }, [filters]);
 
   // Update filters when selectedTrainer changes
   useEffect(() => {
@@ -90,34 +100,33 @@ export default function Statistics() {
   }, [selectedTrainer]);
 
   const { data: statistics, isLoading, error: queryError } = useQuery<StatisticsData>({
-    queryKey: ['statistics', filters],
-    queryFn: async () => {
+    queryKey: ['statistics', debouncedFilters],
+    queryFn: async ({ signal }) => {
       try {
-        logger.debug('Fetching statistics with filters:', filters);
-        const response = await schedules.getStatistics({
-          trainer: filters.trainer,
-          training: filters.training,
-          dateRange: filters.dateRange,
-          day: filters.day
-        });
+        logger.debug('Fetching statistics with filters:', debouncedFilters);
+        const response = await schedules.getStatistics(debouncedFilters);
         logger.debug('Statistics response:', response.data);
         return response.data;
       } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('Statistics request was cancelled');
+          throw error;
+        }
         logger.error('Error fetching statistics:', error);
         throw error;
       }
+    },
+    staleTime: 30000,
+    retry: (failureCount: number, error: Error) => {
+      if (error.name === 'AbortError') return false;
+      return failureCount < 3;
     }
   });
 
-  const selectedTraining = useMemo(() => {
-    if (!statistics?.trainings || filters.training === 'all') return null;
-    return statistics.trainings.find((t: Training) => t._id === filters.training);
-  }, [statistics, filters.training]);
-
-  const parseDuration = (durationStr: string): number => {
+  const parseDuration = useCallback((durationStr: string): number => {
     const match = durationStr.match(/(-?\d+)/);
     return match ? parseInt(match[0]) : 0;
-  };
+  }, []);
 
   const timeVarianceData = useMemo(() => {
     console.log('Statistics data:', statistics);
@@ -127,7 +136,7 @@ export default function Statistics() {
     }
 
     // All trainings view
-    if (filters.training === 'all') {
+    if (debouncedFilters.training === 'all') {
       console.log('All trainings view');
       console.log('Available trainings:', statistics.trainings);
       return (statistics.trainings || []).map((training: Training) => {
@@ -141,14 +150,14 @@ export default function Statistics() {
     }
 
     // Single training, specific day view
-    if (filters.day) {
+    if (debouncedFilters.day) {
       console.log('Single training, specific day view');
       if (!statistics.dailyStats) {
         console.log('No daily stats available');
         return [];
       }
       
-      const dayStats = statistics.dailyStats.find(d => d.day === filters.day);
+      const dayStats = statistics.dailyStats.find(d => d.day === debouncedFilters.day);
       if (!dayStats?.activities) {
         console.log('No activity stats available for selected day');
         return [];
@@ -173,56 +182,61 @@ export default function Statistics() {
       name: `Day ${day.day}`,
       timeVariance: day.timeVariance
     }));
-  }, [statistics, filters.training, filters.day]);
+  }, [statistics, debouncedFilters.training, debouncedFilters.day]);
 
   // Chart title based on view
   const chartTitle = useMemo(() => {
     if (!statistics?.trainings) return 'Schedule Accuracy';
     
-    if (filters.training === 'all') {
+    if (debouncedFilters.training === 'all') {
       return 'Schedule Accuracy by Program';
     }
     const selectedTrainingName = statistics.trainings.find(
-      t => t._id === filters.training
+      t => t._id === debouncedFilters.training
     )?.name;
-    if (filters.day) {
-      return `Activity Timing Analysis - ${selectedTrainingName || 'Selected Training'} (Day ${filters.day})`;
+    if (debouncedFilters.day) {
+      return `Activity Timing Analysis - ${selectedTrainingName || 'Selected Training'} (Day ${debouncedFilters.day})`;
     }
     return `Daily Schedule Accuracy - ${selectedTrainingName || 'Selected Training'}`;
-  }, [filters.training, filters.day, statistics?.trainings]);
+  }, [debouncedFilters.training, debouncedFilters.day, statistics?.trainings]);
 
-  // Fetch trainer-specific statistics
+  // Debounced trainer queries
   const trainerQueries = useMemo(() => {
-    if (!statistics?.trainers || filters.trainer !== 'all') return { queries: [] };
+    if (!statistics?.trainers || debouncedFilters.trainer !== 'all') return { queries: [] };
     
     return {
       queries: statistics.trainers.map((trainer: Trainer) => ({
-        queryKey: ['statistics', { ...filters, trainer: trainer._id }],
+        queryKey: ['statistics', { ...debouncedFilters, trainer: trainer._id }],
         queryFn: async () => {
           const response = await schedules.getStatistics({
-            ...filters,
+            ...debouncedFilters,
             trainer: trainer._id
           });
           return response.data;
+        },
+        staleTime: 30000,
+        retry: (failureCount: number, error: Error) => {
+          if (error.name === 'AbortError') return false;
+          return failureCount < 3;
         }
       }))
     };
-  }, [statistics, filters]);
+  }, [statistics, debouncedFilters]);
 
   const trainerResults = useQueries(trainerQueries);
 
   const trainerVarianceData = useMemo(() => {
-    if (!statistics?.trainers || filters.trainer !== 'all') return [];
+    if (!statistics?.trainers || debouncedFilters.trainer !== 'all') return [];
     
     // Single training, specific day view
-    if (filters.training !== 'all' && filters.day) {
+    if (debouncedFilters.training !== 'all' && debouncedFilters.day) {
       console.log('Single day view - showing trainer performance');
       if (!statistics.dailyStats) {
         console.log('No daily stats available');
         return [];
       }
       
-      const dayStats = statistics.dailyStats.find(d => d.day === filters.day);
+      const dayStats = statistics.dailyStats.find(d => d.day === debouncedFilters.day);
       if (!dayStats?.trainers) {
         console.log('No trainer stats available for selected day');
         return [];
@@ -249,7 +263,7 @@ export default function Statistics() {
 
     // Filter out trainers with no data
     return trainerData.filter((data): data is TimeVarianceData => data !== null);
-  }, [statistics, filters, trainerResults, parseDuration]);
+  }, [statistics, debouncedFilters, trainerResults, parseDuration]);
 
   const calculateTimingDistribution = (data: TimeVarianceData[]) => {
     const total = data.length;
@@ -281,13 +295,13 @@ export default function Statistics() {
     if (!data || !statistics) return;
 
     // Determine what type of data was clicked based on current view
-    if (filters.training === 'all') {
+    if (debouncedFilters.training === 'all') {
       // Clicking on a training bar
       const training = statistics.trainings.find(t => t.name === data.name);
       if (training) {
         setFilters(prev => ({ ...prev, training: training._id, day: undefined }));
       }
-    } else if (!filters.day) {
+    } else if (!debouncedFilters.day) {
       // Clicking on a day bar
       const dayNumber = parseInt(data.name.split(' ')[1]);
       if (!isNaN(dayNumber)) {
@@ -307,9 +321,9 @@ export default function Statistics() {
   const renderTimeVarianceChart = (data: TimeVarianceData[], title: string, isTrainerChart: boolean = false) => {
     console.log('Rendering chart with data:', data);
     const chartTitle = isTrainerChart ? 'Timing Performance by Trainer' : (
-      filters.training === 'all' 
+      debouncedFilters.training === 'all' 
         ? 'Schedule Accuracy by Program'
-        : filters.day
+        : debouncedFilters.day
           ? 'Activity Timing Analysis'
           : 'Daily Schedule Accuracy'
     );
@@ -350,8 +364,9 @@ export default function Statistics() {
                     angle={data.length > 5 ? -35 : 0}
                     textAnchor="middle"
                     height={data.length > 5 ? 120 : 40}
-                    tickMargin={10}
-                    dx={data.length > 5 ? 15 : 0}
+                    tickMargin={data.length > 5 ? 35 : 10}
+                    dx={data.length > 5 ? -10 : 0}
+                    dy={data.length > 5 ? 20 : 0}
                   />
                   <YAxis 
                     label={{ 
@@ -466,6 +481,22 @@ export default function Statistics() {
     );
   };
 
+  // Debounced filter change handlers
+  const handleTrainingChange = useCallback((value: string) => {
+    setFilters(prev => ({ ...prev, training: value, day: undefined }));
+  }, []);
+
+  const handleDayChange = useCallback((value: string) => {
+    setFilters(prev => ({ 
+      ...prev, 
+      day: value === 'all' ? undefined : parseInt(value) 
+    }));
+  }, []);
+
+  const handleDateRangeChange = useCallback((value: string) => {
+    setFilters(prev => ({ ...prev, dateRange: value }));
+  }, []);
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -533,8 +564,8 @@ export default function Statistics() {
             </div>
             <div>
               <Select
-                value={filters.training}
-                onValueChange={(value) => setFilters({ ...filters, training: value, day: undefined })}
+                value={debouncedFilters.training}
+                onValueChange={handleTrainingChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Training" />
@@ -551,21 +582,18 @@ export default function Statistics() {
             </div>
             <div>
               <Select
-                value={filters.day?.toString() || 'all'}
-                onValueChange={(value) => setFilters({ 
-                  ...filters, 
-                  day: value === 'all' ? undefined : parseInt(value) 
-                })}
-                disabled={filters.training === 'all'}
+                value={debouncedFilters.day?.toString() || 'all'}
+                onValueChange={handleDayChange}
+                disabled={debouncedFilters.training === 'all'}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Day" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Days</SelectItem>
-                  {filters.training !== 'all' && statistics?.metadata?.templates && 
+                  {debouncedFilters.training !== 'all' && statistics?.metadata?.templates && 
                     (() => {
-                      const selectedTraining = statistics.trainings.find(t => t._id === filters.training);
+                      const selectedTraining = statistics.trainings.find(t => t._id === debouncedFilters.training);
                       const template = statistics.metadata.templates.find(t => t.name === selectedTraining?.name);
                       return template && Array.from({ length: template.days }, (_, i) => (
                         <SelectItem key={i + 1} value={(i + 1).toString()}>
@@ -579,8 +607,8 @@ export default function Statistics() {
             </div>
             <div>
               <Select
-                value={filters.dateRange}
-                onValueChange={(value) => setFilters({ ...filters, dateRange: value })}
+                value={debouncedFilters.dateRange}
+                onValueChange={handleDateRangeChange}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Date Range" />
@@ -668,7 +696,7 @@ export default function Statistics() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-sm">
-                    <p>Average time variance in minutes for each {filters.training === 'all' ? 'training program' : 'day'}.</p>
+                    <p>Average time variance in minutes for each {debouncedFilters.training === 'all' ? 'training program' : 'day'}.</p>
                     <p className="mt-2 text-sm text-muted-foreground">Calculation:</p>
                     <p className="text-sm">Positive values indicate activities took longer than scheduled.</p>
                     <p className="text-sm">Negative values indicate activities were completed faster than scheduled.</p>
@@ -743,7 +771,7 @@ export default function Statistics() {
       </div>
 
       {/* Timing Performance by Trainer chart in its own container */}
-      {filters.trainer === 'all' && (
+      {debouncedFilters.trainer === 'all' && (
         <div className="mb-8">
           {renderTimeVarianceChart(trainerVarianceData, 'Time Variance by Trainer', true)}
         </div>
@@ -754,15 +782,15 @@ export default function Statistics() {
         {/* Schedule Adherence Distribution */}
         {renderTimingDistributionCharts(
           timeVarianceData,
-          filters.training === 'all' 
+          debouncedFilters.training === 'all' 
             ? 'Training'
-            : filters.day
+            : debouncedFilters.day
               ? 'Activity'
               : 'Day'
         )}
         
         {/* Trainer Timing Patterns */}
-        {filters.trainer === 'all' && renderTimingDistributionCharts(trainerVarianceData, 'Trainer')}
+        {debouncedFilters.trainer === 'all' && renderTimingDistributionCharts(trainerVarianceData, 'Trainer')}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

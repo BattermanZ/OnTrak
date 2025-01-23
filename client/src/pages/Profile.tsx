@@ -142,6 +142,47 @@ export default function Profile() {
             </form>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Password</CardTitle>
+            <CardDescription>Update your password</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Current Password</label>
+                <Input
+                  type="password"
+                  name="currentPassword"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Password</label>
+                <Input
+                  type="password"
+                  name="newPassword"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm New Password</label>
+                <Input
+                  type="password"
+                  name="confirmNewPassword"
+                  value={passwordForm.confirmNewPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmNewPassword: e.target.value })}
+                />
+              </div>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Changing Password...' : 'Change Password'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
