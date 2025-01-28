@@ -162,6 +162,17 @@ export default function Dashboard() {
     return convertFromAmsterdamTime(time, user.timezone);
   };
 
+  const getActivityBackgroundColor = (activityName: string) => {
+    const lowerName = activityName.toLowerCase();
+    if (lowerName.includes('break')) {
+      return 'bg-orange-50';
+    }
+    if (lowerName.includes('lunch')) {
+      return 'bg-green-50';
+    }
+    return '';
+  };
+
   return (
     <div className="container mx-auto p-6">
       <AppTour page="dashboard" run={showTour} onClose={() => setShowTour(false)} />
@@ -292,7 +303,7 @@ export default function Dashboard() {
                   <div 
                     key={activity._id}
                     className={`py-2 flex items-start ${
-                      activity.isActive ? 'bg-blue-50' : ''
+                      activity.isActive ? 'bg-blue-50' : getActivityBackgroundColor(activity.name)
                     }`}
                   >
                     <div className="w-20 shrink-0 font-medium text-gray-900 pt-1">
@@ -305,7 +316,11 @@ export default function Dashboard() {
                         </span>
                         <div className="space-y-1 min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-gray-900">{activity.name}</p>
+                            <p className={`font-medium ${
+                              activity.name.toLowerCase().includes('break') ? 'text-orange-700' :
+                              activity.name.toLowerCase().includes('lunch') ? 'text-green-700' :
+                              'text-gray-900'
+                            }`}>{activity.name}</p>
                             <span className="text-sm text-gray-500 shrink-0">
                               ({activity.duration} min)
                             </span>

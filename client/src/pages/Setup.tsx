@@ -83,6 +83,8 @@ export default function Setup() {
   const [isBulkActivityDialogOpen, setIsBulkActivityDialogOpen] = useState(false);
   const [bulkActivities, setBulkActivities] = useState('');
   const [showTour, setShowTour] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<TemplateWithDisplayTimes | null>(null);
+  const [hasPreviewChanges, setHasPreviewChanges] = useState(false);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -194,20 +196,12 @@ export default function Setup() {
         userTimezone: user.timezone
       });
 
-      await templateApi.update(selectedTemplate._id, {
-        name: selectedTemplate.name,
-        days: selectedTemplate.days,
-        activities: [
-          ...selectedTemplate.activities,
-          {
-            ...activityForm,
-            startTime: amsterdamTime,
-            displayTime: activityForm.startTime, // Keep display time in user's timezone
-            _id: '', // This will be assigned by the server
-            actualStartTime: null,
-            actualEndTime: null
-          }
-        ]
+      // Use the dedicated addActivity endpoint
+      await templateApi.addActivity(selectedTemplate._id, {
+        ...activityForm,
+        startTime: amsterdamTime,
+        actualStartTime: null,
+        actualEndTime: null
       });
 
       setIsAddActivityDialogOpen(false);
@@ -492,8 +486,32 @@ export default function Setup() {
       const activities = bulkActivities
         .split('\n')
         .filter(line => line.trim())
-        .map(line => {
+        .map((line, index) => {
           const [name, startTime, duration, day, description = ''] = line.split(';').map(s => s.trim());
+          
+          // Validate required fields
+          if (!name || !startTime || !duration || !day) {
+            throw new Error(`Line ${index + 1}: All fields (name, startTime, duration, day) are required`);
+          }
+
+          // Validate time format
+          const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+          if (!timeRegex.test(startTime)) {
+            throw new Error(`Line ${index + 1}: Invalid time format for "${startTime}". Please use HH:MM format (e.g., 09:00)`);
+          }
+
+          // Validate duration is a number
+          const parsedDuration = parseInt(duration);
+          if (isNaN(parsedDuration) || parsedDuration <= 0) {
+            throw new Error(`Line ${index + 1}: Duration must be a positive number`);
+          }
+
+          // Validate day is within range
+          const parsedDay = parseInt(day);
+          if (isNaN(parsedDay) || parsedDay < 1 || parsedDay > selectedTemplate.days) {
+            throw new Error(`Line ${index + 1}: Day must be between 1 and ${selectedTemplate.days}`);
+          }
+
           // Convert time to Amsterdam time before saving
           const amsterdamTime = convertToAmsterdamTime(startTime, user.timezone);
           console.log('Processing bulk activity:', {
@@ -502,27 +520,20 @@ export default function Setup() {
             amsterdamTime,
             userTimezone: user.timezone
           });
+
           return {
             name,
             startTime: amsterdamTime,
-            displayTime: startTime, // Keep display time in user's timezone
-            duration: parseInt(duration),
-            day: parseInt(day),
+            duration: parsedDuration,
+            day: parsedDay,
             description,
-            _id: '', // This will be assigned by the server
             actualStartTime: null,
             actualEndTime: null
-          } as ActivityWithDisplay;
+          };
         });
 
-      await templateApi.update(selectedTemplate._id, {
-        name: selectedTemplate.name,
-        days: selectedTemplate.days,
-        activities: [
-          ...selectedTemplate.activities,
-          ...activities
-        ]
-      });
+      // Use the dedicated bulk activities endpoint
+      await templateApi.addActivitiesBulk(selectedTemplate._id, { activities });
 
       setIsBulkActivityDialogOpen(false);
       setBulkActivities('');
@@ -534,7 +545,13 @@ export default function Setup() {
       });
     } catch (err) {
       console.error('Error adding bulk activities:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add activities');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add activities';
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      setError(errorMessage);
     }
   };
 
@@ -573,6 +590,149 @@ export default function Setup() {
     return `${validHours}:${validMinutes}`;
   };
 
+  // Add this function to determine activity background color
+  const getActivityBackgroundColor = (activityName: string) => {
+    const lowerName = activityName.toLowerCase();
+    if (lowerName.includes('break')) {
+      return 'bg-orange-50 hover:bg-orange-100';
+    }
+    if (lowerName.includes('lunch')) {
+      return 'bg-green-50 hover:bg-green-100';
+    }
+    return 'bg-gray-50 hover:bg-gray-100';
+  };
+
+  const handlePreviewOpen = (template: TemplateWithDisplayTimes) => {
+    setSelectedTemplate(template);
+    setPreviewTemplate(JSON.parse(JSON.stringify(template))); // Deep copy
+    setHasPreviewChanges(false);
+    setIsPreviewDialogOpen(true);
+  };
+
+  const handlePreviewChange = async (updatedActivities: ActivityWithDisplay[]) => {
+    if (!previewTemplate) return;
+    
+    setPreviewTemplate({
+      ...previewTemplate,
+      activities: updatedActivities
+    });
+    setHasPreviewChanges(true);
+  };
+
+  // Add this helper function near the top
+  const generateTempId = () => {
+    return `temp_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Update the handlePreviewSave function
+  const handlePreviewSave = async () => {
+    if (!previewTemplate || !hasPreviewChanges) {
+      setIsPreviewDialogOpen(false);
+      setPreviewTemplate(null);
+      return;
+    }
+
+    try {
+      // Clean up activities before saving
+      const cleanedActivities = previewTemplate.activities.map(activity => {
+        // Remove displayTime as it's not needed on the server
+        const { displayTime, ...rest } = activity;
+        
+        // For new activities (with temp IDs or empty IDs), completely omit the _id field
+        if (!rest._id || rest._id.startsWith('temp_')) {
+          // Destructure all fields we want to keep, omitting _id
+          const { 
+            name, 
+            startTime, 
+            duration, 
+            description, 
+            day, 
+            actualStartTime = null, 
+            actualEndTime = null,
+            status,
+            isActive,
+            completed
+          } = rest;
+          
+          // Return only the fields we want to keep
+          return {
+            name,
+            startTime,
+            duration,
+            description,
+            day,
+            actualStartTime,
+            actualEndTime,
+            ...(status && { status }),
+            ...(isActive !== undefined && { isActive }),
+            ...(completed !== undefined && { completed })
+          };
+        }
+        
+        // For existing activities, keep their IDs
+        return rest;
+      });
+
+      // Create the update object with proper typing
+      const templateToUpdate: Partial<Template> = {
+        name: previewTemplate.name,
+        days: previewTemplate.days,
+        activities: cleanedActivities as Activity[],
+        tags: previewTemplate.tags
+      };
+
+      await templateApi.update(previewTemplate._id, templateToUpdate);
+      
+      await fetchTemplates();
+      setIsPreviewDialogOpen(false);
+      setPreviewTemplate(null);
+      setHasPreviewChanges(false);
+      toast({
+        title: "Success",
+        description: "Template updated successfully",
+      });
+    } catch (err) {
+      console.error('Error saving template changes:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save template changes';
+      setError(errorMessage);
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Update the recalculateTimings function to maintain order
+  const recalculateTimings = (activities: ActivityWithDisplay[], dayIndex: number): ActivityWithDisplay[] => {
+    // First, get all activities that are not for this day
+    const otherDaysActivities = activities.filter(a => a.day !== dayIndex + 1);
+    
+    // Get and sort activities for this day
+    const dayActivities = activities
+      .filter(a => a.day === dayIndex + 1)
+      .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+
+    // Start with the first activity at 09:00 or its original time if it's the first activity of day 1
+    let currentTime = dayActivities.length > 0 ? 
+      (dayIndex === 0 && dayActivities[0].displayTime < "09:00" ? dayActivities[0].displayTime : "09:00") : 
+      "09:00";
+
+    // Update times for this day's activities while maintaining their order
+    const updatedDayActivities = dayActivities.map(activity => {
+      const updatedActivity = {
+        ...activity,
+        displayTime: currentTime,
+        startTime: user?.timezone ? convertToAmsterdamTime(currentTime, user.timezone) : currentTime
+      };
+      currentTime = calculateEndTime(currentTime, activity.duration);
+      return updatedActivity;
+    });
+
+    // Combine with other days' activities
+    return [...otherDaysActivities, ...updatedDayActivities];
+  };
+
   return (
     <>
       <div className="container mx-auto p-6">
@@ -598,7 +758,7 @@ export default function Setup() {
               variant="outline"
               onClick={() => setIsImportDialogOpen(true)}
             >
-              <Upload className="mr-2 h-4 w-4" />
+              <Download className="mr-2 h-4 w-4" />
               Import Template
             </Button>
             <Button
@@ -701,13 +861,12 @@ export default function Setup() {
           {filteredTemplates.map((template) => (
             <Card 
               key={template._id} 
-              className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
-              onClick={() => {
-                setSelectedTemplate(template);
-                setIsPreviewDialogOpen(true);
-              }}
+              className="hover:shadow-lg transition-shadow flex flex-col"
             >
-              <CardHeader className="bg-gray-50 border-b">
+              <CardHeader 
+                className="bg-gray-50 border-b cursor-pointer"
+                onClick={() => handlePreviewOpen(template)}
+              >
                 <div className="flex flex-col h-full">
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -743,7 +902,7 @@ export default function Setup() {
                                 handleExportTemplate(template);
                               }}
                             >
-                              <Download className="h-4 w-4" />
+                              <Upload className="h-4 w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Export template</TooltipContent>
@@ -832,10 +991,10 @@ export default function Setup() {
                       <div key={day} className="mb-4">
                         <h4 className="font-medium text-sm text-gray-600 mb-2">Day {day}</h4>
                         {dayActivities.length > 0 ? (
-                          dayActivities.map((activity) => (
+                          dayActivities.map((activity, activityIndex, dayActivities) => (
                             <div
                               key={activity._id}
-                              className="p-2 bg-gray-50 rounded-md mb-2 hover:bg-gray-100 cursor-pointer"
+                              className={`p-2 rounded-md mb-2 cursor-pointer ${getActivityBackgroundColor(activity.name)}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleActivityClick(template, activity, e);
@@ -1189,20 +1348,37 @@ export default function Setup() {
         </Dialog>
 
         {/* Preview Dialog */}
-        <Dialog open={isPreviewDialogOpen} onOpenChange={(open) => {
-          if (!open) {
-            setIsPreviewDialogOpen(false);
-            setSelectedTemplate(null);
-          }
-        }}>
+        <Dialog 
+          open={isPreviewDialogOpen} 
+          onOpenChange={(open) => {
+            if (!open && hasPreviewChanges) {
+              if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
+                setError(null);
+                setIsPreviewDialogOpen(false);
+                setPreviewTemplate(null);
+                setHasPreviewChanges(false);
+              }
+            } else if (!open) {
+              setError(null);
+              setIsPreviewDialogOpen(false);
+              setPreviewTemplate(null);
+              setHasPreviewChanges(false);
+            }
+          }}
+        >
           <DialogContent className="sm:max-w-[1200px]">
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <DialogHeader>
               <DialogTitle>
-                {selectedTemplate?.name}
+                {previewTemplate?.name}
               </DialogTitle>
               <DialogDescription>
-                Created by {selectedTemplate?.createdBy ? 
-                  `${selectedTemplate.createdBy.firstName} ${selectedTemplate.createdBy.lastName}` : 
+                Created by {previewTemplate?.createdBy ? 
+                  `${previewTemplate.createdBy.firstName} ${previewTemplate.createdBy.lastName}` : 
                   'Unknown'
                 }
               </DialogDescription>
@@ -1210,69 +1386,245 @@ export default function Setup() {
 
             <ScrollArea className="h-[calc(100vh-200px)] rounded-md border p-6">
               <div className="grid grid-cols-3 gap-8">
-                {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, dayIndex) => (
+                {previewTemplate && Array.from({ length: previewTemplate.days }, (_, dayIndex) => (
                   <div key={dayIndex} className="rounded-lg border p-6">
                     <h3 className="mb-4 font-semibold text-lg">Day {dayIndex + 1}</h3>
                     <div className="space-y-2">
-                      {selectedTemplate.activities
+                      {previewTemplate.activities
                         .filter(activity => activity.day === dayIndex + 1)
                         .sort((a, b) => a.displayTime.localeCompare(b.displayTime))
-                        .map(activity => (
-                          <div
-                            key={activity._id}
-                            className="rounded-lg border p-3 group hover:border-primary transition-colors cursor-pointer"
-                            onClick={(e) => handleActivityClick(selectedTemplate, activity, e)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium">{activity.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {activity.displayTime} - {calculateEndTime(activity.displayTime, activity.duration)}
-                                </p>
-                                {activity.description && (
-                                  <p className="text-sm text-gray-600 mt-2 break-words">
-                                    {activity.description}
+                        .map((activity, activityIndex, dayActivities) => (
+                          <div key={activity._id}>
+                            {/* Drop zone above first activity */}
+                            {activityIndex === 0 && (
+                              <div
+                                className="h-1 -mt-1 relative group"
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.add('bg-primary', 'h-2');
+                                }}
+                                onDragLeave={(e) => {
+                                  e.currentTarget.classList.remove('bg-primary', 'h-2');
+                                }}
+                                onDrop={async (e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.remove('bg-primary', 'h-2');
+                                  
+                                  const droppedActivity = JSON.parse(e.dataTransfer.getData('activity')) as ActivityWithDisplay;
+                                  
+                                  // First, get all activities except the dropped one
+                                  const otherActivities = previewTemplate.activities.filter(a => a._id !== droppedActivity._id);
+                                  
+                                  // Get current day's activities
+                                  const currentDayActivities = otherActivities.filter(a => a.day === dayIndex + 1);
+                                  
+                                  // Create new activities array with the dropped activity at the start of the day
+                                  const updatedActivities = [
+                                    ...otherActivities.filter(a => a.day !== dayIndex + 1),
+                                    {
+                                      ...droppedActivity,
+                                      _id: droppedActivity._id || generateTempId(),
+                                      day: dayIndex + 1,
+                                      displayTime: "09:00" // Will be recalculated
+                                    },
+                                    ...currentDayActivities
+                                  ];
+
+                                  // Recalculate timings
+                                  const finalActivities = recalculateTimings(updatedActivities, dayIndex);
+                                  handlePreviewChange(finalActivities);
+                                }}
+                              />
+                            )}
+                            <div
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('activity', JSON.stringify(activity));
+                                e.currentTarget.classList.add('opacity-50');
+                              }}
+                              onDragEnd={(e) => {
+                                e.currentTarget.classList.remove('opacity-50');
+                              }}
+                              className={`rounded-lg border p-3 group transition-colors cursor-pointer ${getActivityBackgroundColor(activity.name)}`}
+                              onClick={(e) => handleActivityClick(previewTemplate, activity, e)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium">{activity.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {activity.displayTime} - {calculateEndTime(activity.displayTime, activity.duration)}
                                   </p>
-                                )}
-                              </div>
-                              <div className="flex gap-2 ml-4 shrink-0" onClick={e => e.stopPropagation()}>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleActivityClick(selectedTemplate, activity, e);
-                                  }}
-                                >
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedActivity(activity);
-                                    setIsDeleteActivityDialogOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
+                                  {activity.description && (
+                                    <p className="text-sm text-gray-600 mt-2 break-words">
+                                      {activity.description}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex gap-2 ml-4 shrink-0" onClick={e => e.stopPropagation()}>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleActivityClick(previewTemplate, activity, e);
+                                    }}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedActivity(activity);
+                                      setIsDeleteActivityDialogOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </div>
                             </div>
+                            {/* Drop zone below activity */}
+                            <div
+                              className="h-1 my-1 relative group"
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.add('bg-primary', 'h-2');
+                              }}
+                              onDragLeave={(e) => {
+                                e.currentTarget.classList.remove('bg-primary', 'h-2');
+                              }}
+                              onDrop={async (e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('bg-primary', 'h-2');
+                                
+                                const droppedActivity = JSON.parse(e.dataTransfer.getData('activity')) as ActivityWithDisplay;
+                                
+                                // Get all activities except the dropped one
+                                const otherActivities = previewTemplate.activities.filter(a => a._id !== droppedActivity._id);
+                                
+                                // Get current day's activities
+                                const currentDayActivities = otherActivities
+                                  .filter(a => a.day === dayIndex + 1)
+                                  .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+                                
+                                // Find the insertion index
+                                const insertIndex = currentDayActivities.findIndex(a => a._id === activity._id) + 1;
+                                
+                                // Insert the activity at the correct position
+                                const updatedDayActivities = [
+                                  ...currentDayActivities.slice(0, insertIndex),
+                                  {
+                                    ...droppedActivity,
+                                    _id: droppedActivity._id || generateTempId(),
+                                    day: dayIndex + 1,
+                                    displayTime: calculateEndTime(activity.displayTime, activity.duration) // Will be recalculated
+                                  },
+                                  ...currentDayActivities.slice(insertIndex)
+                                ];
+
+                                // Combine with other days' activities
+                                const updatedActivities = [
+                                  ...otherActivities.filter(a => a.day !== dayIndex + 1),
+                                  ...updatedDayActivities
+                                ];
+
+                                // Recalculate timings
+                                const finalActivities = recalculateTimings(updatedActivities, dayIndex);
+                                handlePreviewChange(finalActivities);
+                              }}
+                            />
                           </div>
                         ))}
-                      {selectedTemplate.activities.filter(activity => activity.day === dayIndex + 1).length === 0 && (
-                        <p className="text-sm text-muted-foreground">No activities scheduled for this day</p>
-                      )}
+                      <div
+                        className="mt-4 border-2 border-dashed rounded-lg p-4"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add('border-primary', 'bg-primary/5');
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
+                          
+                          const droppedActivity = JSON.parse(e.dataTransfer.getData('activity')) as ActivityWithDisplay;
+                          
+                          // Get all activities except the dropped one
+                          const otherActivities = previewTemplate.activities.filter(a => a._id !== droppedActivity._id);
+                          
+                          // Add the activity to the end of this day's activities
+                          const updatedActivities = [
+                            ...otherActivities,
+                            {
+                              ...droppedActivity,
+                              _id: droppedActivity._id || generateTempId(),
+                              day: dayIndex + 1,
+                              displayTime: "09:00" // Will be recalculated
+                            }
+                          ];
+
+                          // Recalculate timings
+                          const finalActivities = recalculateTimings(updatedActivities, dayIndex);
+                          handlePreviewChange(finalActivities);
+                        }}
+                      >
+                        <Button
+                          variant="ghost"
+                          className="w-full"
+                          onClick={() => {
+                            setSelectedTemplate(previewTemplate);
+                            setActivityForm({
+                              name: '',
+                              startTime: '',
+                              duration: 30,
+                              day: dayIndex + 1,
+                              description: ''
+                            });
+                            setIsAddActivityDialogOpen(true);
+                          }}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Activity
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </ScrollArea>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
-                Close
+            <DialogFooter className="flex justify-between">
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsPreviewDialogOpen(false);
+                    setPreviewTemplate(null);
+                    setHasPreviewChanges(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedTemplate(previewTemplate);
+                    setBulkActivities('');
+                    setIsBulkActivityDialogOpen(true);
+                  }}
+                >
+                  <ListPlus className="mr-2 h-4 w-4" />
+                  Bulk Add
+                </Button>
+              </div>
+              <Button 
+                onClick={handlePreviewSave}
+                disabled={!hasPreviewChanges}
+              >
+                {hasPreviewChanges ? 'Save Changes' : 'Close'}
               </Button>
             </DialogFooter>
           </DialogContent>

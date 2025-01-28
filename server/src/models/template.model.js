@@ -3,6 +3,10 @@ const Schedule = require('./schedule.model');
 const logger = require('../config/logger');
 
 const activitySchema = new mongoose.Schema({
+  _id: {
+    type: mongoose.Schema.Types.ObjectId,
+    auto: true // This will auto-generate _id for new activities
+  },
   name: {
     type: String,
     required: true,
@@ -25,8 +29,16 @@ const activitySchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 1
+  },
+  actualStartTime: {
+    type: String,
+    default: null
+  },
+  actualEndTime: {
+    type: String,
+    default: null
   }
-});
+}, { _id: false }); // This ensures we can control _id generation
 
 const templateSchema = new mongoose.Schema({
   name: {
@@ -57,6 +69,19 @@ const templateSchema = new mongoose.Schema({
   activities: [activitySchema]
 }, {
   timestamps: true
+});
+
+// Add pre-save hook to handle activities without _id
+templateSchema.pre('save', function(next) {
+  if (this.isModified('activities')) {
+    this.activities = this.activities.map(activity => {
+      if (!activity._id) {
+        activity._id = new mongoose.Types.ObjectId();
+      }
+      return activity;
+    });
+  }
+  next();
 });
 
 // Add pre-delete hook
