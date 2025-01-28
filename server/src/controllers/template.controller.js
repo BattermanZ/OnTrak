@@ -319,15 +319,29 @@ const updateActivity = async (req, res) => {
   }
 };
 
-// Delete template
+// Delete template (admin only)
 const deleteTemplate = async (req, res) => {
   try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only administrators can delete templates' });
+    }
+
     const template = await Template.findByIdAndDelete(req.params.id);
     if (!template) {
       return res.status(404).json({ message: 'Template not found' });
     }
+
+    logger.info('Template deleted by admin', {
+      templateId: template._id,
+      templateName: template.name,
+      adminId: req.user._id,
+      adminName: `${req.user.firstName} ${req.user.lastName}`
+    });
+
     res.json({ message: 'Template deleted' });
   } catch (error) {
+    logger.error('Error deleting template:', error);
     res.status(500).json({ message: error.message });
   }
 };

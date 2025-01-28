@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { PlayCircle, SkipForward, SkipBack, StopCircle } from 'lucide-react';
+import { PlayCircle, SkipForward, SkipBack, StopCircle, HelpCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 // @ts-ignore
 import ReactMarkdown from 'react-markdown';
@@ -28,6 +28,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { convertFromAmsterdamTime } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
+import { AppTour } from '../components/AppTour';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [isStartDayDialogOpen, setIsStartDayDialogOpen] = useState(false);
   const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
   const [isCancelDayDialogOpen, setIsCancelDayDialogOpen] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   const { data: currentSchedule = {} as Schedule } = useQuery({
     queryKey: ['currentSchedule'],
@@ -161,9 +163,11 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-lg shadow-sm">
+    <div className="container mx-auto p-6">
+      <AppTour page="dashboard" run={showTour} onClose={() => setShowTour(false)} />
+      
+      {/* Header Section */}
+      <div className="dashboard-header flex justify-between items-center mb-8 bg-gradient-to-r from-orange-50 to-orange-100 p-6 rounded-lg shadow-sm">
         <div>
           {currentSchedule?.title ? (
             <>
@@ -181,31 +185,42 @@ export default function Dashboard() {
             </>
           )}
         </div>
-        {!currentSchedule?.title ? (
+        <div className="flex gap-2">
           <Button
-            onClick={() => setIsStartDayDialogOpen(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white"
+            variant="outline"
+            size="icon"
+            onClick={() => setShowTour(true)}
+            className="w-10 h-10"
+            title="Start Tour"
           >
-            <PlayCircle className="mr-2 h-4 w-4" />
-            Start Day
+            <HelpCircle className="h-5 w-5" />
           </Button>
-        ) : (
-          <div className="flex gap-2">
+          {!currentSchedule?.title ? (
             <Button
-              onClick={() => setIsCancelDayDialogOpen(true)}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="start-day-button bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => setIsStartDayDialogOpen(true)}
             >
-              Cancel Day
+              <PlayCircle className="mr-2 h-4 w-4" />
+              Start Day
             </Button>
-            <Button
-              onClick={() => setIsCloseDayDialogOpen(true)}
-              variant="destructive"
-            >
-              <StopCircle className="mr-2 h-4 w-4" />
-              Close Day
-            </Button>
-          </div>
-        )}
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsCancelDayDialogOpen(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                Cancel Day
+              </Button>
+              <Button
+                onClick={() => setIsCloseDayDialogOpen(true)}
+                variant="destructive"
+              >
+                <StopCircle className="mr-2 h-4 w-4" />
+                Close Day
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error Alert */}
@@ -218,7 +233,7 @@ export default function Dashboard() {
       {currentSchedule?.title ? (
         <div className="space-y-8">
           {/* Activity Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          <div className="activity-cards grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             <ActivityCard
               title="Previous"
               activity={getPreviousActivity(currentSchedule)}
@@ -239,7 +254,7 @@ export default function Dashboard() {
           </div>
 
           {/* Controls */}
-          <div className="flex justify-center gap-4">
+          <div className="controls flex justify-center gap-4">
             <Button
               variant="outline"
               onClick={handlePreviousActivity}

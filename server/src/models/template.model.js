@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const Schedule = require('./schedule.model');
+const logger = require('../config/logger');
 
 const activitySchema = new mongoose.Schema({
   name: {
@@ -55,6 +57,35 @@ const templateSchema = new mongoose.Schema({
   activities: [activitySchema]
 }, {
   timestamps: true
+});
+
+// Add pre-delete hook
+templateSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const template = await this.model.findOne(this.getQuery());
+    if (template) {
+      // Find and update all associated schedules
+      const result = await Schedule.updateMany(
+        { templateId: template._id },
+        { 
+          $set: { 
+            status: 'cancelled',
+            title: `${template.name} (Template Deleted)`
+          }
+        }
+      );
+      
+      logger.info('Updated schedules after template deletion', {
+        templateId: template._id,
+        templateName: template.name,
+        schedulesUpdated: result.modifiedCount
+      });
+    }
+    next();
+  } catch (error) {
+    logger.error('Error in template pre-delete hook:', error);
+    next(error);
+  }
 });
 
 const Template = mongoose.model('Template', templateSchema);

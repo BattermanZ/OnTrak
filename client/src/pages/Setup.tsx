@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Copy, Download, ListPlus, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, Copy, Download, ListPlus, Upload, HelpCircle } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { convertFromAmsterdamTime, convertToAmsterdamTime } from '../utils/timezone';
+import { AppTour } from '../components/AppTour';
 
 import {
   Card,
@@ -81,6 +82,7 @@ export default function Setup() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isBulkActivityDialogOpen, setIsBulkActivityDialogOpen] = useState(false);
   const [bulkActivities, setBulkActivities] = useState('');
+  const [showTour, setShowTour] = useState(false);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -574,13 +576,24 @@ export default function Setup() {
   return (
     <>
       <div className="container mx-auto p-6">
+        <AppTour page="setup" run={showTour} onClose={() => setShowTour(false)} />
+        
         {/* Header Section */}
-        <div className="flex justify-between items-center mb-8 bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-lg shadow-sm">
+        <div className="setup-header flex justify-between items-center mb-8 bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-lg shadow-sm">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Training Setup</h1>
             <p className="text-gray-600 mt-2">Manage your training templates and activities</p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowTour(true)}
+              className="w-10 h-10"
+              title="Start Tour"
+            >
+              <HelpCircle className="h-5 w-5" />
+            </Button>
             <Button
               variant="outline"
               onClick={() => setIsImportDialogOpen(true)}
@@ -593,7 +606,7 @@ export default function Setup() {
                 setSelectedTemplate(null);
                 setIsCreateDialogOpen(true);
               }}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="create-training-button bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="mr-2 h-4 w-4" />
               Create Training
@@ -602,14 +615,14 @@ export default function Setup() {
         </div>
 
         {/* Search Section */}
-        <div className="flex gap-4 mb-6">
+        <div className="search-section flex gap-4 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
             <Input
               className="pl-10"
-          placeholder="Search templates..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search templates..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <div className="relative w-72">
@@ -684,129 +697,79 @@ export default function Setup() {
         )}
 
         {/* Templates Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="templates-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTemplates.map((template) => (
             <Card 
               key={template._id} 
               className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col"
-                      onClick={() => {
-                        setSelectedTemplate(template);
-              setIsPreviewDialogOpen(true);
-            }}
+              onClick={() => {
+                setSelectedTemplate(template);
+                setIsPreviewDialogOpen(true);
+              }}
             >
-              <CardHeader className="bg-gray-50 border-b">
-                <div className="flex flex-col h-full">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-                      <p className="text-sm text-gray-500">Created by {template.createdBy?.firstName} {template.createdBy?.lastName}</p>
-                    </div>
-                    <div className="flex -space-x-3 -mr-2" onClick={e => e.stopPropagation()}>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCloneTemplate(template);
-                              }}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Clone template</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleExportTemplate(template);
-                              }}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Export template</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedTemplate(template);
-                                setTemplateForm({
-                                  name: template.name,
-                                  days: template.days,
-                                  tags: template.tags || []
-                                });
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit template</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedTemplate(template);
-                                setIsDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete template</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </div>
-                  <div className="flex flex-col w-full" onClick={e => e.stopPropagation()}>
-                    {template.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {template.tags.map((tag) => (
-                          <Badge 
-                            key={tag} 
-                            className={`text-xs cursor-pointer ${getTagColor(tag)}`}
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="font-semibold text-xl">{template.name}</div>
+                <div className="flex gap-1">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportTemplate(template);
+                          }}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Export template</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTemplate(template);
+                            setTemplateForm({
+                              name: template.name,
+                              days: template.days,
+                              tags: template.tags || []
+                            });
+                            setIsEditDialogOpen(true);
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Edit template</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {user?.role === 'admin' && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleTagClick(tag, e);
+                              setSelectedTemplate(template);
+                              setIsDeleteDialogOpen(true);
                             }}
                           >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Badge variant="secondary" className="flex items-center">
-                        <Calendar className="w-3 h-3 mr-2" />
-                        {template.days} Days
-                      </Badge>
-                      <Badge variant="outline" className="flex items-center">
-                        <Clock className="w-3 h-3 mr-2" />
-                        {template.activities.length} Activities
-                      </Badge>
-                    </div>
-                  </div>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete template</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="p-4 flex-1">
@@ -866,11 +829,11 @@ export default function Setup() {
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedTemplate(template);
-                        setActivityForm({
-                          name: '',
-                          startTime: '',
-                          duration: 30,
-                          day: 1,
+                      setActivityForm({
+                        name: '',
+                        startTime: '',
+                        duration: 30,
+                        day: 1,
                         description: ''
                       });
                       setIsAddActivityDialogOpen(true);
@@ -883,7 +846,7 @@ export default function Setup() {
                     variant="outline"
                     onClick={(e) => {
                       e.stopPropagation();
-                        setSelectedTemplate(template);
+                      setSelectedTemplate(template);
                       setBulkActivities('');
                       setIsBulkActivityDialogOpen(true);
                     }}
@@ -897,7 +860,7 @@ export default function Setup() {
           ))}
         </div>
 
-      {/* Create/Edit Template Dialog */}
+        {/* Create/Edit Template Dialog */}
         <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
           if (!open) {
             setIsCreateDialogOpen(false);
@@ -905,7 +868,7 @@ export default function Setup() {
             setSelectedTemplate(null);
           }
         }}>
-        <DialogContent>
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>{isEditDialogOpen ? 'Edit Training Template' : 'Create Training Template'}</DialogTitle>
               <DialogDescription>
@@ -918,17 +881,17 @@ export default function Setup() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Template Name</label>
                 <Input
-            value={templateForm.name}
-            onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                  value={templateForm.name}
+                  onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
                   placeholder="Enter template name"
                 />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Number of Days</label>
                 <Input
-            type="number"
+                  type="number"
                   min="1"
-            value={templateForm.days}
+                  value={templateForm.days}
                   onChange={(e) => setTemplateForm({ ...templateForm, days: parseInt(e.target.value) })}
                 />
               </div>
@@ -971,16 +934,16 @@ export default function Setup() {
                           <div
                             key={tag}
                             className="px-3 py-2 cursor-pointer hover:bg-gray-100"
-            onClick={() => {
-                          if (templateForm.tags.length < 5) {
-                            setTemplateForm(prev => ({
-                              ...prev,
-                              tags: [...prev.tags, tag]
-                            }));
-                            setTagInput('');
-                            setShowTagSuggestions(false);
-                          }
-                        }}
+                            onClick={() => {
+                              if (templateForm.tags.length < 5) {
+                                setTemplateForm(prev => ({
+                                  ...prev,
+                                  tags: [...prev.tags, tag]
+                                }));
+                                setTagInput('');
+                                setShowTagSuggestions(false);
+                              }
+                            }}
                           >
                             <Badge className={getTagColor(tag)}>
                               {tag}
@@ -1002,23 +965,23 @@ export default function Setup() {
                 setSelectedTemplate(null);
               }}>
                 Cancel
-          </Button>
+              </Button>
               <Button onClick={isEditDialogOpen ? handleEditTemplate : handleCreateTemplate}>
                 {isEditDialogOpen ? 'Save Changes' : 'Create Template'}
-            </Button>
+              </Button>
             </DialogFooter>
           </DialogContent>
-      </Dialog>
+        </Dialog>
 
-      {/* Add/Edit Activity Dialog */}
+        {/* Add/Edit Activity Dialog */}
         <Dialog open={isAddActivityDialogOpen || isEditActivityDialogOpen} onOpenChange={(open) => {
           if (!open) {
             setIsAddActivityDialogOpen(false);
             setIsEditActivityDialogOpen(false);
-        setSelectedActivity(null);
+            setSelectedActivity(null);
           }
-      }}>
-        <DialogContent>
+        }}>
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>
                 {isEditActivityDialogOpen ? 'Edit Activity' : 'Add Activity'}
@@ -1033,8 +996,8 @@ export default function Setup() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Activity Name</label>
                 <Input
-            value={activityForm.name}
-            onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
+                  value={activityForm.name}
+                  onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
                   placeholder="Enter activity name"
                 />
               </div>
@@ -1042,8 +1005,8 @@ export default function Setup() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Start Time</label>
                   <Input
-            value={activityForm.startTime}
-            onChange={(e) => {
+                    value={activityForm.startTime}
+                    onChange={(e) => {
                       const formatted = formatTimeInput(e.target.value);
                       setActivityForm({ ...activityForm, startTime: formatted });
                     }}
@@ -1053,9 +1016,9 @@ export default function Setup() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Duration (minutes)</label>
                   <Input
-            type="number"
+                    type="number"
                     min="1"
-            value={activityForm.duration}
+                    value={activityForm.duration}
                     onChange={(e) => setActivityForm({ ...activityForm, duration: parseInt(e.target.value) })}
                   />
                 </div>
@@ -1075,9 +1038,9 @@ export default function Setup() {
                     <SelectValue placeholder="Select day" />
                   </SelectTrigger>
                   <SelectContent>
-            {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
+                    {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
                       <SelectItem key={day} value={day.toString()}>
-                Day {day}
+                        Day {day}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1086,8 +1049,8 @@ export default function Setup() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Description (optional)</label>
                 <Input
-            value={activityForm.description}
-            onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
+                  value={activityForm.description}
+                  onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
                   placeholder="Enter activity description"
                 />
               </div>
@@ -1104,7 +1067,7 @@ export default function Setup() {
                 {isEditActivityDialogOpen ? 'Save Changes' : 'Add Activity'}
               </Button>
             </DialogFooter>
-        </DialogContent>
+          </DialogContent>
         </Dialog>
 
         {/* Delete Template Confirmation Dialog */}
@@ -1162,16 +1125,16 @@ export default function Setup() {
             <DialogFooter>
               <Button variant="outline" onClick={() => {
                 setIsDeleteActivityDialogOpen(false);
-              setSelectedActivity(null);
+                setSelectedActivity(null);
               }}>
                 Cancel
-          </Button>
+              </Button>
               <Button variant="destructive" onClick={handleDeleteActivity}>
                 Delete Activity
               </Button>
             </DialogFooter>
           </DialogContent>
-      </Dialog>
+        </Dialog>
 
         {/* Preview Dialog */}
         <Dialog open={isPreviewDialogOpen} onOpenChange={(open) => {
@@ -1258,7 +1221,7 @@ export default function Setup() {
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
                 Close
-            </Button>
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
