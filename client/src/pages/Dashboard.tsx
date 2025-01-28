@@ -30,6 +30,42 @@ import { convertFromAmsterdamTime } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
 import { AppTour } from '../components/AppTour';
 
+const styles = `
+  .activity-gap {
+    transform: scale(1.02);
+    z-index: 10;
+  }
+  
+  .activity-gap-top::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -8px;
+    height: 8px;
+    background: #3b82f6;
+    transform: scaleX(0.98);
+    border-radius: 4px;
+  }
+  
+  .activity-gap-bottom::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -8px;
+    height: 8px;
+    background: #3b82f6;
+    transform: scaleX(0.98);
+    border-radius: 4px;
+  }
+`;
+
+const styleSheet = document.createElement('style');
+styleSheet.type = 'text/css';
+styleSheet.innerText = styles;
+document.head.appendChild(styleSheet);
+
 export default function Dashboard() {
   const { user } = useAuth();
   const socket = useSocket();
@@ -173,6 +209,62 @@ export default function Dashboard() {
     return '';
   };
 
+  const handleActivityReorder = async (updatedActivities: Activity[]) => {
+    try {
+      // Update the schedule with the new activity order
+      await schedules.updateActivities(currentSchedule._id, updatedActivities);
+      queryClient.invalidateQueries({ queryKey: ['currentSchedule'] });
+    } catch (err) {
+      console.error('Error reordering activities:', err);
+      setError(err instanceof Error ? err.message : 'Failed to reorder activities');
+    }
+  };
+
+  const recalculateTimings = (activities: Activity[]): Activity[] => {
+    // Sort activities by their current order
+    const sortedActivities = [...activities];
+    
+    // Start with the first activity's time or 09:00 if none
+    let currentTime = sortedActivities[0]?.startTime || "09:00";
+
+    // Update times for activities while maintaining their order
+    return sortedActivities.map((activity, index) => {
+      const updatedActivity = {
+        ...activity,
+        startTime: currentTime
+      };
+      
+      // Calculate the next start time based on the current activity's duration
+      const [hours, minutes] = currentTime.split(':').map(Number);
+      const totalMinutes = hours * 60 + minutes + activity.duration;
+      const nextHours = Math.floor(totalMinutes / 60) % 24;
+      const nextMinutes = totalMinutes % 60;
+      currentTime = `${nextHours.toString().padStart(2, '0')}:${nextMinutes.toString().padStart(2, '0')}`;
+      
+      return updatedActivity;
+    });
+  };
+
+  // Add this before the return statement
+  const handleDrop = async (draggedActivity: Activity, targetActivity: Activity) => {
+    const activities = [...currentSchedule.activities];
+    const draggedIndex = activities.findIndex(a => a._id === draggedActivity._id);
+    const targetIndex = activities.findIndex(a => a._id === targetActivity._id);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Remove the dragged activity from its original position
+    const [removed] = activities.splice(draggedIndex, 1);
+    // Insert it at the new position
+    activities.splice(targetIndex, 0, removed);
+
+    // Recalculate timings for all activities
+    const updatedActivities = recalculateTimings(activities);
+    
+    // Update the schedule with the new order
+    await handleActivityReorder(updatedActivities);
+  };
+
   return (
     <div className="container mx-auto p-6">
       <AppTour page="dashboard" run={showTour} onClose={() => setShowTour(false)} />
@@ -302,11 +394,55 @@ export default function Dashboard() {
                 {currentSchedule.activities.map((activity: Activity, index: number) => (
                   <div 
                     key={activity._id}
-                    className={`py-2 flex items-start ${
+                    className={`py-2 flex items-start transition-all duration-200 ${
                       activity.isActive ? 'bg-blue-50' : getActivityBackgroundColor(activity.name)
-                    }`}
+                    } ${activity.completed ? 'opacity-75' : ''} hover:bg-gray-50 relative`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('activity', JSON.stringify(activity));
+                      e.currentTarget.classList.add('opacity-50', 'scale-95', 'shadow-sm');
+                    }}
+                    onDragEnd={(e) => {
+                      e.currentTarget.classList.remove('opacity-50', 'scale-95', 'shadow-sm');
+                      // Remove any remaining gap classes from all activities
+                      document.querySelectorAll('.activity-gap').forEach(el => {
+                        el.classList.remove('activity-gap', 'activity-gap-top', 'activity-gap-bottom');
+                      });
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      const target = e.currentTarget as HTMLElement;
+                      const rect = target.getBoundingClientRect();
+                      const mouseY = e.clientY;
+                      const threshold = rect.top + rect.height / 2;
+                      
+                      // Remove gap classes from all activities first
+                      document.querySelectorAll('.activity-gap').forEach(el => {
+                        el.classList.remove('activity-gap', 'activity-gap-top', 'activity-gap-bottom');
+                      });
+                      
+                      // Add gap class to current target
+                      if (mouseY < threshold) {
+                        target.classList.add('activity-gap', 'activity-gap-top');
+                      } else {
+                        target.classList.add('activity-gap', 'activity-gap-bottom');
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('activity-gap', 'activity-gap-top', 'activity-gap-bottom');
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      const target = e.currentTarget as HTMLElement;
+                      target.classList.remove('activity-gap', 'activity-gap-top', 'activity-gap-bottom');
+                      
+                      const draggedActivity = JSON.parse(e.dataTransfer.getData('activity'));
+                      if (draggedActivity._id === activity._id) return;
+                      
+                      await handleDrop(draggedActivity, activity);
+                    }}
                   >
-                    <div className="w-20 shrink-0 font-medium text-gray-900 pt-1">
+                    <div className="w-20 shrink-0 font-medium text-gray-900 pt-1 cursor-move group-hover:text-primary">
                       {formatActivityTime(activity.startTime)}
                     </div>
                     <div className="flex-1 min-w-0 flex items-start justify-between gap-4">

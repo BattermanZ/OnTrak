@@ -267,6 +267,8 @@ const schedules = {
   nextActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/next/${activityId}`),
   goToPreviousActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/previous/${activityId}`),
   getStatistics: (filters: { trainer: string; training: string; dateRange: string; day?: number }) => api.get('/statistics', { params: filters }),
+  updateActivities: (scheduleId: string, activities: Activity[]) =>
+    api.put(`/schedules/${scheduleId}/activities`, { activities }),
 };
 
 // Add statistics object

@@ -365,6 +365,76 @@ router.put('/:id',
   }
 );
 
+// Update schedule activities
+router.put('/:id/activities',
+  passport.authenticate('jwt', { session: false }),
+  [
+    param('id').isMongoId(),
+    body('activities').isArray()
+  ],
+  async (req, res, next) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const schedule = await Schedule.findById(req.params.id);
+
+      if (!schedule) {
+        return res.status(404).json({ message: 'Schedule not found' });
+      }
+
+      // Check if user owns this schedule
+      if (schedule.createdBy.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const { activities } = req.body;
+      
+      if (!activities || !Array.isArray(activities)) {
+        return res.status(400).json({ message: 'Activities array is required' });
+      }
+
+      if (activities.length !== schedule.activities.length) {
+        return res.status(400).json({ message: 'Activities array length must match current schedule' });
+      }
+
+      // Update activities while preserving activity states
+      const updatedActivities = activities.map((activity, index) => ({
+        ...schedule.activities[index].toObject(),
+        ...activity,
+        // Preserve these fields from the original activity
+        isActive: schedule.activities[index].isActive,
+        completed: schedule.activities[index].completed,
+        actualStartTime: schedule.activities[index].actualStartTime,
+        actualEndTime: schedule.activities[index].actualEndTime,
+        status: schedule.activities[index].status
+      }));
+
+      schedule.activities = updatedActivities;
+      await schedule.save();
+
+      // Add virtual properties for response
+      const result = schedule.toObject();
+      result.currentActivity = schedule.getCurrentActivity();
+      result.previousActivity = schedule.getPreviousActivity();
+      result.nextActivity = schedule.getNextActivity();
+
+      // Emit socket event for real-time updates
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('schedule:updated', result);
+      }
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Error updating schedule activities:', error);
+      next(error);
+    }
+  }
+);
+
 // Delete schedule (admin only)
 router.delete('/:id',
   passport.authenticate('jwt', { session: false }),

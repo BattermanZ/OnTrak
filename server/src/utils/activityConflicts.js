@@ -1,7 +1,5 @@
 const { parseISO, addMinutes, isWithinInterval } = require('date-fns');
 
-const MINIMUM_BREAK_TIME = 15; // minutes
-
 /**
  * Parse time string to Date object
  * @param {string} timeStr Time string in HH:MM format
@@ -30,35 +28,18 @@ const doIntervalsOverlap = (start1, end1, start2, end2) => {
   );
 };
 
-/**
- * Calculate break time between two activities in minutes
- * @param {Date} end1 End time of first activity
- * @param {Date} start2 Start time of second activity
- * @returns {number} Break time in minutes
- */
-const getBreakTime = (end1, start2) => {
-  return Math.floor((start2.getTime() - end1.getTime()) / (1000 * 60));
-};
-
-/**
- * Check for conflicts between activities
- * @param {Array} activities List of activities to check
- * @returns {Array} List of conflicts found
- */
 const checkActivityConflicts = (activities) => {
   const conflicts = [];
+  const activitiesByDay = {};
 
   // Group activities by day
-  const activitiesByDay = activities.reduce((acc, activity) => {
-    const day = activity.day;
-    if (!acc[day]) {
-      acc[day] = [];
+  activities.forEach(activity => {
+    if (!activitiesByDay[activity.day]) {
+      activitiesByDay[activity.day] = [];
     }
-    acc[day].push(activity);
-    return acc;
-  }, {});
+    activitiesByDay[activity.day].push(activity);
+  });
 
-  // Check conflicts within each day
   Object.entries(activitiesByDay).forEach(([day, dayActivities]) => {
     // Sort activities by start time
     const sortedActivities = [...dayActivities].sort((a, b) => {
@@ -87,16 +68,6 @@ const checkActivityConflicts = (activities) => {
             message: `Activities "${activity1.name}" and "${activity2.name}" have overlapping times on day ${day}`,
           });
         }
-
-        // Check for insufficient break time
-        const breakTime = getBreakTime(end1, start2);
-        if (breakTime < MINIMUM_BREAK_TIME && breakTime > 0) {
-          conflicts.push({
-            type: 'break',
-            activities: [activity1._id, activity2._id],
-            message: `Insufficient break time (${breakTime} minutes) between "${activity1.name}" and "${activity2.name}" on day ${day}`,
-          });
-        }
       }
     }
   });
@@ -106,6 +77,5 @@ const checkActivityConflicts = (activities) => {
 
 module.exports = {
   checkActivityConflicts,
-  MINIMUM_BREAK_TIME,
   parseActivityTime, // Export for testing
 }; 
