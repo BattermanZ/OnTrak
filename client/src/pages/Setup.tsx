@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Download, ListPlus, Upload, HelpCircle, Copy } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
-import type { Template, Activity } from '../types';
+import type { Template, Activity, ActivityConflict } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { convertFromAmsterdamTime, convertToAmsterdamTime } from '../utils/timezone';
 import { AppTour } from '../components/AppTour';
+import { checkActivityConflicts } from '../utils/activityConflicts';
 
 import {
   Card,
@@ -85,6 +86,7 @@ export default function Setup() {
   const [showTour, setShowTour] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<TemplateWithDisplayTimes | null>(null);
   const [hasPreviewChanges, setHasPreviewChanges] = useState(false);
+  const [activityConflicts, setActivityConflicts] = useState<ActivityConflict[]>([]);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -183,6 +185,7 @@ export default function Setup() {
     }
   };
 
+  // Update handleAddActivity
   const handleAddActivity = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
@@ -190,19 +193,41 @@ export default function Setup() {
 
       // Convert time to Amsterdam time before saving
       const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
-      console.log('Adding activity with times:', {
-        userTime: activityForm.startTime,
-        amsterdamTime,
-        userTimezone: user.timezone
-      });
-
-      // Use the dedicated addActivity endpoint
-      await templateApi.addActivity(selectedTemplate._id, {
+      
+      // Check for conflicts before saving
+      const newActivity: Activity = {
+        _id: '',
         ...activityForm,
         startTime: amsterdamTime,
         actualStartTime: null,
         actualEndTime: null
-      });
+      };
+      
+      const conflicts = checkForConflicts(newActivity);
+      if (conflicts.length > 0) {
+        // Don't proceed if there are conflicts - they will be shown in the dialog
+        return;
+      }
+
+      // Use the dedicated addActivity endpoint
+      await templateApi.addActivity(selectedTemplate._id, newActivity);
+
+      // Update preview if open
+      if (previewTemplate && selectedTemplate._id === previewTemplate._id) {
+        const response = await templateApi.getAll();
+        const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
+        if (updatedTemplate) {
+          // Convert times for preview display
+          const templateWithDisplayTimes: TemplateWithDisplayTimes = {
+            ...updatedTemplate,
+            activities: updatedTemplate.activities.map((activity: Activity) => ({
+              ...activity,
+              displayTime: user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime
+            }))
+          };
+          setPreviewTemplate(templateWithDisplayTimes);
+        }
+      }
 
       setIsAddActivityDialogOpen(false);
       setActivityForm({
@@ -212,6 +237,7 @@ export default function Setup() {
         description: '',
         day: 1
       });
+      setActivityConflicts([]);
       await fetchTemplates();
     } catch (err) {
       console.error('Error adding activity:', err);
@@ -219,6 +245,7 @@ export default function Setup() {
     }
   };
 
+  // Update handleEditActivity
   const handleEditActivity = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
@@ -226,18 +253,27 @@ export default function Setup() {
       
       // Convert time to Amsterdam time before saving
       const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
-      console.log('Converting to Amsterdam time:', {
-        userTime: activityForm.startTime,
-        amsterdamTime,
-        userTimezone: user.timezone
-      });
       
       const updatedActivity: ActivityWithDisplay = {
         ...selectedActivity,
         ...activityForm,
         startTime: amsterdamTime,
-        displayTime: activityForm.startTime // Keep display time in user's timezone
+        displayTime: activityForm.startTime
       };
+
+      // Check for conflicts before saving, excluding the current activity being edited
+      const conflicts = checkActivityConflicts(
+        selectedTemplate.activities.filter(a => a._id !== selectedActivity._id),
+        {
+          ...updatedActivity,
+          _id: selectedActivity._id // Keep the original ID for proper exclusion
+        }
+      );
+      
+      if (conflicts.length > 0) {
+        setActivityConflicts(conflicts);
+        return;
+      }
 
       await templateApi.update(selectedTemplate._id, {
         name: selectedTemplate.name,
@@ -247,8 +283,26 @@ export default function Setup() {
         )
       });
 
+      // Update preview if open
+      if (previewTemplate && selectedTemplate._id === previewTemplate._id) {
+        const response = await templateApi.getAll();
+        const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
+        if (updatedTemplate) {
+          // Convert times for preview display
+          const templateWithDisplayTimes: TemplateWithDisplayTimes = {
+            ...updatedTemplate,
+            activities: updatedTemplate.activities.map((activity: Activity) => ({
+              ...activity,
+              displayTime: user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime
+            }))
+          };
+          setPreviewTemplate(templateWithDisplayTimes);
+        }
+      }
+
       setIsEditActivityDialogOpen(false);
       setSelectedActivity(null);
+      setActivityConflicts([]);
       await fetchTemplates();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to edit activity');
@@ -270,19 +324,29 @@ export default function Setup() {
         activities: updatedActivities
       });
 
+      // Update preview if open
+      if (previewTemplate && selectedTemplate._id === previewTemplate._id) {
+        const response = await templateApi.getAll();
+        const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
+        if (updatedTemplate) {
+          // Convert times for preview display
+          const templateWithDisplayTimes: TemplateWithDisplayTimes = {
+            ...updatedTemplate,
+            activities: updatedTemplate.activities.map((activity: Activity) => ({
+              ...activity,
+              displayTime: user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime
+            }))
+          };
+          setPreviewTemplate(templateWithDisplayTimes);
+        }
+      }
+
       // Close dialogs and reset states first
       setIsDeleteActivityDialogOpen(false);
       setSelectedActivity(null);
       
       // Then fetch fresh data
-      const response = await templateApi.getAll();
-      setTemplates(response.data);
-      
-      // Update selected template with fresh data
-      const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
-      if (updatedTemplate) {
-        setSelectedTemplate(updatedTemplate);
-      }
+      await fetchTemplates();
 
       toast({
         title: "Success",
@@ -351,19 +415,23 @@ export default function Setup() {
 
   // Function to get all unique tags from templates
   const getAllUniqueTags = () => {
-    const tagSet = new Set<string>();
-    // Sort templates by creation date to maintain consistent order
-    const sortedTemplates = [...templates].sort((a, b) => {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
+    if (!templates || !Array.isArray(templates)) return [];
     
-    // Add tags in order of template creation
-    sortedTemplates.forEach(template => {
-      template.tags?.forEach(tag => tagSet.add(tag));
-    });
+    // Get all tags from all templates, filter out undefined/null, and flatten
+    const allTags = templates
+      .map(template => template?.tags || [])
+      .filter(tags => Array.isArray(tags))
+      .flat()
+      .filter(tag => typeof tag === 'string' && tag.trim() !== '');
     
-    // Convert to array and sort alphabetically for consistent ordering
-    return Array.from(tagSet).sort();
+    // Create a Set to get unique tags
+    const uniqueTags = Array.from(new Set(allTags));
+    
+    // Sort the filtered tags, with additional type safety
+    return uniqueTags.sort((a, b) => {
+      if (!a || !b) return 0;
+      return a.localeCompare(b);
+    });
   };
 
   // Function to get consistent color for a tag
@@ -564,30 +632,36 @@ export default function Setup() {
     setBulkActivities(e.target.value);
   };
 
-  // Add formatTimeInput function
+  // Update formatTimeInput function
   const formatTimeInput = (value: string): string => {
-    // Remove any non-digit characters
-    const digits = value.replace(/\D/g, '');
+    // Remove any non-digit characters except colon
+    const cleaned = value.replace(/[^\d:]/g, '');
     
-    // Handle empty input
-    if (!digits) return '';
+    // If empty, return empty string
+    if (!cleaned) return '';
     
-    // Handle hours
-    if (digits.length <= 2) {
-      const hours = parseInt(digits);
-      if (hours > 23) return '23';
-      return digits;
+    // If there's a colon in the input
+    if (cleaned.includes(':')) {
+      const [hours, minutes] = cleaned.split(':');
+      
+      // Only format if we have valid hours and minutes
+      if (hours && minutes) {
+        const validHours = Math.min(parseInt(hours), 23);
+        const validMinutes = Math.min(parseInt(minutes), 59);
+        return `${validHours.toString().padStart(2, '0')}:${validMinutes.toString().padStart(2, '0')}`;
+      }
+      return cleaned;
     }
     
-    // Handle hours and minutes
-    const hours = parseInt(digits.slice(0, 2));
-    const minutes = parseInt(digits.slice(2));
+    // Only format if we have exactly 4 digits
+    if (cleaned.length === 4) {
+      const hours = Math.min(parseInt(cleaned.slice(0, 2)), 23);
+      const minutes = Math.min(parseInt(cleaned.slice(2, 4)), 59);
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    }
     
-    // Validate hours and minutes
-    const validHours = hours > 23 ? '23' : digits.slice(0, 2).padStart(2, '0');
-    const validMinutes = minutes > 59 ? '59' : digits.slice(2, 4).padStart(2, '0');
-    
-    return `${validHours}:${validMinutes}`;
+    // Return cleaned input without formatting for partial inputs
+    return cleaned;
   };
 
   // Add this function to determine activity background color
@@ -711,7 +785,10 @@ export default function Setup() {
     // Get and sort activities for this day
     const dayActivities = activities
       .filter(a => a.day === dayIndex + 1)
-      .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+      .sort((a, b) => {
+        if (!a?.displayTime || !b?.displayTime) return 0;
+        return a.displayTime.localeCompare(b.displayTime);
+      });
 
     // Start with the first activity at 09:00 or its original time if it's the first activity of day 1
     let currentTime = dayActivities.length > 0 ? 
@@ -732,6 +809,36 @@ export default function Setup() {
     // Combine with other days' activities
     return [...otherDaysActivities, ...updatedDayActivities];
   };
+
+  // Update the checkForConflicts function to properly handle activity IDs
+  const checkForConflicts = useCallback((activity: Partial<Activity>) => {
+    if (!selectedTemplate) return [];
+    
+    // When editing an activity, exclude it from the conflict check using its original ID
+    const activitiesToCheck = selectedTemplate.activities.filter(a => {
+      // If we're editing (have selectedActivity), exclude it from the check
+      if (selectedActivity && a._id === selectedActivity._id) {
+        return false;
+      }
+      return true;
+    });
+
+    const conflicts = checkActivityConflicts(
+      activitiesToCheck,
+      {
+        _id: activity._id || '',
+        name: activity.name || '',
+        startTime: activity.startTime || '',
+        duration: activity.duration || 0,
+        day: activity.day || 1,
+        description: activity.description || '',
+        actualStartTime: null,
+        actualEndTime: null
+      }
+    );
+    setActivityConflicts(conflicts);
+    return conflicts;
+  }, [selectedTemplate, selectedActivity]);
 
   return (
     <>
@@ -794,15 +901,17 @@ export default function Setup() {
                   setTagSearchQuery(e.target.value);
                   setShowTagSearchSuggestions(true);
                 }}
+                onFocus={() => setShowTagSearchSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowTagSearchSuggestions(false), 200)}
               />
-              {showTagSearchSuggestions && tagSearchQuery && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg">
+              {showTagSearchSuggestions && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
                   {getAllUniqueTags()
                     .filter(tag => 
-                      tag.toLowerCase().includes(tagSearchQuery.toLowerCase()) &&
-                      !selectedFilterTags.includes(tag)
+                      !selectedFilterTags.includes(tag) &&
+                      (!tagSearchQuery || tag.toLowerCase().includes(tagSearchQuery.toLowerCase()))
                     )
+                    .sort((a, b) => a.localeCompare(b))
                     .map(tag => (
                       <div
                         key={tag}
@@ -818,6 +927,15 @@ export default function Setup() {
                         </Badge>
                       </div>
                     ))}
+                  {getAllUniqueTags()
+                    .filter(tag => 
+                      !selectedFilterTags.includes(tag) &&
+                      (!tagSearchQuery || tag.toLowerCase().includes(tagSearchQuery.toLowerCase()))
+                    ).length === 0 && (
+                    <div className="px-3 py-2 text-sm text-gray-500 italic">
+                      No matching tags found
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1204,25 +1322,81 @@ export default function Setup() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {activityConflicts.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    <div className="space-y-2">
+                      <p className="font-semibold">Time Conflict Detected:</p>
+                      {activityConflicts.map((conflict, index) => {
+                        const conflictingActivity = conflict.activity2;
+                        const conflictEnd = calculateEndTime(conflictingActivity.startTime, conflictingActivity.duration);
+                        return (
+                          <div key={index} className="pl-4 border-l-2 border-red-500">
+                            <p className="font-medium">{conflictingActivity.name}</p>
+                            <p className="text-sm">
+                              Time: {conflictingActivity.startTime} - {conflictEnd} ({conflictingActivity.duration} minutes)
+                            </p>
+                            {conflictingActivity.description && (
+                              <p className="text-sm mt-1">{conflictingActivity.description}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="space-y-2">
                 <label className="text-sm font-medium">Activity Name</label>
                 <Input
                   value={activityForm.name}
-                  onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
+                  onChange={(e) => {
+                    setActivityForm({ ...activityForm, name: e.target.value });
+                    if (activityForm.startTime && activityForm.duration) {
+                      checkForConflicts({
+                        ...activityForm,
+                        name: e.target.value,
+                        _id: '',
+                        actualStartTime: null,
+                        actualEndTime: null
+                      });
+                    }
+                  }}
                   placeholder="Enter activity name"
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Start Time</label>
-                  <Input
-                    value={activityForm.startTime}
-                    onChange={(e) => {
-                      const formatted = formatTimeInput(e.target.value);
-                      setActivityForm({ ...activityForm, startTime: formatted });
+                  <label className="text-sm font-medium">Day</label>
+                  <Select
+                    value={activityForm.day.toString()}
+                    onValueChange={(value) => {
+                      const newDay = parseInt(value);
+                      setActivityForm({ ...activityForm, day: newDay });
+                      if (activityForm.startTime && activityForm.duration) {
+                        checkForConflicts({
+                          ...activityForm,
+                          day: newDay,
+                          _id: '',
+                          actualStartTime: null,
+                          actualEndTime: null
+                        });
+                      }
                     }}
-                    placeholder="HH:MM"
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
+                        <SelectItem key={day} value={day.toString()}>
+                          Day {day}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Duration (minutes)</label>
@@ -1230,39 +1404,137 @@ export default function Setup() {
                     type="number"
                     min="1"
                     value={activityForm.duration}
-                    onChange={(e) => setActivityForm({ ...activityForm, duration: parseInt(e.target.value) })}
+                    onChange={(e) => {
+                      const newDuration = parseInt(e.target.value);
+                      setActivityForm({ ...activityForm, duration: newDuration });
+                      if (activityForm.startTime && !isNaN(newDuration)) {
+                        checkForConflicts({
+                          ...activityForm,
+                          duration: newDuration,
+                          _id: '',
+                          actualStartTime: null,
+                          actualEndTime: null
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
-              {calculatedEndTime && (
-                <div className="text-sm text-gray-500">
-                  End Time: {calculatedEndTime}
-                </div>
-              )}
+
               <div className="space-y-2">
-                <label className="text-sm font-medium">Day</label>
-                <Select
-                  value={activityForm.day.toString()}
-                  onValueChange={(value) => setActivityForm({ ...activityForm, day: parseInt(value) })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select day" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedTemplate && Array.from({ length: selectedTemplate.days }, (_, i) => i + 1).map((day) => (
-                      <SelectItem key={day} value={day.toString()}>
-                        Day {day}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium">Start Time</label>
+                <div className="flex gap-4 items-start">
+                  <div className="relative flex-1">
+                    <Input
+                      value={activityForm.startTime}
+                      onChange={(e) => {
+                        const formatted = formatTimeInput(e.target.value);
+                        setActivityForm({ ...activityForm, startTime: formatted });
+                        if (formatted.length === 5 && activityForm.duration) {
+                          checkForConflicts({
+                            ...activityForm,
+                            startTime: formatted,
+                            _id: '',
+                            actualStartTime: null,
+                            actualEndTime: null
+                          });
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' || e.key === 'Delete') {
+                          const input = e.currentTarget;
+                          const value = input.value;
+                          const selectionStart = input.selectionStart || 0;
+                          const selectionEnd = input.selectionEnd || 0;
+                          
+                          // If text is selected, let default behavior handle it
+                          if (selectionStart !== selectionEnd) return;
+                          
+                          e.preventDefault();
+                          
+                          // Handle backspace
+                          if (e.key === 'Backspace') {
+                            // If cursor is after colon, delete the character before the colon
+                            if (value[selectionStart - 1] === ':') {
+                              const newValue = value.slice(0, selectionStart - 2) + value.slice(selectionStart);
+                              setActivityForm({
+                                ...activityForm,
+                                startTime: newValue
+                              });
+                              // Set cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(selectionStart - 2, selectionStart - 2);
+                              }, 0);
+                            } else {
+                              // Normal backspace behavior
+                              const newValue = value.slice(0, selectionStart - 1) + value.slice(selectionStart);
+                              setActivityForm({
+                                ...activityForm,
+                                startTime: newValue
+                              });
+                              // Set cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(selectionStart - 1, selectionStart - 1);
+                              }, 0);
+                            }
+                          }
+                          
+                          // Handle delete
+                          if (e.key === 'Delete') {
+                            // If cursor is before colon, delete the character after the colon
+                            if (value[selectionStart] === ':') {
+                              const newValue = value.slice(0, selectionStart) + value.slice(selectionStart + 2);
+                              setActivityForm({
+                                ...activityForm,
+                                startTime: newValue
+                              });
+                              // Keep cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(selectionStart, selectionStart);
+                              }, 0);
+                            } else {
+                              // Normal delete behavior
+                              const newValue = value.slice(0, selectionStart) + value.slice(selectionStart + 1);
+                              setActivityForm({
+                                ...activityForm,
+                                startTime: newValue
+                              });
+                              // Keep cursor position
+                              setTimeout(() => {
+                                input.setSelectionRange(selectionStart, selectionStart);
+                              }, 0);
+                            }
+                          }
+                        }
+                      }}
+                      placeholder="Enter time (e.g., 17:45 or 1745)"
+                    />
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <span className="text-sm text-gray-400">HH:MM</span>
+                    </div>
+                  </div>
+                  {calculatedEndTime && (
+                    <div className="w-48 bg-gray-100 rounded-md px-3 py-2 cursor-not-allowed select-none">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-500 font-medium">End Time</span>
+                        <span className="text-sm text-gray-700">{calculatedEndTime}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  Enter time in 24-hour format (e.g., 09:00 or 0900 for 9 AM, 17:45 or 1745 for 5:45 PM)
+                </p>
               </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Description (optional)</label>
-                <Input
+                <Textarea
                   value={activityForm.description}
                   onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
                   placeholder="Enter activity description"
+                  className="min-h-[100px]"
+                  rows={4}
                 />
               </div>
             </div>
@@ -1271,10 +1543,14 @@ export default function Setup() {
                 setIsAddActivityDialogOpen(false);
                 setIsEditActivityDialogOpen(false);
                 setSelectedActivity(null);
+                setActivityConflicts([]);
               }}>
                 Cancel
               </Button>
-              <Button onClick={isEditActivityDialogOpen ? handleEditActivity : handleAddActivity}>
+              <Button 
+                onClick={isEditActivityDialogOpen ? handleEditActivity : handleAddActivity}
+                disabled={activityConflicts.length > 0}
+              >
                 {isEditActivityDialogOpen ? 'Save Changes' : 'Add Activity'}
               </Button>
             </DialogFooter>
@@ -1392,7 +1668,10 @@ export default function Setup() {
                     <div className="space-y-2">
                       {previewTemplate.activities
                         .filter(activity => activity.day === dayIndex + 1)
-                        .sort((a, b) => a.displayTime.localeCompare(b.displayTime))
+                        .sort((a, b) => {
+                          if (!a?.displayTime || !b?.displayTime) return 0;
+                          return a.displayTime.localeCompare(b.displayTime);
+                        })
                         .map((activity, activityIndex, dayActivities) => (
                           <div key={activity._id}>
                             {/* Drop zone above first activity */}
@@ -1507,7 +1786,10 @@ export default function Setup() {
                                 // Get current day's activities
                                 const currentDayActivities = otherActivities
                                   .filter(a => a.day === dayIndex + 1)
-                                  .sort((a, b) => a.displayTime.localeCompare(b.displayTime));
+                                  .sort((a, b) => {
+                                    if (!a?.displayTime || !b?.displayTime) return 0;
+                                    return a.displayTime.localeCompare(b.displayTime);
+                                  });
                                 
                                 // Find the insertion index
                                 const insertIndex = currentDayActivities.findIndex(a => a._id === activity._id) + 1;
