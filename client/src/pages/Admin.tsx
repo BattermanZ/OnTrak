@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, Plus } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { Edit, Plus } from 'lucide-react';
 import { auth } from '../services/api';
 
 import {
@@ -53,7 +52,6 @@ const initialFormData: UserFormData = {
 };
 
 const Admin = () => {
-  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);

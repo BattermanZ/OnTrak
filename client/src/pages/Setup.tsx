@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Copy, Download, ListPlus, Upload, HelpCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, Download, ListPlus, Upload, HelpCircle, Copy } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -707,69 +707,121 @@ export default function Setup() {
                 setIsPreviewDialogOpen(true);
               }}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="font-semibold text-xl">{template.name}</div>
-                <div className="flex gap-1">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleExportTemplate(template);
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Export template</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTemplate(template);
-                            setTemplateForm({
-                              name: template.name,
-                              days: template.days,
-                              tags: template.tags || []
-                            });
-                            setIsEditDialogOpen(true);
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Edit template</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  {user?.role === 'admin' && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+              <CardHeader className="bg-gray-50 border-b">
+                <div className="flex flex-col h-full">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
+                      <p className="text-sm text-gray-500">Created by {template.createdBy?.firstName} {template.createdBy?.lastName}</p>
+                    </div>
+                    <div className="flex -space-x-3 -mr-2" onClick={e => e.stopPropagation()}>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloneTemplate(template);
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Clone template</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportTemplate(template);
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Export template</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTemplate(template);
+                                setTemplateForm({
+                                  name: template.name,
+                                  days: template.days,
+                                  tags: template.tags || []
+                                });
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit template</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {user?.role === 'admin' && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTemplate(template);
+                                  setIsDeleteDialogOpen(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete template</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col w-full" onClick={e => e.stopPropagation()}>
+                    {template.tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {template.tags.map((tag) => (
+                          <Badge 
+                            key={tag} 
+                            className={`text-xs cursor-pointer ${getTagColor(tag)}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedTemplate(template);
-                              setIsDeleteDialogOpen(true);
+                              handleTagClick(tag, e);
                             }}
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Delete template</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Badge variant="secondary" className="flex items-center">
+                        <Calendar className="w-3 h-3 mr-2" />
+                        {template.days} Days
+                      </Badge>
+                      <Badge variant="outline" className="flex items-center">
+                        <Clock className="w-3 h-3 mr-2" />
+                        {template.activities.length} Activities
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-4 flex-1">

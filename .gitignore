@@ -8,6 +8,10 @@ database/logs/
 *.log
 database/mongod.pid
 
+# Backups
+backups/
+*.gz
+
 # Build
 /build
 /dist

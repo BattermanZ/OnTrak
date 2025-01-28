@@ -12,6 +12,8 @@ const path = require('path');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const statisticsRoutes = require('./routes/statistics.routes');
+const backupRoutes = require('./routes/backup.routes');
+const backupScheduler = require('./utils/scheduler');
 
 require('dotenv').config();
 require('./config/passport');
@@ -335,6 +337,10 @@ app.use('/api/templates', passport.authenticate('jwt', { session: false }), requ
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 app.use('/api/logs', require('./routes/logs.routes'));
 app.use('/api/statistics', passport.authenticate('jwt', { session: false }), statisticsRoutes);
+app.use('/api/backups', passport.authenticate('jwt', { session: false }), backupRoutes);
+
+// Start backup scheduler
+backupScheduler.start();
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../../client/build')));

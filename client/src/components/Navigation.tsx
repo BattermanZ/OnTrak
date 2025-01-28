@@ -9,7 +9,8 @@ import {
   User,
   Users,
   LogOut,
-  CheckCircle2
+  CheckCircle2,
+  Database
 } from "lucide-react";
 import {
   Dialog,
@@ -91,6 +92,17 @@ const Navigation = () => {
                     {item.label}
                   </TabsTrigger>
                 ))}
+                {user?.role === 'admin' && (
+                  <>
+                    <TabsTrigger
+                      value="/backups"
+                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow gap-2"
+                    >
+                      <Database className="w-4 h-4" />
+                      Backups
+                    </TabsTrigger>
+                  </>
+                )}
               </TabsList>
             </Tabs>
             <Button

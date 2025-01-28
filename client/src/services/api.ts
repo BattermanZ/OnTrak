@@ -284,6 +284,14 @@ const statistics = {
   },
 };
 
+export const backups = {
+  create: () => api.post('/backups/create'),
+  list: () => api.get('/backups/list'),
+  delete: (fileName: string) => api.delete(`/backups/${fileName}`),
+  restore: (fileName: string) => api.post(`/backups/${fileName}/restore`),
+  getRetentionPolicy: () => api.get('/backups/retention-policy')
+};
+
 // Export everything at the end
 export { api, auth, templates, schedules, statistics };
 export type { User, Schedule, Activity, Template } from '../types/index'; 
