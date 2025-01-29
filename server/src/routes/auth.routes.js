@@ -8,6 +8,12 @@ const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
+// Ensure JWT_SECRET is set
+if (!process.env.JWT_SECRET) {
+  logger.error('JWT_SECRET environment variable is not set');
+  process.exit(1);
+}
+
 // Middleware to check if user is admin
 const isAdmin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
@@ -82,7 +88,7 @@ router.post('/register', validateRegistration, async (req, res, next) => {
     // Generate JWT token
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET || 'your-secret-key',
+      process.env.JWT_SECRET,
       { algorithm: 'HS256' }
     );
 
@@ -137,10 +143,8 @@ router.post('/login', loginLimiter, [
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { 
-        algorithm: 'HS256'
-      }
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256' }
     );
 
     // Set secure cookie

@@ -152,26 +152,43 @@ OnTrak is a comprehensive training session management system designed to help tr
 
 The application will be available at http://0.0.0.0:3000 and accessible from any network interface.
 
-Note: The backend API runs inside the container and is not exposed externally, as it's only accessed by the frontend application within the container.
-
-### Manual Deployment
-
-1. Build the frontend:
-   ```bash
-   cd client
-   npm run build
-   ```
-
-2. Configure your reverse proxy (nginx recommended)
-3. Set up SSL certificates
-4. Configure environment variables for production
-5. Set up MongoDB with proper security measures
-6. Implement proper backup strategies
-
 ## Monitoring and Maintenance
 
-- Regular security updates
-- Database backups
-- Performance monitoring
-- Error logging and tracking
-- User activity monitoring
+### Regular Maintenance Tasks
+- Run database backups daily (automated via cron)
+- Store backups in a secure, external location
+- Monitor system logs for errors and unusual activity
+- Update dependencies monthly
+- Run security audits weekly
+- Clean up old logs weekly
+
+### Backup Management
+- Daily backups are stored in a separate backup location
+- Keep last 7 daily backups
+- Keep last 4 weekly backups
+- Keep last 3 monthly backups
+
+### Performance Monitoring
+- Monitor server resource usage
+- Track API response times
+- Monitor database performance
+- Set up alerts for abnormal conditions
+
+### Security Maintenance
+- Regular security updates for all dependencies
+- SSL certificate renewal monitoring
+- Access log review
+- Failed login attempt monitoring
+- Regular security scanning
+
+### Documentation
+- Keep documentation up to date with changes
+- Document all configuration changes
+- Maintain deployment procedures
+- Update troubleshooting guides
+
+## Additional Documentation
+Refer to the following documents in the `docs` directory for detailed information:
+- `TRAINING_DAY_LOGIC.md` - Training session management logic
+- `STATISTICS_DATA_FLOW.md` - Data flow for statistics generation
+- `CRASH_PREVENTION.md` - System stability and crash prevention measures
