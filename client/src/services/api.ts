@@ -2,8 +2,8 @@ import axios from 'axios';
 import type { User, Schedule, Activity, Template } from '../types';
 import { logger } from '../utils/logger';
 
-// Create base API URL with fallback
-const baseURL = process.env.REACT_APP_API_URL || '/api';
+// Create base API URL
+const baseURL = 'http://localhost:3456/api';
 logger.debug('Initializing API with base URL:', baseURL);
 
 const api = axios.create({

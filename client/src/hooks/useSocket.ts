@@ -7,7 +7,7 @@ export const useSocket = () => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && !socketRef.current) {
-      socketRef.current = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:3456', {
+      socketRef.current = io('http://localhost:3456', {
         auth: {
           token,
         },

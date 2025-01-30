@@ -5,12 +5,6 @@ const ExtractJwt = require('passport-jwt').ExtractJwt;
 const User = require('../models/user.model');
 const logger = require('./logger');
 
-// Ensure JWT_SECRET is set
-if (!process.env.JWT_SECRET) {
-  logger.error('JWT_SECRET environment variable is not set');
-  process.exit(1);
-}
-
 // Local Strategy for username/password login
 passport.use(new LocalStrategy({
   usernameField: 'email',
@@ -56,7 +50,7 @@ const jwtOptions = {
     ExtractJwt.fromAuthHeaderAsBearerToken(),
     cookieExtractor
   ]),
-  secretOrKey: process.env.JWT_SECRET,
+  secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
   algorithms: ['HS256'],
   ignoreExpiration: true,
 };

@@ -15,7 +15,8 @@ const statisticsRoutes = require('./routes/statistics.routes');
 const backupRoutes = require('./routes/backup.routes');
 const backupScheduler = require('./utils/scheduler');
 
-require('dotenv').config();
+// Load .env from root directory
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 require('./config/passport');
 
 const app = express();
@@ -254,7 +255,7 @@ shutdownSignals.forEach(signal => {
 
 // CORS configuration
 const corsOptions = {
-  origin: ['http://localhost:3000', process.env.CLIENT_URL].filter(Boolean),
+  origin: 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -356,7 +357,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
 });
 
-const PORT = process.env.PORT || 3456;
+const PORT = 3456;
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server is running on 0.0.0.0:${PORT}`);
 });
