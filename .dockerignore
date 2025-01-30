@@ -1,28 +1,32 @@
+# Development and source control
+.git
+.gitignore
+.env*
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+docs
+scripts
+*.md
+
 # Dependencies
 node_modules
 **/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Build outputs
-**/build
+# Build and data
 **/dist
-
-# Development files
-.git
-.gitignore
-.env
-**/.env
-**/.env.*
-**/npm-debug.log
-**/.DS_Store
-
-# Data and logs
+**/build
 database
 logs
-**/logs
+backups
 **/*.log
 
-# IDE files
+# IDE and OS
 .idea
 .vscode
-**/.idea
-**/.vscode 
+**/.DS_Store
+**/Thumbs.db 

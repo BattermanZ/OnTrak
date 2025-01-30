@@ -1,21 +1,33 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
+  ontrak:
+    image: ontrak:beta1
+    container_name: ontrak
     ports:
-      - "3000:3000"  # Frontend port
+      - "3456:3000"  # Frontend port
     volumes:
-      - mongodb_data:/app/database/data
-      - app_logs:/app/logs
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+      - ./database:/app/database
+      - ./.env:/app/.env
     environment:
-      - NODE_ENV=production
-      - MONGODB_URI=mongodb://127.0.0.1:27017/ontrak
-      - JWT_SECRET=your-secret-key-here
-      - HOST=0.0.0.0
-      - PORT=3000
+      - TZ=
+      - PUID=
+      - PGID=
+    networks:
+      - cinelink_default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-volumes:
-  mongodb_data:
-  app_logs: 
+networks:
+  cinelink_default:
+    external: true
