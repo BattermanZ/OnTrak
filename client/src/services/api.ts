@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 
 // Create base API URL
 const baseURL = 'http://localhost:3456/api';
-logger.debug('Initializing API with base URL:', baseURL);
+logger.info('API service initialized', { baseURL });
 
 const api = axios.create({
   baseURL,
@@ -23,8 +23,8 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // Simplified request logging
-    logger.debug('API Request', { 
+    // Log API requests as info level
+    logger.info('API Request', { 
       method: config.method, 
       url: config.url,
     });
@@ -42,30 +42,23 @@ api.interceptors.request.use(
 // Add response interceptor to handle errors and logging
 api.interceptors.response.use(
   (response) => {
-    // Simplified response logging
-    const logData: {
-      status: number;
-      statusText: string;
-      title?: string;
-    } = {
-      status: response.status,
-      statusText: response.statusText,
-    };
-
-    // Only add training name if it exists
-    if (response.data?.title) {
-      logData.title = response.data.title;
+    // Only log non-GET requests or errors as they represent state changes
+    if (response.config.method !== 'get') {
+      logger.info('API Response', {
+        status: response.status,
+        statusText: response.statusText,
+        method: response.config.method,
+        url: response.config.url
+      });
     }
-
-    logger.debug('API Response', logData);
     return response;
   },
   async (error) => {
-    // Simplified error logging
     logger.error('API Response Error', {
       message: error.message,
       status: error.response?.status,
-      statusText: error.response?.statusText
+      statusText: error.response?.statusText,
+      url: error.config?.url
     });
 
     // Handle specific error cases
@@ -93,18 +86,16 @@ api.interceptors.response.use(
 const auth = {
   login: async (data: { email: string; password: string }) => {
     try {
-      logger.debug('Attempting login', { email: data.email });
+      logger.info('Login attempt', { email: data.email });
       const response = await api.post('/auth/login', data);
-      // Store the token
       if (response.data.token) {
         localStorage.setItem('token', response.data.token);
-        // Set the default Authorization header for future requests
         api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       }
-      logger.info('Login successful');
+      logger.info('Login successful', { email: data.email });
       return response;
     } catch (error) {
-      logger.error('Login failed', error);
+      logger.error('Login failed', { email: data.email });
       throw error;
     }
   },
@@ -271,16 +262,29 @@ const schedules = {
     api.put(`/schedules/${scheduleId}/activities`, { activities }),
 };
 
-// Add statistics object
+// Statistics API
 const statistics = {
   getStatistics: async (filters: { trainer: string; training: string; dateRange: string; day?: number }) => {
     try {
-      logger.debug('Fetching statistics', filters);
+      logger.info('Fetching statistics', { 
+        trainer: filters.trainer,
+        training: filters.training,
+        dateRange: filters.dateRange,
+        day: filters.day 
+      });
       const response = await api.get('/statistics', { params: filters });
-      logger.debug('Statistics fetched successfully');
+      logger.info('Statistics fetched successfully', { 
+        trainer: filters.trainer,
+        training: filters.training
+      });
       return response;
-    } catch (error) {
-      logger.error('Failed to fetch statistics', error);
+    } catch (err) {
+      const error = err as Error;
+      logger.error('Failed to fetch statistics', { 
+        trainer: filters.trainer,
+        training: filters.training,
+        error: error.message || 'Unknown error'
+      });
       throw error;
     }
   },

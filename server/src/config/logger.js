@@ -21,7 +21,27 @@ const timestampFormat = () => {
   }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
 };
 
+// Custom format for better readability
+const customFormat = winston.format.printf(({ level, message, timestamp, ...metadata }) => {
+  let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
+  
+  if (Object.keys(metadata).length > 0) {
+    const { service, userId, method, url, status, socketId, ...rest } = metadata;
+    
+    if (userId) msg += ` - User: ${userId}`;
+    if (method && url) msg += ` - ${method.toUpperCase()} ${url}`;
+    if (status) msg += ` - Status: ${status}`;
+    if (socketId) msg += ` - Socket: ${socketId}`;
+    
+    // Add remaining metadata if any
+    const remaining = Object.keys(rest).length > 0 ? JSON.stringify(rest) : '';
+    if (remaining) msg += ` - ${remaining}`;
+  }
+  return msg;
+});
+
 const logger = winston.createLogger({
+  // Set default level to debug, can be overridden by LOG_LEVEL env variable
   level: process.env.LOG_LEVEL || 'debug',
   format: winston.format.combine(
     winston.format.timestamp({
@@ -33,48 +53,41 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'backend' },
   transports: [
-    // Write all logs to a single file
+    // File transport for all logs (debug and above)
     new winston.transports.File({
       filename: path.join(logsDir, 'backend.log'),
-      level: 'debug',
+      level: 'debug', // Changed to debug to capture all logs
       format: winston.format.combine(
         winston.format.timestamp({
           format: timestampFormat
         }),
-        winston.format.printf(
-          ({ level, message, timestamp, ...metadata }) => {
-            let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
-            if (Object.keys(metadata).length > 0 && metadata.service) {
-              msg += ` ${JSON.stringify(metadata)}`;
-            }
-            return msg;
-          }
-        )
+        customFormat
       )
     }),
+
     // Console transport for development
     new winston.transports.Console({
       level: 'debug',
       format: winston.format.combine(
         winston.format.colorize(),
-        winston.format.simple(),
-        winston.format.printf(
-          ({ level, message, timestamp, ...metadata }) => {
-            let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
-            if (Object.keys(metadata).length > 0 && metadata.service) {
-              msg += ` ${JSON.stringify(metadata)}`;
-            }
-            return msg;
-          }
-        )
+        winston.format.timestamp({
+          format: timestampFormat
+        }),
+        customFormat
       )
     })
   ]
 });
 
-// Create a stream object for Morgan middleware
+// Create a stream object with a 'write' function that will be used by morgan
 logger.stream = {
-  write: (message) => logger.http(message.trim())
+  write: (message) => {
+    // Log HTTP requests as debug level for more detailed information
+    logger.debug(message.trim());
+  }
 };
+
+// Log logger initialization
+logger.debug('Logger initialized with level:', process.env.LOG_LEVEL || 'debug');
 
 module.exports = logger; 

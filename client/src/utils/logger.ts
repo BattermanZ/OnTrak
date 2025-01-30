@@ -1,4 +1,4 @@
-import { debounce } from 'lodash';
+// import { debounce } from 'lodash';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -13,8 +13,6 @@ class Logger {
   private static instance: Logger;
   private logBuffer: LogEntry[] = [];
   private readonly bufferSize = 100;
-  private readonly logFile = '../../logs/frontend.log';
-  private queue: string[] = [];
   private isErrored: boolean = false;
   private errorTimeout: number | null = null;
 
@@ -47,49 +45,45 @@ class Logger {
   }
 
   private async flushLogs() {
-    if (this.logBuffer.length === 0) return;
+    if (this.logBuffer.length === 0 || this.isErrored) return;
 
-    const logs = this.logBuffer.map(log => 
-      `${log.timestamp} [${log.level.toUpperCase()}] ${log.message}${log.data ? ' ' + JSON.stringify(log.data) : ''}`
-    ).join('\n') + '\n';
+    // Filter out large data objects and format logs
+    const logs = this.logBuffer.map(log => {
+      let formattedData = '';
+      if (log.data) {
+        // Create a copy of data to modify
+        const dataCopy = { ...log.data };
+        
+        // Remove large response data
+        if (dataCopy.response) delete dataCopy.response;
+        if (dataCopy.adherence) delete dataCopy.adherence;
+        if (dataCopy.statistics) delete dataCopy.statistics;
+        
+        // Only include data if it's not empty
+        if (Object.keys(dataCopy).length > 0) {
+          formattedData = ' ' + JSON.stringify(dataCopy);
+        }
+      }
+      return `${log.timestamp} [${log.level.toUpperCase()}] ${log.message}${formattedData}`;
+    }).join('\n') + '\n';
 
     try {
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
-      const response = await fetch(`${baseUrl}/logs`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3456/api/logs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({ logs })
       });
 
       if (response.ok) {
         this.logBuffer = [];
-      }
-    } catch (error) {
-      console.error('Failed to write logs:', error);
-    }
-  }
-
-  private debouncedFlushLogs = debounce(async () => {
-    if (this.queue.length === 0 || this.isErrored) return;
-
-    try {
-      const logs = this.queue.join('\n');
-      this.queue = [];
-      
-      const response = await fetch('/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logs })
-      });
-
-      if (!response.ok) {
+      } else {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
     } catch (error) {
-      // Set error state and clear after timeout
       this.isErrored = true;
       if (this.errorTimeout) {
         clearTimeout(this.errorTimeout);
@@ -99,44 +93,63 @@ class Logger {
         this.errorTimeout = null;
       }, 5000) as unknown as number;
 
-      // Don't log this error to prevent loops
-      console.warn('Failed to send logs to server:', error);
+      console.warn('Failed to send logs to server:', error instanceof Error ? error.message : 'Unknown error');
     }
-  }, 1000);
-
-  private formatLogMessage(level: string, message: string, data?: any): string {
-    const timestamp = new Date().toISOString();
-    const dataStr = data ? ` ${JSON.stringify(data)}` : '';
-    return `${timestamp} [${level}] ${message}${dataStr}`;
   }
 
-  public log(level: string, message: string, data?: any) {
-    const logMessage = this.formatLogMessage(level, message, data);
+  private log(level: LogLevel, message: string, data?: any) {
+    const timestamp = this.getTimestamp();
     
-    // Always log to console
+    // Filter out large data objects before logging
+    let filteredData = undefined;
+    if (data) {
+      // Create a copy of data to modify
+      const dataCopy = { ...data };
+      
+      // Remove large response data
+      if (dataCopy.response) delete dataCopy.response;
+      if (dataCopy.adherence) delete dataCopy.adherence;
+      if (dataCopy.statistics) delete dataCopy.statistics;
+      
+      // Only include data if it's not empty
+      if (Object.keys(dataCopy).length > 0) {
+        filteredData = dataCopy;
+      }
+    }
+    
+    // Create human-readable message
+    const logMessage = `${timestamp} [${level.toUpperCase()}] ${message}${
+      filteredData ? ' ' + JSON.stringify(filteredData) : ''
+    }`;
     console.log(logMessage);
     
-    // Only queue if not in error state
-    if (!this.isErrored) {
-      this.queue.push(logMessage);
-      this.debouncedFlushLogs();
+    // Add to buffer
+    this.logBuffer.push({ timestamp, level, message, data: filteredData });
+    
+    // Flush if buffer is full
+    if (this.logBuffer.length >= this.bufferSize) {
+      this.flushLogs();
     }
   }
 
   public debug(message: string, data?: any) {
-    this.log('DEBUG', message, data);
+    // Use debug only for detailed technical information
+    this.log('debug', message, data);
   }
 
   public info(message: string, data?: any) {
-    this.log('INFO', message, data);
+    // Use info for general application flow and user actions
+    this.log('info', message, data);
   }
 
   public warn(message: string, data?: any) {
-    this.log('WARN', message, data);
+    // Use warn for concerning but non-critical issues
+    this.log('warn', message, data);
   }
 
   public error(message: string, data?: any) {
-    this.log('ERROR', message, data);
+    // Use error for critical issues that affect functionality
+    this.log('error', message, data);
   }
 }
 

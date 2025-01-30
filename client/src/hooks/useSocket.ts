@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import io, { Socket } from 'socket.io-client';
+import { logger } from '../utils/logger';
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
@@ -7,6 +8,8 @@ export const useSocket = () => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && !socketRef.current) {
+      logger.info('Initializing socket connection');
+      
       socketRef.current = io('http://localhost:3456', {
         auth: {
           token,
@@ -14,16 +17,23 @@ export const useSocket = () => {
       });
 
       socketRef.current.on('connect', () => {
-        console.log('Socket connected');
+        logger.info('Socket connected successfully');
       });
 
       socketRef.current.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
+        logger.error('Socket connection failed', {
+          message: error.message
+        });
+      });
+
+      socketRef.current.on('disconnect', (reason) => {
+        logger.warn('Socket disconnected', { reason });
       });
     }
 
     return () => {
       if (socketRef.current) {
+        logger.info('Closing socket connection');
         socketRef.current.disconnect();
         socketRef.current = null;
       }
