@@ -4,39 +4,26 @@ set -e
 # Create necessary directories
 mkdir -p /app/database/data /app/logs
 
-# Set proper permissions
-chown -R mongodb:mongodb /app/database/data /app/logs
+# Start MongoDB with optimized settings for NAS
+echo "Starting MongoDB..."
+if ! mongod --dbpath /app/database/data \
+            --logpath /app/logs/mongodb.log \
+            --bind_ip 127.0.0.1 \
+            --port 27017 \
+            --fork \
+            --wiredTigerCacheSizeGB 0.25 \
+            --syncdelay 300 \
+            --directoryperdb \
+            --wiredTigerDirectoryForIndexes \
+            --nojournal; then
+    echo "MongoDB failed to start. Last few lines of log:"
+    tail -n 20 /app/logs/mongodb.log
+    exit 1
+fi
 
-# Start MongoDB with more stable configuration
-mongod --dbpath /app/database/data \
-       --logpath /app/logs/mongodb.log \
-       --bind_ip 127.0.0.1 \
-       --port 27017 \
-       --fork \
-       --smallfiles \
-       --journal \
-       --logappend \
-       --wiredTigerCacheSizeGB 0.25
-
-# Wait for MongoDB to be ready with better error handling
+# Simple wait for MongoDB
 echo "Waiting for MongoDB to start..."
-timeout=30
-while ! mongosh --quiet --eval "db.adminCommand('ping')" > /dev/null 2>&1; do
-    if [ -f /app/logs/mongodb.log ]; then
-        tail -n 5 /app/logs/mongodb.log
-    fi
-    timeout=$((timeout - 1))
-    if [ $timeout -le 0 ]; then
-        echo "Timed out waiting for MongoDB to start"
-        if [ -f /app/logs/mongodb.log ]; then
-            echo "Last MongoDB logs:"
-            tail -n 20 /app/logs/mongodb.log
-        fi
-        exit 1
-    fi
-    sleep 1
-done
-echo "MongoDB started successfully"
+sleep 5
 
 # Start Node.js server
 cd /app/server && exec node src/app.js 

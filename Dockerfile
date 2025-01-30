@@ -1,20 +1,21 @@
 # Stage 1: Build Frontend
 FROM node:20-alpine as frontend-builder
-WORKDIR /build
+WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
 COPY client/ .
+ENV HOST=0.0.0.0
 RUN npm run build
 
 # Stage 2: Build Backend
 FROM node:20-alpine as backend-builder
-WORKDIR /build
+WORKDIR /app/server
 COPY server/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 COPY server/ .
 
 # Stage 3: Production
-FROM mongo:6.0
+FROM mongo:4.4
 WORKDIR /app
 
 # Create mongodb user if it doesn't exist
@@ -32,8 +33,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy built applications
-COPY --from=backend-builder /build ./server
-COPY --from=frontend-builder /build/build ./client/build
+COPY --from=backend-builder /app/server ./server
+COPY --from=frontend-builder /app/client/build ./client/build
 
 # Create required directories
 RUN mkdir -p /app/database/data /app/logs /app/backups
