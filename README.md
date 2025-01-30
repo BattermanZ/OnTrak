@@ -90,16 +90,25 @@ OnTrak is a comprehensive training session management system designed to help tr
    ```
 
 3. Set up environment variables:
-   - Copy `.env.example` to `.env` in both client and server directories
+   - Copy `.env.example` to `.env` in the root directory
    - Configure the environment variables as needed
 
-4. Start MongoDB:
-   ```bash
-   # For macOS with Homebrew
-   ./scripts/start-mongodb.sh
-
-   # For other systems, ensure MongoDB is running on default port 27017
-   ```
+4. Set up MongoDB:
+   - Install MongoDB Community Edition for your platform:
+     - macOS: `brew install mongodb-community`
+     - Linux: Follow [MongoDB installation guide](https://www.mongodb.com/docs/manual/administration/install-on-linux/)
+     - Windows: Follow [MongoDB installation guide](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-windows/)
+   
+   - Start MongoDB service:
+     - macOS: `brew services start mongodb-community`
+     - Linux: `sudo systemctl start mongod`
+     - Windows: MongoDB runs as a Windows Service (starts automatically)
+   
+   - Verify MongoDB is running:
+     ```bash
+     mongosh
+     # You should see the MongoDB shell connect successfully
+     ```
 
 5. Start the development servers:
    ```bash
