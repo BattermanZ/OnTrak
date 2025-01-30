@@ -5,12 +5,12 @@ services:
     image: ontrak:beta1
     container_name: ontrak
     ports:
-      - "3456:3000"  # Frontend port
+      - "3456:3456"  # Map host port 3456 to container port 3456
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
       - ./database:/app/database
-      - ./.env:/app/.env
+      - ./.env:/app/.env:ro
     environment:
       - TZ=
       - PUID=
@@ -18,12 +18,13 @@ services:
     networks:
       - cinelink_default
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3456/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
     logging:
+      driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"

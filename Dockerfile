@@ -15,19 +15,21 @@ RUN npm ci
 COPY server/ .
 
 # Stage 3: Production
-FROM mongo:4.4
+FROM ubuntu:20.04
 WORKDIR /app
 
-# Create mongodb user if it doesn't exist
-RUN if ! id -u mongodb > /dev/null 2>&1; then \
-    groupadd -r mongodb && \
-    useradd -r -g mongodb mongodb; \
-fi
-
-# Install Node.js and curl (needed for healthcheck)
+# Install MongoDB 4.4
 RUN apt-get update && \
-    apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y curl gnupg && \
+    curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | gpg --dearmor -o /usr/share/keyrings/mongodb-org-4.4.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/mongodb-org-4.4.gpg] http://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.4.list && \
+    apt-get update && \
+    apt-get install -y mongodb-org && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

@@ -255,7 +255,7 @@ shutdownSignals.forEach(signal => {
 
 // CORS configuration
 const corsOptions = {
-  origin: 'http://localhost:3000',
+  origin: process.env.CLIENT_URL || ['http://localhost:3000', 'http://localhost:3456'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -266,6 +266,9 @@ app.use(cors(corsOptions));
 
 // Trust proxy if behind a reverse proxy
 app.set('trust proxy', 1);
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../../client/build')));
 
 // Passport middleware
 app.use(passport.initialize());
@@ -343,18 +346,18 @@ app.use('/api/backups', passport.authenticate('jwt', { session: false }), backup
 // Start backup scheduler
 backupScheduler.start();
 
-// Serve static files from the React app
-app.use(express.static(path.join(__dirname, '../../client/build')));
-
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   logger.debug('Health check request received');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Handle React routing, return all requests to React app
+// The catchall handler: for any request that doesn't match API routes,
+// send back React's index.html file.
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+  if (!req.path.startsWith('/api/')) {
+    res.sendFile(path.join(__dirname, '../../client/build/index.html'));
+  }
 });
 
 const PORT = 3456;
