@@ -5,16 +5,16 @@ services:
     image: ontrak:beta1
     container_name: ontrak
     ports:
-      - "3456:3456"  # Map host port 3456 to container port 3456
+      - "${PORT:-3456}:3456"  # Use PORT from env or default to 3456
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
       - ./database:/app/database
-      - ./.env:/app/.env:ro
+      - ./.env.production:/app/.env:ro  # Use production env file
     environment:
-      - TZ=
-      - PUID=
-      - PGID=
+      - TZ=${TZ:-UTC}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     networks:
       - cinelink_default
     healthcheck:
@@ -24,7 +24,6 @@ services:
       retries: 3
     restart: unless-stopped
     logging:
-      driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"

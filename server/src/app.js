@@ -19,11 +19,22 @@ const backupScheduler = require('./utils/scheduler');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 require('./config/passport');
 
+// Environment-specific configuration
+const isDevelopment = process.env.NODE_ENV !== 'production';
+const PORT = process.env.PORT || 3456;
+
+// Define allowed origins
+const allowedOrigins = isDevelopment
+  ? ['http://localhost:3000', 'http://localhost:3456'] // Dev origins
+  : process.env.CLIENT_URL 
+    ? [process.env.CLIENT_URL]  // Production with specific URL
+    : ['http://localhost:3456']; // Production fallback
+
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -33,7 +44,24 @@ const io = require('socket.io')(server, {
 app.set('io', io);
 
 // Security middleware
-app.use(helmet()); // Set security HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", ...allowedOrigins],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", ...allowedOrigins],
+      styleSrc: ["'self'", "'unsafe-inline'", ...allowedOrigins],
+      imgSrc: ["'self'", "data:", "blob:", ...allowedOrigins],
+      connectSrc: ["'self'", ...allowedOrigins],
+      fontSrc: ["'self'", "data:", ...allowedOrigins],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", ...allowedOrigins],
+      frameSrc: ["'none'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(mongoSanitize()); // Sanitize data against NoSQL query injection
 app.use(xss()); // Sanitize data against XSS attacks
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
@@ -255,7 +283,7 @@ shutdownSignals.forEach(signal => {
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CLIENT_URL || ['http://localhost:3000', 'http://localhost:3456'],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -267,8 +295,24 @@ app.use(cors(corsOptions));
 // Trust proxy if behind a reverse proxy
 app.set('trust proxy', 1);
 
-// Serve static files from the React app
-app.use(express.static(path.join(__dirname, '../../client/build')));
+// Serve static files only in production
+if (!isDevelopment) {
+  app.use(express.static(path.join(__dirname, '../../client/build'), {
+    fallthrough: true,
+    maxAge: '1h',
+    etag: true,
+    lastModified: true,
+    onError: (err, req, res, next) => {
+      logger.error('Static file error:', { 
+        error: err.message, 
+        path: req.path,
+        method: req.method,
+        ip: req.ip
+      });
+      next(err);
+    }
+  }));
+}
 
 // Passport middleware
 app.use(passport.initialize());
@@ -277,7 +321,7 @@ app.use(passport.initialize());
 app.use(morgan('combined', { stream: logger.stream }));
 
 // MongoDB Connection configuration
-const mongoUri = process.env.MONGODB_URI || 'mongodb://mongodb:27017/ontrak';
+const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ontrak';
 
 // MongoDB Connection with retry logic and proper error handling
 const connectWithRetry = async (retries = 5, delay = 5000) => {
@@ -353,16 +397,31 @@ app.get('/api/health', (req, res) => {
 });
 
 // The catchall handler: for any request that doesn't match API routes,
-// send back React's index.html file.
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api/')) {
+// send back React's index.html file in production only
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  if (!isDevelopment) {
     res.sendFile(path.join(__dirname, '../../client/build/index.html'));
+  } else {
+    // In development, let the request fall through to the next middleware
+    // This allows the React development server to handle the request
+    next();
   }
 });
 
-const PORT = 3456;
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ 
+    status: 'error',
+    message: `API endpoint not found: ${req.path}`
+  });
+});
+
 server.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server is running on 0.0.0.0:${PORT}`);
+  logger.info(`Server is running on 0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
 });
 
 // Add graceful shutdown

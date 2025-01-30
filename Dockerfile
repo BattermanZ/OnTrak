@@ -46,12 +46,12 @@ VOLUME ["/app/database/data", "/app/logs", "/app/backups"]
 
 # Environment variables
 ENV NODE_ENV=production \
-    PORT=3000 \
+    PORT=3456 \
     HOST=0.0.0.0 \
     MONGODB_URI=mongodb://127.0.0.1:27017/ontrak
 
 # Expose port
-EXPOSE 3000
+EXPOSE 3456
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /
