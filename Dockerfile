@@ -14,8 +14,14 @@ RUN npm ci --only=production
 COPY server/ .
 
 # Stage 3: Production
-FROM mongo:8.0
+FROM mongo:6.0
 WORKDIR /app
+
+# Create mongodb user if it doesn't exist
+RUN if ! id -u mongodb > /dev/null 2>&1; then \
+    groupadd -r mongodb && \
+    useradd -r -g mongodb mongodb; \
+fi
 
 # Install Node.js and curl (needed for healthcheck)
 RUN apt-get update && \
