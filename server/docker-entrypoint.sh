@@ -26,4 +26,4 @@ echo "Waiting for MongoDB to start..."
 sleep 5
 
 # Start Node.js server
-cd /app/server && exec node src/app.js 
+exec node src/app.js 
