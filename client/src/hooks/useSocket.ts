@@ -11,10 +11,10 @@ export const useSocket = () => {
       logger.info('Initializing socket connection');
       
       const isDevelopment = process.env.NODE_ENV === 'development';
-      const BACKEND_URL = process.env.BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
+      const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
       
       if (!BACKEND_URL) {
-        logger.error('BACKEND_URL environment variable is not set in production mode');
+        logger.error('REACT_APP_BACKEND_URL environment variable is not set in production mode');
         return;
       }
       

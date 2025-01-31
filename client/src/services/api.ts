@@ -4,10 +4,10 @@ import { logger } from '../utils/logger';
 
 // Create base API URL based on environment
 const isDevelopment = process.env.NODE_ENV === 'development';
-const BACKEND_URL = process.env.BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
 
 if (!BACKEND_URL) {
-  throw new Error('BACKEND_URL environment variable is not set in production mode');
+  throw new Error('REACT_APP_BACKEND_URL environment variable is not set in production mode');
 }
 const baseURL = `${BACKEND_URL}/api`;
 
