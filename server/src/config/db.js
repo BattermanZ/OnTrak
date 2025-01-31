@@ -7,11 +7,7 @@ const logPath = path.join(process.cwd(), '..', 'logs', 'app.log');
 
 const connectDB = async () => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI environment variable is not set');
-    }
-    
-    await mongoose.connect(process.env.MONGODB_URI, {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ontrak', {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       dbName: 'ontrak',

@@ -18,13 +18,7 @@ class Logger {
   private readonly BACKEND_URL: string;
 
   private constructor() {
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
-    
-    if (!backendUrl) {
-      throw new Error('REACT_APP_BACKEND_URL environment variable is not set in production mode');
-    }
-    this.BACKEND_URL = backendUrl;
+    this.BACKEND_URL = 'http://192.168.31.24:3456';
     
     window.addEventListener('beforeunload', () => {
       this.flushLogs();

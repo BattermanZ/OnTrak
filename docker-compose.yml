@@ -1,33 +1,47 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: ./client
-      args:
-        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL}
+  client:
+    image: ontrak-client:beta2
+    container_name: ontrak-client
     ports:
-      - "3457:3000"
+      - "3457:3000"  # Frontend port
     volumes:
       - ./.env:/app/.env:ro
+    environment:
+      - PUID=1035
+      - PGID=100
     networks:
-      - app-network
-
-  backend:
-    build:
-      context: ./server
+      - ontrak_default
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+  server:
+    image: ontrak-server:beta1
+    container_name: ontrak-server
     ports:
-      - "3456:3456"
+      - "3456:3456"  # Backend port
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
       - ./database:/app/database
       - ./.env:/app/.env:ro
     environment:
-      - TZ=${TZ:-UTC}
+      - TZ=Europe/Amsterdam
+      - PUID=1035
+      - PGID=100
     networks:
-      - app-network
+      - ontrak_default
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
-  app-network:
+  ontrak_default:
+    name: ontrak_default
     driver: bridge

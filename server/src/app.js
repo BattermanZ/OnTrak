@@ -25,8 +25,8 @@ const PORT = process.env.PORT || 3456;
 
 // Define allowed origins
 const allowedOrigins = isDevelopment
-  ? [process.env.CLIENT_URL || 'http://localhost:3000', process.env.BACKEND_URL || 'http://localhost:3456']
-  : [process.env.CLIENT_URL, process.env.BACKEND_URL].filter(Boolean);
+  ? ['http://localhost:3000', 'http://localhost:3456'] // Dev origins
+  : [process.env.CLIENT_URL, process.env.BACKEND_URL].filter(Boolean); // Production URLs
 
 const app = express();
 const server = require('http').createServer(app);
