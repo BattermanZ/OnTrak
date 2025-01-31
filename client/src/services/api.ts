@@ -3,7 +3,12 @@ import type { User, Schedule, Activity, Template } from '../types';
 import { logger } from '../utils/logger';
 
 // Create base API URL based on environment
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3456';
+const isDevelopment = process.env.NODE_ENV === 'development';
+const BACKEND_URL = process.env.BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
+
+if (!BACKEND_URL) {
+  throw new Error('BACKEND_URL environment variable is not set in production mode');
+}
 const baseURL = `${BACKEND_URL}/api`;
 
 logger.info('API service initialized', { baseURL, environment: process.env.NODE_ENV });

@@ -25,10 +25,8 @@ const PORT = process.env.PORT || 3456;
 
 // Define allowed origins
 const allowedOrigins = isDevelopment
-  ? ['http://localhost:3000', 'http://localhost:3456'] // Dev origins
-  : process.env.CLIENT_URL 
-    ? [process.env.CLIENT_URL]  // Production with specific URL
-    : ['http://localhost:3456']; // Production fallback
+  ? [process.env.CLIENT_URL || 'http://localhost:3000', process.env.BACKEND_URL || 'http://localhost:3456']
+  : [process.env.CLIENT_URL, process.env.BACKEND_URL].filter(Boolean);
 
 const app = express();
 const server = require('http').createServer(app);
@@ -283,7 +281,16 @@ shutdownSignals.forEach(signal => {
 
 // CORS configuration
 const corsOptions = {
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || isDevelopment) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

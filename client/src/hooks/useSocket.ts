@@ -10,7 +10,14 @@ export const useSocket = () => {
     if (token && !socketRef.current) {
       logger.info('Initializing socket connection');
       
-      const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3456';
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const BACKEND_URL = process.env.BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
+      
+      if (!BACKEND_URL) {
+        logger.error('BACKEND_URL environment variable is not set in production mode');
+        return;
+      }
+      
       socketRef.current = io(BACKEND_URL, {
         auth: {
           token,

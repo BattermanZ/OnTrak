@@ -17,10 +17,18 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Get backend URL from environment
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const BACKEND_URL = process.env.BACKEND_URL || (isDevelopment ? 'http://localhost:3456' : undefined);
+  
+  if (!BACKEND_URL) {
+    throw new Error('BACKEND_URL environment variable is not set in production mode');
+  }
+  const baseUrl = `${BACKEND_URL}/api`;
+
   // Test backend connection
   const testBackendConnection = async () => {
     try {
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
       logger.debug('Testing backend connection to:', baseUrl);
       
       const response = await axios.get(`${baseUrl}/health`);
@@ -45,7 +53,7 @@ const Login = () => {
       }
 
       logger.debug('Attempting login with email:', email);
-      logger.debug('Current API URL:', process.env.REACT_APP_API_URL);
+      logger.debug('Current API URL:', baseUrl);
 
       await login(email, password);
       logger.info('Login successful, navigating to home');
