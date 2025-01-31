@@ -4,7 +4,7 @@ WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
 COPY client/ .
-ENV HOST=0.0.0.0
+ENV NODE_ENV=production
 RUN npm run build
 
 # Stage 2: Build Backend

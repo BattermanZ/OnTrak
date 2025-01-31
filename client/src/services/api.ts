@@ -2,9 +2,9 @@ import axios from 'axios';
 import type { User, Schedule, Activity, Template } from '../types';
 import { logger } from '../utils/logger';
 
-// Create base API URL
-const baseURL = 'http://localhost:3456/api';
-logger.info('API service initialized', { baseURL });
+// Create base API URL based on environment
+const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
+logger.info('API service initialized', { baseURL, environment: process.env.NODE_ENV });
 
 const api = axios.create({
   baseURL,
