@@ -15,8 +15,11 @@ class Logger {
   private readonly bufferSize = 100;
   private isErrored: boolean = false;
   private errorTimeout: number | null = null;
+  private readonly BACKEND_URL: string;
 
   private constructor() {
+    this.BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3456';
+    
     window.addEventListener('beforeunload', () => {
       this.flushLogs();
     });
@@ -69,7 +72,7 @@ class Logger {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3456/api/logs', {
+      const response = await fetch(`${this.BACKEND_URL}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

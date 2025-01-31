@@ -1,33 +1,31 @@
 version: '3.8'
 
 services:
-  ontrak:
-    image: ontrak:beta1
-    container_name: ontrak
+  frontend:
+    build:
+      context: ./client
     ports:
-      - "${PORT:-3456}:3456"  # Use PORT from env or default to 3456
+      - "3457:3000"
+    volumes:
+      - ./.env:/app/.env:ro
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./server
+    ports:
+      - "3456:3456"
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
       - ./database:/app/database
-      - ./.env.production:/app/.env:ro  # Use production env file
+      - ./.env:/app/.env:ro
     environment:
       - TZ=${TZ:-UTC}
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
     networks:
-      - cinelink_default
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3456/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    logging:
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - app-network
 
 networks:
-  cinelink_default:
-    external: true
+  app-network:
+    driver: bridge

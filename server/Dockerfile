@@ -1,20 +1,11 @@
-# Stage 1: Build Frontend
-FROM node:20-alpine as frontend-builder
-WORKDIR /app/client
-COPY client/package*.json ./
-RUN npm ci
-COPY client/ .
-ENV NODE_ENV=production
-RUN npm run build
-
-# Stage 1: Build Backend
+# Build stage
 FROM node:20-alpine as builder
-WORKDIR /app/server
-COPY server/package*.json ./
+WORKDIR /app
+COPY package*.json ./
 RUN npm ci
-COPY server/ .
+COPY . .
 
-# Stage 2: Production
+# Production stage
 FROM ubuntu:20.04
 WORKDIR /app
 
@@ -29,9 +20,8 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy built applications
-COPY --from=builder /app/server ./server
-COPY --from=frontend-builder /app/client/build ./client/build
+# Copy built application
+COPY --from=builder /app ./
 
 # Create required directories
 RUN mkdir -p /app/database/data /app/logs /app/backups
@@ -46,7 +36,7 @@ ENV NODE_ENV=production \
     MONGODB_URI=mongodb://127.0.0.1:27017/ontrak
 
 # Expose ports
-EXPOSE 3456 27017
+EXPOSE 3456
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /

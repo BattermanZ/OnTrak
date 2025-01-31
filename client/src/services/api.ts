@@ -3,7 +3,9 @@ import type { User, Schedule, Activity, Template } from '../types';
 import { logger } from '../utils/logger';
 
 // Create base API URL based on environment
-const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3456/api';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3456';
+const baseURL = `${BACKEND_URL}/api`;
+
 logger.info('API service initialized', { baseURL, environment: process.env.NODE_ENV });
 
 const api = axios.create({

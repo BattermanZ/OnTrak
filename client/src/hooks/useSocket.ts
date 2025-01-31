@@ -10,7 +10,8 @@ export const useSocket = () => {
     if (token && !socketRef.current) {
       logger.info('Initializing socket connection');
       
-      socketRef.current = io('http://localhost:3456', {
+      const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3456';
+      socketRef.current = io(BACKEND_URL, {
         auth: {
           token,
         },
