@@ -6,10 +6,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Production stage - using serve for lightweight static serving
-FROM node:20-alpine
-WORKDIR /app
-RUN npm install -g serve
-COPY --from=builder /app/build ./build
+# Production stage - using nginx for lightweight static serving
+FROM nginx:alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 3000
-CMD ["serve", "-s", "build", "-l", "3000"] 
+CMD ["nginx", "-g", "daemon off;"] 

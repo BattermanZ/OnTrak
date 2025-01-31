@@ -8,17 +8,9 @@ yarn-error.log
 .env
 .env.*
 
-# Build and data
-dist
-build
-**/build
-coverage
-
 # Development
 .git
 .gitignore
-.dockerignore
-Dockerfile
 *.md
 *.log
 
@@ -40,18 +32,5 @@ tests
 *.pem
 .cache
 
-# Development and source control
-.env*
-.dockerignore
-Dockerfile
-docker-compose.yml
-README.md
-docs
-scripts
-*.md
-
-# Build and data
-database
-logs
-backups
-**/*.log 
+# Keep docker-entrypoint.sh
+!docker-entrypoint.sh 
