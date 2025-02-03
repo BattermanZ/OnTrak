@@ -88,8 +88,8 @@ const corsOptions = {
     });
 
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      logger.debug('No origin provided, allowing request');
+    if (!origin || isDevelopment) {
+      logger.debug('No origin or development mode, allowing request');
       return callback(null, true);
     }
     
@@ -407,9 +407,14 @@ const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ontrak';
 const connectWithRetry = async (retries = 5, delay = 5000) => {
   for (let i = 0; i < retries; i++) {
     try {
-      await mongoose.connect(mongoUri);
+      await mongoose.connect(mongoUri, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+      });
       logger.info('Connected to MongoDB');
-      return;
+      return true;
     } catch (error) {
       logger.error('MongoDB connection error:', error);
       if (i === retries - 1) {
@@ -420,9 +425,8 @@ const connectWithRetry = async (retries = 5, delay = 5000) => {
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
+  return false;
 };
-
-connectWithRetry();
 
 // Handle MongoDB connection errors
 mongoose.connection.on('error', err => {
@@ -494,18 +498,35 @@ app.use('/api/*', (req, res) => {
   });
 });
 
-// Start the server
-server.listen(PORT, '0.0.0.0', () => {
-  logger.info('Server Configuration:', {
-    port: PORT,
-    environment: process.env.NODE_ENV,
-    bindAddress: '0.0.0.0',
-    allowedOrigins,
-    clientUrl: process.env.CLIENT_URL,
-    backendUrl: process.env.BACKEND_URL,
-    trustProxy: app.get('trust proxy')
-  });
-});
+// Start the server only after MongoDB is connected
+const startServer = async () => {
+  try {
+    // Connect to MongoDB first
+    const connected = await connectWithRetry();
+    if (!connected) {
+      logger.error('Failed to connect to MongoDB after retries');
+      process.exit(1);
+    }
+
+    // Start the HTTP server
+    server.listen(PORT, '0.0.0.0', () => {
+      logger.info('Server Configuration:', {
+        port: PORT,
+        environment: process.env.NODE_ENV,
+        bindAddress: '0.0.0.0',
+        allowedOrigins,
+        clientUrl: process.env.CLIENT_URL,
+        backendUrl: process.env.BACKEND_URL,
+        trustProxy: app.get('trust proxy')
+      });
+    });
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Add graceful shutdown
 process.on('SIGTERM', () => {
