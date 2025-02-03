@@ -287,7 +287,7 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || isDevelopment) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       logger.debug('CORS allowed origin:', origin);
       callback(null, true);
     } else {
