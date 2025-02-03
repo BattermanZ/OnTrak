@@ -15,8 +15,38 @@ const statisticsRoutes = require('./routes/statistics.routes');
 const backupRoutes = require('./routes/backup.routes');
 const backupScheduler = require('./utils/scheduler');
 
-// Load .env from root directory
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+// Load .env from multiple possible locations
+const envPaths = [
+  path.join(__dirname, '../../.env'),  // Local development
+  path.join(__dirname, '../.env'),     // Docker container
+  '/.env',                            // Root in Docker
+  '.env'                              // Current directory
+];
+
+// Try loading .env from each possible location
+let envLoaded = false;
+for (const envPath of envPaths) {
+  if (require('fs').existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+    logger.info('Loaded .env from:', envPath);
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  logger.warn('No .env file found in any of the following locations:', envPaths);
+}
+
+// Debug environment variables
+logger.info('Environment Variables:', {
+  nodeEnv: process.env.NODE_ENV,
+  clientUrl: process.env.CLIENT_URL,
+  backendUrl: process.env.BACKEND_URL,
+  port: process.env.PORT,
+  envPaths
+});
+
 require('./config/passport');
 
 // Environment-specific configuration
@@ -26,7 +56,12 @@ const PORT = process.env.PORT || 3456;
 // Define allowed origins using environment variables
 const allowedOrigins = isDevelopment
   ? ['http://localhost:3000', 'http://localhost:3456']
-  : [process.env.CLIENT_URL].filter(Boolean);
+  : [
+      process.env.CLIENT_URL,
+      // Allow IP-based origins for local network testing
+      'http://192.168.31.24:3457',
+      'http://192.168.31.24:3456'
+    ].filter(Boolean);
 
 logger.info('CORS Configuration:', {
   environment: process.env.NODE_ENV,
@@ -60,12 +95,15 @@ const corsOptions = {
     
     // Check if the origin is allowed
     const isAllowed = allowedOrigins.some(allowed => {
+      if (!allowed) return false;
       // Exact match
       if (origin === allowed) return true;
       // Match without trailing slash
       if (origin.replace(/\/$/, '') === allowed) return true;
       // Match with trailing slash
       if (origin === allowed + '/') return true;
+      // Match IP-based origins
+      if (origin.startsWith('http://192.168.')) return true;
       return false;
     });
 

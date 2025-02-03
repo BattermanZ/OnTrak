@@ -1,5 +1,7 @@
 // import { debounce } from 'lodash';
 
+import { env, isDevelopment } from '../config/env';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -16,12 +18,22 @@ class Logger {
   private isErrored: boolean = false;
   private errorTimeout: number | null = null;
   private readonly BACKEND_URL: string;
+  private retryCount: number = 0;
+  private readonly maxRetries: number = 3;
 
   private constructor() {
-    this.BACKEND_URL = 'http://192.168.31.24:3456';
+    this.BACKEND_URL = env.BACKEND_URL;
     
-    window.addEventListener('beforeunload', () => {
-      this.flushLogs();
+    // Log initialization in development
+    if (isDevelopment) {
+      console.log('Logger initialized with backend URL:', this.BACKEND_URL);
+    }
+    
+    // Flush logs before page unload
+    window.addEventListener('beforeunload', async (event) => {
+      event.preventDefault();
+      await this.flushLogs(true); // Force flush on unload
+      return undefined;
     });
 
     // Flush logs periodically
@@ -47,24 +59,29 @@ class Logger {
     }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
   }
 
-  private async flushLogs() {
-    if (this.logBuffer.length === 0 || this.isErrored) return;
+  private async flushLogs(force: boolean = false) {
+    if ((this.logBuffer.length === 0 || this.isErrored) && !force) return;
 
     // Filter out large data objects and format logs
     const logs = this.logBuffer.map(log => {
       let formattedData = '';
       if (log.data) {
-        // Create a copy of data to modify
-        const dataCopy = { ...log.data };
-        
-        // Remove large response data
-        if (dataCopy.response) delete dataCopy.response;
-        if (dataCopy.adherence) delete dataCopy.adherence;
-        if (dataCopy.statistics) delete dataCopy.statistics;
-        
-        // Only include data if it's not empty
-        if (Object.keys(dataCopy).length > 0) {
-          formattedData = ' ' + JSON.stringify(dataCopy);
+        try {
+          // Create a copy of data to modify
+          const dataCopy = { ...log.data };
+          
+          // Remove large response data
+          if (dataCopy.response) delete dataCopy.response;
+          if (dataCopy.adherence) delete dataCopy.adherence;
+          if (dataCopy.statistics) delete dataCopy.statistics;
+          
+          // Only include data if it's not empty
+          if (Object.keys(dataCopy).length > 0) {
+            formattedData = ' ' + JSON.stringify(dataCopy);
+          }
+        } catch (error) {
+          formattedData = ' [Error serializing data]';
+          console.error('Error serializing log data:', error);
         }
       }
       return `${log.timestamp} [${log.level.toUpperCase()}] ${log.message}${formattedData}`;
@@ -78,25 +95,33 @@ class Logger {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ logs })
+        body: JSON.stringify({ logs, timestamp: new Date().toISOString() })
       });
 
       if (response.ok) {
         this.logBuffer = [];
+        this.retryCount = 0; // Reset retry count on success
       } else {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
     } catch (error) {
-      this.isErrored = true;
-      if (this.errorTimeout) {
-        clearTimeout(this.errorTimeout);
-      }
-      this.errorTimeout = window.setTimeout(() => {
-        this.isErrored = false;
-        this.errorTimeout = null;
-      }, 5000) as unknown as number;
-
       console.warn('Failed to send logs to server:', error instanceof Error ? error.message : 'Unknown error');
+      
+      // Implement retry logic
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++;
+        setTimeout(() => this.flushLogs(), 1000 * Math.pow(2, this.retryCount)); // Exponential backoff
+      } else {
+        this.isErrored = true;
+        if (this.errorTimeout) {
+          clearTimeout(this.errorTimeout);
+        }
+        this.errorTimeout = window.setTimeout(() => {
+          this.isErrored = false;
+          this.retryCount = 0;
+          this.errorTimeout = null;
+        }, 30000) as unknown as number; // Reset after 30 seconds
+      }
     }
   }
 
@@ -106,25 +131,34 @@ class Logger {
     // Filter out large data objects before logging
     let filteredData = undefined;
     if (data) {
-      // Create a copy of data to modify
-      const dataCopy = { ...data };
-      
-      // Remove large response data
-      if (dataCopy.response) delete dataCopy.response;
-      if (dataCopy.adherence) delete dataCopy.adherence;
-      if (dataCopy.statistics) delete dataCopy.statistics;
-      
-      // Only include data if it's not empty
-      if (Object.keys(dataCopy).length > 0) {
-        filteredData = dataCopy;
+      try {
+        // Create a copy of data to modify
+        const dataCopy = { ...data };
+        
+        // Remove large response data
+        if (dataCopy.response) delete dataCopy.response;
+        if (dataCopy.adherence) delete dataCopy.adherence;
+        if (dataCopy.statistics) delete dataCopy.statistics;
+        
+        // Only include data if it's not empty
+        if (Object.keys(dataCopy).length > 0) {
+          filteredData = dataCopy;
+        }
+      } catch (error) {
+        console.error('Error processing log data:', error);
+        filteredData = { error: 'Error processing log data' };
       }
     }
     
     // Create human-readable message
     const logMessage = `${timestamp} [${level.toUpperCase()}] ${message}${
-      filteredData ? ' ' + JSON.stringify(filteredData) : ''
+      filteredData ? ' ' + JSON.stringify(filteredData, null, 2) : ''
     }`;
-    console.log(logMessage);
+    
+    // Log to console in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log(logMessage);
+    }
     
     // Add to buffer
     this.logBuffer.push({ timestamp, level, message, data: filteredData });
@@ -136,22 +170,18 @@ class Logger {
   }
 
   public debug(message: string, data?: any) {
-    // Use debug only for detailed technical information
     this.log('debug', message, data);
   }
 
   public info(message: string, data?: any) {
-    // Use info for general application flow and user actions
     this.log('info', message, data);
   }
 
   public warn(message: string, data?: any) {
-    // Use warn for concerning but non-critical issues
     this.log('warn', message, data);
   }
 
   public error(message: string, data?: any) {
-    // Use error for critical issues that affect functionality
     this.log('error', message, data);
   }
 }

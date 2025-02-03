@@ -1,11 +1,42 @@
 const winston = require('winston');
 const path = require('path');
-const fs = require('fs');
+const fs = require('fs').promises;
 
-// Ensure logs directory exists
+// Ensure logs directory exists with proper permissions
 const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+
+async function initializeLogger() {
+  try {
+    // Create logs directory with proper permissions if it doesn't exist
+    await fs.mkdir(logsDir, { recursive: true, mode: 0o755 });
+    
+    // Create log files if they don't exist
+    const backendLogPath = path.join(logsDir, 'backend.log');
+    const frontendLogPath = path.join(logsDir, 'frontend.log');
+    
+    try {
+      await fs.access(backendLogPath);
+    } catch {
+      await fs.writeFile(backendLogPath, '', { mode: 0o644 });
+    }
+    
+    try {
+      await fs.access(frontendLogPath);
+    } catch {
+      await fs.writeFile(frontendLogPath, '', { mode: 0o644 });
+    }
+  } catch (error) {
+    console.error('Error initializing logger:', error);
+    process.exit(1);
+  }
+}
+
+// Initialize logger synchronously for immediate use
+try {
+  require('fs').mkdirSync(logsDir, { recursive: true, mode: 0o755 });
+} catch (error) {
+  console.error('Error creating logs directory:', error);
+  process.exit(1);
 }
 
 // Custom timestamp format that uses local timezone
@@ -41,7 +72,6 @@ const customFormat = winston.format.printf(({ level, message, timestamp, ...meta
 });
 
 const logger = winston.createLogger({
-  // Set default level to debug, can be overridden by LOG_LEVEL env variable
   level: process.env.LOG_LEVEL || 'debug',
   format: winston.format.combine(
     winston.format.timestamp({
@@ -56,13 +86,18 @@ const logger = winston.createLogger({
     // File transport for all logs (debug and above)
     new winston.transports.File({
       filename: path.join(logsDir, 'backend.log'),
-      level: 'debug', // Changed to debug to capture all logs
+      level: 'debug',
       format: winston.format.combine(
         winston.format.timestamp({
           format: timestampFormat
         }),
         customFormat
-      )
+      ),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+      tailable: true,
+      handleExceptions: true,
+      handleRejections: true
     }),
 
     // Console transport for development
@@ -74,18 +109,23 @@ const logger = winston.createLogger({
           format: timestampFormat
         }),
         customFormat
-      )
+      ),
+      handleExceptions: true,
+      handleRejections: true
     })
-  ]
+  ],
+  exitOnError: false
 });
 
 // Create a stream object with a 'write' function that will be used by morgan
 logger.stream = {
   write: (message) => {
-    // Log HTTP requests as debug level for more detailed information
     logger.debug(message.trim());
   }
 };
+
+// Initialize logger asynchronously
+initializeLogger().catch(console.error);
 
 // Log logger initialization
 logger.debug('Logger initialized with level:', process.env.LOG_LEVEL || 'debug');

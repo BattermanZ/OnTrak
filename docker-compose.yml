@@ -8,9 +8,13 @@ services:
       - "3457:3000"  # Frontend port
     volumes:
       - ./.env:/app/.env:ro
+    env_file:
+      - .env
     environment:
       - PUID=1035
       - PGID=100
+      - NODE_ENV=production
+      - REACT_APP_BACKEND_URL=http://192.168.31.24:3456
     networks:
       - ontrak_default
     restart: unless-stopped
@@ -22,6 +26,7 @@ services:
   server:
     image: ontrak-server:beta1
     container_name: ontrak-server
+    user: "node"
     ports:
       - "3456:3456"  # Backend port
     volumes:
@@ -29,10 +34,16 @@ services:
       - ./backups:/app/backups
       - ./database:/app/database
       - ./.env:/app/.env:ro
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Amsterdam
       - PUID=1035
       - PGID=100
+      - NODE_ENV=production
+      - CLIENT_URL=http://192.168.31.24:3457
+      - BACKEND_URL=http://192.168.31.24:3456
+      - PORT=3456
     networks:
       - ontrak_default
     restart: unless-stopped
