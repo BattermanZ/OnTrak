@@ -25,7 +25,7 @@ const Login: React.FC = () => {
   useEffect(() => {
     const checkFirstTimeSetup = async () => {
       try {
-        const response = await api.get('/api/users/count');
+        const response = await api.get('/users/count');
         if (response.data.count === 0) {
           navigate('/first-time-setup');
         }
