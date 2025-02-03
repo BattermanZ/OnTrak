@@ -8,6 +8,7 @@ import Admin from './pages/Admin';
 import Statistics from './pages/Statistics';
 import Profile from './pages/Profile';
 import BackupManager from './pages/BackupManager';
+import FirstTimeSetup from './pages/FirstTimeSetup';
 import { Toaster } from './components/ui/toaster';
 import Layout from './components/Layout';
 
@@ -20,7 +21,6 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
       <Route path="/" element={user ? <Layout><Dashboard /></Layout> : <Navigate to="/login" />} />
       <Route path="/setup" element={user ? <Layout><Setup /></Layout> : <Navigate to="/login" />} />
       <Route path="/admin" element={user ? <Layout><Admin /></Layout> : <Navigate to="/login" />} />
@@ -29,6 +29,8 @@ function AppRoutes() {
       {user?.role === 'admin' && (
         <Route path="/backups" element={<BackupManager />} />
       )}
+      <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+      <Route path="/first-time-setup" element={!user ? <FirstTimeSetup /> : <Navigate to="/" />} />
     </Routes>
   );
 }
