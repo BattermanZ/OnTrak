@@ -28,22 +28,58 @@ const allowedOrigins = isDevelopment
   ? ['http://localhost:3000', 'http://localhost:3456']
   : [process.env.CLIENT_URL].filter(Boolean);
 
-logger.info('Allowed CORS origins:', allowedOrigins);
+logger.info('CORS Configuration:', {
+  environment: process.env.NODE_ENV,
+  allowedOrigins,
+  clientUrl: process.env.CLIENT_URL,
+  backendUrl: process.env.BACKEND_URL
+});
 
 const app = express();
+
+// Trust proxy settings (before any middleware)
+app.set('trust proxy', true);
+app.enable('trust proxy');
+
 const server = require('http').createServer(app);
 
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
+    logger.debug('CORS Origin Check:', { 
+      receivedOrigin: origin,
+      allowedOrigins,
+      isDevelopment
+    });
+
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      logger.debug('No origin provided, allowing request');
+      return callback(null, true);
+    }
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Check if the origin is allowed
+    const isAllowed = allowedOrigins.some(allowed => {
+      // Exact match
+      if (origin === allowed) return true;
+      // Match without trailing slash
+      if (origin.replace(/\/$/, '') === allowed) return true;
+      // Match with trailing slash
+      if (origin === allowed + '/') return true;
+      return false;
+    });
+
+    if (isAllowed) {
       logger.debug('CORS allowed origin:', origin);
       callback(null, true);
     } else {
-      logger.warn('CORS blocked request from origin:', origin, 'Allowed origins:', allowedOrigins);
+      logger.warn('CORS blocked request:', {
+        origin,
+        allowedOrigins,
+        isDevelopment,
+        clientUrl: process.env.CLIENT_URL,
+        backendUrl: process.env.BACKEND_URL
+      });
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -54,18 +90,14 @@ const corsOptions = {
   maxAge: 600 // 10 minutes
 };
 
-// Apply CORS before ANY other middleware
-app.use(cors(corsOptions));
-
-// Handle OPTIONS preflight requests
+// Enable pre-flight requests for all routes
 app.options('*', cors(corsOptions));
 
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
 const io = require('socket.io')(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true
-  }
+  cors: corsOptions
 });
 
 // Make io available to routes
@@ -426,8 +458,17 @@ app.use('/api/*', (req, res) => {
   });
 });
 
+// Start the server
 server.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server is running on 0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  logger.info('Server Configuration:', {
+    port: PORT,
+    environment: process.env.NODE_ENV,
+    bindAddress: '0.0.0.0',
+    allowedOrigins,
+    clientUrl: process.env.CLIENT_URL,
+    backendUrl: process.env.BACKEND_URL,
+    trustProxy: app.get('trust proxy')
+  });
 });
 
 // Add graceful shutdown
