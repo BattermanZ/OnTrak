@@ -7,11 +7,17 @@ ENV REACT_APP_LOG_LEVEL=debug
 ENV NODE_ENV=production
 
 WORKDIR /app
+
+# Copy both package.json AND package-lock.json
 COPY package*.json ./
-# Clean install including dev dependencies (needed for build)
+
+# Install dependencies using clean install
 RUN npm ci
+
+# Copy the rest of the code
 COPY . .
-# Build with production optimizations
+
+# Build the application
 RUN npm run build
 
 # Production stage - using nginx for lightweight static serving
