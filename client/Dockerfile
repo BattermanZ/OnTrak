@@ -15,7 +15,9 @@ COPY package*.json ./
 ARG CACHEBUST=1
 
 # First, clear npm cache and then install dependencies
-RUN npm cache clean --force && \
+# Use CACHEBUST in the RUN command to prevent caching
+RUN echo "Cache bust: $CACHEBUST" && \
+    npm cache clean --force && \
     npm ci --prefer-offline --no-audit
 
 # Copy the rest of the code

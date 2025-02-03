@@ -461,6 +461,7 @@ io.on('connection', (socket) => {
 
 // API Routes
 app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/users', require('./routes/user.routes'));
 app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
 app.use('/api/statistics', passport.authenticate('jwt', { session: false }), statisticsRoutes);
