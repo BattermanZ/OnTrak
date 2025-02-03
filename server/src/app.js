@@ -23,17 +23,19 @@ require('./config/passport');
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const PORT = process.env.PORT || 3456;
 
-// Define allowed origins
+// Define allowed origins using environment variables
 const allowedOrigins = isDevelopment
   ? ['http://localhost:3000', 'http://localhost:3456'] // Dev origins
-  : [process.env.CLIENT_URL, process.env.BACKEND_URL].filter(Boolean); // Production URLs
+  : [process.env.CLIENT_URL].filter(Boolean); // Only allow frontend URL in production
+
+logger.info('Allowed CORS origins:', allowedOrigins);
 
 const app = express();
 const server = require('http').createServer(app);
 const io = require('socket.io')(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   }
 });
@@ -286,8 +288,10 @@ const corsOptions = {
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1 || isDevelopment) {
+      logger.debug('CORS allowed origin:', origin);
       callback(null, true);
     } else {
+      logger.warn('CORS blocked request from origin:', origin, 'Allowed origins:', allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -295,8 +299,10 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600, // 10 minutes
+  maxAge: 600 // 10 minutes
 };
+
+// Apply CORS before other middleware
 app.use(cors(corsOptions));
 
 // Trust proxy if behind a reverse proxy
