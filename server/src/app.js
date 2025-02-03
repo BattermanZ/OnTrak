@@ -128,11 +128,12 @@ const corsOptions = {
   maxAge: 600 // 10 minutes
 };
 
-// Enable pre-flight requests for all routes
-app.options('*', cors(corsOptions));
-
 // Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Body parser with increased limits
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const io = require('socket.io')(server, {
   cors: corsOptions
@@ -193,10 +194,6 @@ app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
 // Cookie parser
 app.use(cookieParser());
-
-// Body parser with increased limits
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Add request timeout middleware
 app.use((req, res, next) => {
