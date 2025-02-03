@@ -11,9 +11,12 @@ WORKDIR /app
 # Copy both package.json AND package-lock.json
 COPY package*.json ./
 
+# Add build argument for cache busting
+ARG CACHEBUST=1
+
 # First, clear npm cache and then install dependencies
 RUN npm cache clean --force && \
-    npm ci
+    npm ci --prefer-offline --no-audit
 
 # Copy the rest of the code
 COPY . .
