@@ -25,13 +25,41 @@ const PORT = process.env.PORT || 3456;
 
 // Define allowed origins using environment variables
 const allowedOrigins = isDevelopment
-  ? ['http://localhost:3000', 'http://localhost:3456'] // Dev origins
-  : [process.env.CLIENT_URL].filter(Boolean); // Only allow frontend URL in production
+  ? ['http://localhost:3000', 'http://localhost:3456']
+  : [process.env.CLIENT_URL].filter(Boolean);
 
 logger.info('Allowed CORS origins:', allowedOrigins);
 
 const app = express();
 const server = require('http').createServer(app);
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      logger.debug('CORS allowed origin:', origin);
+      callback(null, true);
+    } else {
+      logger.warn('CORS blocked request from origin:', origin, 'Allowed origins:', allowedOrigins);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // 10 minutes
+};
+
+// Apply CORS before ANY other middleware
+app.use(cors(corsOptions));
+
+// Handle OPTIONS preflight requests
+app.options('*', cors(corsOptions));
+
 const io = require('socket.io')(server, {
   cors: {
     origin: allowedOrigins,
@@ -43,7 +71,34 @@ const io = require('socket.io')(server, {
 // Make io available to routes
 app.set('io', io);
 
-// Security middleware
+// Register critical endpoints before any restrictive middleware
+app.get('/api/health', (req, res) => {
+  logger.debug('Health check request received');
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Register logs route (also needs to be before rate limiting)
+app.use('/api/logs', require('./routes/logs.routes'));
+
+// Rate limiting configuration
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, // 200 requests per minute
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to all other API routes
+app.use('/api/', (req, res, next) => {
+  // Skip rate limiting for health and logs endpoints
+  if (req.path === '/health' || req.path.startsWith('/logs')) {
+    return next();
+  }
+  return limiter(req, res, next);
+});
+
+// Now apply security middleware
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -68,37 +123,6 @@ app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
 // Cookie parser
 app.use(cookieParser());
-
-// Rate limiting configuration
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 200, // 200 requests per minute
-  message: 'Too many requests, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiting to all routes except logs in development
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api/', limiter);
-} else {
-  // Apply rate limiting to all API routes except /api/logs
-  app.use('/api/', (req, res, next) => {
-    if (req.path.startsWith('/logs')) {
-      return next();
-    }
-    return limiter(req, res, next);
-  });
-}
-
-// Separate rate limiter for logs endpoint
-const logsLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 1000, // 1000 requests per minute for logs
-  message: 'Too many log requests, please try again later.',
-});
-
-app.use('/api/logs', logsLimiter);
 
 // Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
@@ -281,30 +305,6 @@ shutdownSignals.forEach(signal => {
   process.on(signal, () => gracefulShutdown(signal));
 });
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      logger.debug('CORS allowed origin:', origin);
-      callback(null, true);
-    } else {
-      logger.warn('CORS blocked request from origin:', origin, 'Allowed origins:', allowedOrigins);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600 // 10 minutes
-};
-
-// Apply CORS before other middleware
-app.use(cors(corsOptions));
-
 // Trust proxy if behind a reverse proxy
 app.set('trust proxy', 1);
 
@@ -396,18 +396,11 @@ io.on('connection', (socket) => {
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/templates', passport.authenticate('jwt', { session: false }), require('./routes/template.routes'));
 app.use('/api/schedules', passport.authenticate('jwt', { session: false }), require('./routes/schedule.routes'));
-app.use('/api/logs', require('./routes/logs.routes'));
 app.use('/api/statistics', passport.authenticate('jwt', { session: false }), statisticsRoutes);
 app.use('/api/backups', passport.authenticate('jwt', { session: false }), backupRoutes);
 
 // Start backup scheduler
 backupScheduler.start();
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  logger.debug('Health check request received');
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // The catchall handler: for any request that doesn't match API routes,
 // send back React's index.html file in production only
