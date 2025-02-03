@@ -2,19 +2,12 @@ version: '3.8'
 
 services:
   client:
-    image: ontrak-client:beta2
+    image: ontrak-client:beta7
     container_name: ontrak-client
     ports:
       - "3457:3000"  # Frontend port
-    volumes:
-      - ./.env:/app/.env:ro
-    env_file:
-      - .env
     environment:
-      - PUID=1035
-      - PGID=100
       - NODE_ENV=production
-      - REACT_APP_BACKEND_URL=http://192.168.31.24:3456
     networks:
       - ontrak_default
     restart: unless-stopped
