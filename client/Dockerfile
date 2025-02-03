@@ -8,8 +8,10 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 COPY package*.json ./
+# Clean install including dev dependencies (needed for build)
 RUN npm ci
 COPY . .
+# Build with production optimizations
 RUN npm run build
 
 # Production stage - using nginx for lightweight static serving
