@@ -394,9 +394,9 @@ export default function Dashboard() {
                 {currentSchedule.activities.map((activity: Activity, index: number) => (
                   <div 
                     key={activity._id}
-                    className={`py-2 flex items-start transition-all duration-200 ${
+                    className={`py-4 px-4 -mx-4 flex items-start transition-all duration-200 ${
                       activity.isActive ? 'bg-blue-50' : getActivityBackgroundColor(activity.name)
-                    } ${activity.completed ? 'opacity-75' : ''} hover:bg-gray-50 relative`}
+                    } ${activity.completed ? 'opacity-75' : ''} hover:bg-gray-50 relative first:rounded-t-md last:rounded-b-md`}
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('activity', JSON.stringify(activity));
