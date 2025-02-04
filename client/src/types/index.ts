@@ -129,6 +129,8 @@ export interface StatisticsFilters {
   training: string;
   dateRange: string;
   day?: number;
+  customStart?: string;
+  customEnd?: string;
 }
 
 export interface TimeVarianceData {

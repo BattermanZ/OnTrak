@@ -258,25 +258,42 @@ const schedules = {
   cancelDay: () => api.post('/schedules/cancel-day'),
   nextActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/next/${activityId}`),
   goToPreviousActivity: (scheduleId: string, activityId: string) => api.post(`/schedules/${scheduleId}/previous/${activityId}`),
-  getStatistics: (filters: { trainer: string; training: string; dateRange: string; day?: number }) => api.get('/statistics', { params: filters }),
+  getStatistics: (filters: { 
+    trainer: string; 
+    training: string; 
+    dateRange: string; 
+    day?: number;
+    customStart?: string;
+    customEnd?: string;
+  }) => api.get('/statistics', { params: filters }),
   updateActivities: (scheduleId: string, activities: Activity[]) =>
     api.put(`/schedules/${scheduleId}/activities`, { activities }),
 };
 
 // Statistics API
 const statistics = {
-  getStatistics: async (filters: { trainer: string; training: string; dateRange: string; day?: number }) => {
+  getStatistics: async (filters: { 
+    trainer: string; 
+    training: string; 
+    dateRange: string; 
+    day?: number;
+    customStart?: string;
+    customEnd?: string;
+  }) => {
     try {
       logger.info('Fetching statistics', { 
         trainer: filters.trainer,
         training: filters.training,
         dateRange: filters.dateRange,
-        day: filters.day 
+        day: filters.day,
+        customStart: filters.customStart,
+        customEnd: filters.customEnd
       });
       const response = await api.get('/statistics', { params: filters });
       logger.info('Statistics fetched successfully', { 
         trainer: filters.trainer,
-        training: filters.training
+        training: filters.training,
+        dateRange: filters.dateRange
       });
       return response;
     } catch (err) {
@@ -284,6 +301,7 @@ const statistics = {
       logger.error('Failed to fetch statistics', { 
         trainer: filters.trainer,
         training: filters.training,
+        dateRange: filters.dateRange,
         error: error.message || 'Unknown error'
       });
       throw error;

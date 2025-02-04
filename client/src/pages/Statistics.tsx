@@ -35,6 +35,7 @@ import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
 import { Button } from "../components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
+import { Input } from "../components/ui/input";
 
 const TIMING_COLORS = {
   onTime: '#22c55e',  // green-500
@@ -76,7 +77,9 @@ export default function Statistics() {
   const [filters, setFilters] = useState<StatisticsFilters>({
     trainer: 'all',
     training: 'all',
-    dateRange: 'all'
+    dateRange: 'all',
+    customStart: '',
+    customEnd: ''
   });
 
   const [selectedTrainer, setSelectedTrainer] = useState<string>('');
@@ -493,9 +496,71 @@ export default function Statistics() {
     }));
   }, []);
 
-  const handleDateRangeChange = useCallback((value: string) => {
-    setFilters(prev => ({ ...prev, dateRange: value }));
-  }, []);
+  const handleDateRangeChange = (value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      dateRange: value,
+      // Reset custom dates when switching to other ranges
+      customStart: value === 'custom' ? prev.customStart : '',
+      customEnd: value === 'custom' ? prev.customEnd : ''
+    }));
+  };
+
+  const handleCustomDateChange = (field: 'customStart' | 'customEnd', value: string) => {
+    // Allow various date input formats
+    const cleanValue = value.replace(/[^\d/]/g, '');
+    
+    // Handle backspace/delete
+    if (value.length < (filters[field]?.length || 0)) {
+      setFilters(prev => ({
+        ...prev,
+        [field]: value
+      }));
+      return;
+    }
+
+    // Auto-format as user types
+    let formattedValue = cleanValue;
+    if (cleanValue.length >= 4 && !cleanValue.includes('/')) {
+      // Convert DDMMYYYY to DD/MM/YYYY
+      formattedValue = `${cleanValue.slice(0, 2)}/${cleanValue.slice(2, 4)}/${cleanValue.slice(4, 8)}`;
+    } else if (cleanValue.length >= 2 && !cleanValue.includes('/')) {
+      // Convert DDMM to DD/MM
+      formattedValue = `${cleanValue.slice(0, 2)}/${cleanValue.slice(2)}`;
+    }
+
+    // Basic validation
+    const dateRegex = /^(\d{2}\/?)(\d{2}\/?)(\d{4})?$/;
+    if (formattedValue && !dateRegex.test(formattedValue.replace(/\//g, ''))) {
+      return;
+    }
+
+    setFilters(prev => ({
+      ...prev,
+      [field]: formattedValue
+    }));
+  };
+
+  // Validate date format
+  const isValidDate = (dateStr: string) => {
+    if (!dateStr) return false;
+    const [day, month, year] = dateStr.split('/').map(Number);
+    if (!day || !month || !year) return false;
+    
+    const date = new Date(year, month - 1, day);
+    return date instanceof Date && !isNaN(date.getTime()) &&
+           date.getDate() === day &&
+           date.getMonth() === month - 1 &&
+           date.getFullYear() === year &&
+           year >= 1900 && year <= 2100;
+  };
+
+  // Get validation state for custom date inputs
+  const getDateValidationState = (dateStr: string): 'valid' | 'invalid' | 'incomplete' => {
+    if (!dateStr) return 'incomplete';
+    if (dateStr.length < 10) return 'incomplete';
+    return isValidDate(dateStr) ? 'valid' : 'invalid';
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -618,10 +683,96 @@ export default function Statistics() {
                   <SelectItem value="month">Last Month</SelectItem>
                   <SelectItem value="year">Last Year</SelectItem>
                   <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {debouncedFilters.dateRange === 'custom' && (
+            <div className="space-y-4 mt-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <InfoIcon className="h-5 w-5 text-blue-500 mt-0.5" />
+                  <div className="text-sm text-blue-700">
+                    <p className="font-medium">Date Input Guide:</p>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>Enter dates in DD/MM/YYYY format</li>
+                      <li>You can type with or without slashes</li>
+                      <li>Quick format: Type 8 digits like "01012024"</li>
+                      <li>Valid years: 1900-2100</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center justify-between">
+                    Start Date
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      getDateValidationState(filters.customStart || '') === 'valid'
+                        ? 'bg-green-100 text-green-700'
+                        : getDateValidationState(filters.customStart || '') === 'invalid'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {getDateValidationState(filters.customStart || '') === 'valid'
+                        ? '✓ Valid'
+                        : getDateValidationState(filters.customStart || '') === 'invalid'
+                        ? '✗ Invalid'
+                        : 'DD/MM/YYYY'}
+                    </span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="DD/MM/YYYY or DDMMYYYY"
+                    value={filters.customStart}
+                    onChange={(e) => handleCustomDateChange('customStart', e.target.value)}
+                    className={`${
+                      getDateValidationState(filters.customStart || '') === 'invalid'
+                        ? 'border-red-300 focus:border-red-500'
+                        : getDateValidationState(filters.customStart || '') === 'valid'
+                        ? 'border-green-300 focus:border-green-500'
+                        : ''
+                    }`}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium flex items-center justify-between">
+                    End Date
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      getDateValidationState(filters.customEnd || '') === 'valid'
+                        ? 'bg-green-100 text-green-700'
+                        : getDateValidationState(filters.customEnd || '') === 'invalid'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {getDateValidationState(filters.customEnd || '') === 'valid'
+                        ? '✓ Valid'
+                        : getDateValidationState(filters.customEnd || '') === 'invalid'
+                        ? '✗ Invalid'
+                        : 'DD/MM/YYYY'}
+                    </span>
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="DD/MM/YYYY or DDMMYYYY"
+                    value={filters.customEnd}
+                    onChange={(e) => handleCustomDateChange('customEnd', e.target.value)}
+                    className={`${
+                      getDateValidationState(filters.customEnd || '') === 'invalid'
+                        ? 'border-red-300 focus:border-red-500'
+                        : getDateValidationState(filters.customEnd || '') === 'valid'
+                        ? 'border-green-300 focus:border-green-500'
+                        : ''
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

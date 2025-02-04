@@ -11,19 +11,77 @@ const mongoose = require('mongoose');
 const router = express.Router();
 
 // Helper function to get date filter based on range
-const getDateFilter = (range) => {
+const getDateFilter = (range, customStart, customEnd) => {
   const now = new Date();
-  const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-  const oneYearFromNow = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
   
   switch (range) {
-    case 'week':
-      return { $gte: oneYearAgo, $lte: oneYearFromNow };
-    case 'month':
-      return { $gte: oneYearAgo, $lte: oneYearFromNow };
-    case 'year':
-      return { $gte: oneYearAgo, $lte: oneYearFromNow };
+    case 'custom': {
+      if (!customStart || !customEnd) {
+        logger.warn('Custom date range missing start or end date');
+        return null;
+      }
+
+      // Parse DD/MM/YYYY format
+      const [startDay, startMonth, startYear] = customStart.split('/');
+      const [endDay, endMonth, endYear] = customEnd.split('/');
+      
+      const startDate = new Date(startYear, startMonth - 1, startDay);
+      const endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59); // End of the day
+      
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        logger.warn('Invalid custom date format', { customStart, customEnd });
+        return null;
+      }
+
+      logger.debug('Custom date filter:', {
+        range,
+        start: startDate.toISOString(),
+        end: endDate.toISOString()
+      });
+
+      return {
+        $gte: startDate,
+        $lt: endDate
+      };
+    }
+    case 'week': {
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Start from Monday
+      logger.debug('Week filter:', {
+        range,
+        start: weekStart.toISOString(),
+        end: now.toISOString()
+      });
+      return { 
+        $gte: weekStart,
+        $lt: now 
+      };
+    }
+    case 'month': {
+      const monthStart = startOfMonth(now);
+      logger.debug('Month filter:', {
+        range,
+        start: monthStart.toISOString(),
+        end: now.toISOString()
+      });
+      return { 
+        $gte: monthStart,
+        $lt: now 
+      };
+    }
+    case 'year': {
+      const yearStart = startOfYear(now);
+      logger.debug('Year filter:', {
+        range,
+        start: yearStart.toISOString(),
+        end: now.toISOString()
+      });
+      return { 
+        $gte: yearStart,
+        $lt: now 
+      };
+    }
     case 'all':
+      logger.debug('No date filter (all time)');
       return null;
     default:
       logger.warn('Invalid date range provided', { range });
@@ -373,9 +431,15 @@ router.get('/',
       }
 
       // Add date filter if specified
-      const dateFilter = getDateFilter(req.query.dateRange);
+      const dateFilter = getDateFilter(req.query.dateRange, req.query.customStart, req.query.customEnd);
       if (dateFilter !== null) {
         baseQuery.date = dateFilter;
+        logger.debug('Applied date filter:', { 
+          dateRange: req.query.dateRange,
+          filter: dateFilter,
+          filterStart: dateFilter.$gte ? dateFilter.$gte.toISOString() : null,
+          filterEnd: dateFilter.$lt ? dateFilter.$lt.toISOString() : null
+        });
       }
 
       // Add logging to debug query
@@ -485,8 +549,11 @@ router.get('/',
         logger.debug('Schedules fetched successfully', {
           count: schedules.length,
           query: baseQuery,
-          sampleSchedule: schedules[0] ? {
+          dateRange: req.query.dateRange,
+          dateFilter: baseQuery.date,
+          firstSchedule: schedules[0] ? {
             id: schedules[0]._id,
+            date: schedules[0].date,
             activities: schedules[0].activities.length,
             hasDate: !!schedules[0].date,
             hasTemplateId: !!schedules[0].templateId,
@@ -494,6 +561,10 @@ router.get('/',
             completedActivities: schedules[0].activities.filter(a => a.completed).length,
             templateName: schedules[0].templateId?.name,
             trainerName: schedules[0].createdBy ? `${schedules[0].createdBy.firstName} ${schedules[0].createdBy.lastName}` : null
+          } : null,
+          lastSchedule: schedules[schedules.length - 1] ? {
+            id: schedules[schedules.length - 1]._id,
+            date: schedules[schedules.length - 1].date
           } : null
         });
 
