@@ -3,7 +3,7 @@ const path = require('path');
 const winston = require('./winston');
 
 const dbPath = path.join(process.cwd(), '..', 'database', 'data');
-const logPath = path.join(process.cwd(), '..', 'logs', 'app.log');
+const logPath = path.join(__dirname, '..', '..', 'logs', 'app.log');
 
 const connectDB = async () => {
   try {

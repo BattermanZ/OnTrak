@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const logger = require('../config/logger');
 
 // Ensure logs directory exists
-const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
+const logsDir = path.join(__dirname, '..', '..', 'logs');
 
 // Initialize logs directory and files
 async function initializeLogsDirectory() {

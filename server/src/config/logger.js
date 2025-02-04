@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 
 // Ensure logs directory exists with proper permissions
-const logsDir = path.join(__dirname, '..', '..', '..', 'logs');
+const logsDir = path.join(__dirname, '..', '..', 'logs');
 
 async function initializeLogger() {
   try {
