@@ -574,6 +574,7 @@ router.get('/',
             // If a specific trainer is selected, only process their schedules
             if (req.query.trainer && req.query.trainer !== 'all') {
               const processedStats = processSchedules(schedules);
+              
               // Update the specific trainer's stats
               const trainerIndex = statistics.trainers.findIndex(t => t._id.toString() === req.query.trainer);
               if (trainerIndex !== -1) {
@@ -582,7 +583,102 @@ router.get('/',
                   ...processedStats
                 };
               }
-              // Use the same stats for overall statistics
+
+              // Process training-specific statistics for this trainer
+              if (req.query.training && req.query.training !== 'all') {
+                const templateSchedules = schedules.filter(s => 
+                  (s.templateId?._id || s.templateId)?.toString() === req.query.training
+                );
+                
+                if (templateSchedules.length > 0) {
+                  const dailyStats = new Map();
+                  
+                  templateSchedules.forEach(schedule => {
+                    const day = schedule.selectedDay;
+                    if (!dailyStats.has(day)) {
+                      dailyStats.set(day, {
+                        totalVariance: 0,
+                        activityCount: 0,
+                        day: day,
+                        activities: new Map(),
+                        trainers: new Map()
+                      });
+                    }
+                    const dayStats = dailyStats.get(day);
+                    
+                    schedule.activities.forEach(activity => {
+                      if (activity.completed && activity.actualStartTime && activity.actualEndTime) {
+                        const actualDuration = differenceInMinutes(
+                          new Date(activity.actualEndTime),
+                          new Date(activity.actualStartTime)
+                        );
+                        const scheduledDuration = activity.duration || 0;  // Ensure we have a number
+                        const variance = actualDuration - scheduledDuration;
+                        
+                        // Update activity-specific stats
+                        if (!dayStats.activities.has(activity.name)) {
+                          dayStats.activities.set(activity.name, {
+                            name: activity.name,
+                            totalVariance: 0,
+                            totalActualDuration: 0,
+                            totalScheduledDuration: 0,
+                            count: 0
+                          });
+                        }
+                        const activityStats = dayStats.activities.get(activity.name);
+                        activityStats.totalVariance += variance;
+                        activityStats.totalActualDuration += actualDuration;
+                        activityStats.totalScheduledDuration += scheduledDuration;
+                        activityStats.count++;
+                        
+                        dayStats.totalVariance += variance;
+                        dayStats.activityCount++;
+                      }
+                    });
+                  });
+                  
+                  // Convert daily stats to array and add to statistics
+                  statistics.dailyStats = Array.from(dailyStats.values())
+                    .map(stats => ({
+                      name: `Day ${stats.day}`,
+                      timeVariance: stats.activityCount > 0 ? 
+                        Math.round(stats.totalVariance / stats.activityCount) : 0,
+                      day: stats.day,
+                      activities: Array.from(stats.activities.values())
+                        .map(activityStats => ({
+                          name: activityStats.name,
+                          timeVariance: activityStats.count > 0 ?
+                            Math.round(activityStats.totalVariance / activityStats.count) : 0,
+                          averageActualDuration: activityStats.count > 0 ?
+                            Math.round(activityStats.totalActualDuration / activityStats.count) : 0,
+                          scheduledDuration: activityStats.count > 0 ?
+                            Math.round(activityStats.totalScheduledDuration / activityStats.count) : 0
+                        }))
+                        .sort((a, b) => b.timeVariance - a.timeVariance)  // Sort by variance
+                    }))
+                    .sort((a, b) => a.day - b.day);
+
+                  // Also update daySpecificStats for consistency
+                  const dayKey = `${req.query.training}-${req.query.day}`;
+                  if (dailyStats.has(parseInt(req.query.day))) {
+                    const dayData = dailyStats.get(parseInt(req.query.day));
+                    statistics.daySpecificStats[dayKey] = {
+                      activities: Array.from(dayData.activities.values())
+                        .map(activityStats => ({
+                          name: activityStats.name,
+                          scheduledDuration: activityStats.count > 0 ?
+                            `${Math.round(activityStats.totalScheduledDuration / activityStats.count)}min` : '0min',
+                          averageActualDuration: activityStats.count > 0 ?
+                            `${Math.round(activityStats.totalActualDuration / activityStats.count)}min` : '0min',
+                          averageVariance: activityStats.count > 0 ?
+                            `${Math.round(activityStats.totalVariance / activityStats.count)}min` : '0min'
+                        }))
+                    };
+                  }
+                }
+              }
+
+              // Use the processed stats for overall statistics
               statistics = {
                 ...statistics,
                 ...processedStats
@@ -684,19 +780,16 @@ router.get('/',
                           dayStats.activities.set(activity.name, {
                             name: activity.name,
                             totalVariance: 0,
+                            totalActualDuration: 0,
+                            totalScheduledDuration: 0,
                             count: 0
                           });
                         }
                         const activityStats = dayStats.activities.get(activity.name);
                         activityStats.totalVariance += variance;
+                        activityStats.totalActualDuration += actualDuration;
+                        activityStats.totalScheduledDuration += scheduledDuration;
                         activityStats.count++;
-                        
-                        // Update trainer-specific stats
-                        if (trainerId) {
-                          const trainerStats = dayStats.trainers.get(trainerId.toString());
-                          trainerStats.totalVariance += variance;
-                          trainerStats.activityCount++;
-                        }
                         
                         dayStats.totalVariance += variance;
                         dayStats.activityCount++;
