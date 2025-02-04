@@ -7,6 +7,7 @@ database/data/
 database/logs/
 *.log
 database/mongod.pid
+server/database/
 
 # Backups
 backups/

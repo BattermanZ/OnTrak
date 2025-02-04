@@ -52,7 +52,7 @@ const shouldKeepBackup = (backup, allBackups) => {
 
 class DatabaseBackup {
   constructor() {
-    this.backupDir = path.join(__dirname, '../../../backups');
+    this.backupDir = path.join(__dirname, '..', '..', 'backups');
     // Ensure backup directory exists
     if (!fs.existsSync(this.backupDir)) {
       fs.mkdirSync(this.backupDir, { recursive: true });

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 const winston = require('./winston');
 
-const dbPath = path.join(process.cwd(), '..', 'database', 'data');
+const dbPath = path.join(__dirname, '..', '..', 'database', 'data');
 const logPath = path.join(__dirname, '..', '..', 'logs', 'app.log');
 
 const connectDB = async () => {
