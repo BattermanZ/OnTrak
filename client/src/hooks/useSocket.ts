@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import io, { Socket } from 'socket.io-client';
 import { logger } from '../utils/logger';
+import { env } from '../config/env';
 
 export const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
@@ -10,8 +11,7 @@ export const useSocket = () => {
     if (token && !socketRef.current) {
       logger.info('Initializing socket connection');
       
-      const BACKEND_URL = 'http://192.168.31.24:3456';
-      socketRef.current = io(BACKEND_URL, {
+      socketRef.current = io(env.BACKEND_URL, {
         auth: {
           token,
         },
