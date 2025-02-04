@@ -1,175 +1,172 @@
-# OnTrak - Training Session Management System
+# OnTrak Training Management System 🏋️‍♂️
 
-OnTrak is a comprehensive training session management system designed to help trainers and administrators efficiently manage and track training sessions.
+OnTrak is a comprehensive training management system designed to help trainers and administrators organize and track training sessions effectively.
 
-## Features
+## 🌟 Features
 
-### User Management
-- Role-based authentication (Admin and Trainer roles)
-- Secure login with rate limiting and account locking
-- Password management with strong validation
-- Profile management
+- 📅 Training schedule management
+- 👥 User role management (Admin/Trainer)
+- 📊 Training statistics and reporting
+- 🔄 Template-based training plans
+- 🌐 Multi-timezone support
+- 📱 Responsive web interface
+- 🔒 Secure authentication system
 
-### Training Management
-- Create and manage training templates
-- Schedule training sessions
-- Real-time progress tracking
-- Activity timing and monitoring
-- Session completion tracking
+## 🏗️ Project Structure
 
-### Statistics and Analytics
-- Comprehensive training statistics
-- Performance metrics visualization
-- Time variance analysis
-- Trainer-specific analytics
+```
+ontrak/
+├── client/                 # Frontend application
+│   ├── src/               # Source code
+│   │   ├── components/    # React components
+│   │   ├── contexts/      # React contexts
+│   │   ├── pages/        # Page components
+│   │   ├── services/     # API services
+│   │   └── utils/        # Utility functions
+│   ├── public/           # Static files
+│   └── Dockerfile        # Frontend container config
+│
+├── server/                # Backend application
+│   ├── src/              # Source code
+│   │   ├── config/       # Configuration files
+│   │   ├── models/       # Database models
+│   │   ├── routes/       # API routes
+│   │   └── utils/        # Utility functions
+│   ├── database/         # MongoDB data directory
+│   ├── logs/             # Application logs
+│   └── Dockerfile        # Backend container config
+│
+├── scripts/              # Utility scripts
+├── database/            # Database files
+├── documentations/      # Project documentation
+└── docker-compose.yml   # Container orchestration
+```
 
-### Administrative Features
-- User account management
-- Training template administration
-- System-wide monitoring
-- Access control
+## 🚀 Getting Started
 
-## Technical Stack
+### Prerequisites
 
-### Frontend
-- React with TypeScript
-- Material-UI for styling
-- React Query for data fetching
-- Socket.IO for real-time updates
-- React Router for navigation
-- Context API for state management
+- Node.js (v16 or higher) 📦
+- MongoDB (v4.4 or higher) 🗄️
+- Docker (optional, for containerized deployment) 🐳
 
-### Backend
-- Node.js with Express
-- MongoDB with Mongoose
-- Passport.js for authentication
-- JWT for session management
-- Socket.IO for real-time communication
+### Development Setup
 
-## Security Features
-- JWT-based authentication
-- Password hashing with bcrypt
-- Rate limiting for API endpoints
-- XSS protection
-- CSRF protection
-- MongoDB injection prevention
-- Secure HTTP headers
-- Cookie security
-- Account locking after failed attempts
-
-## Project Structure
-
-### Frontend (/client)
-- `/src/components` - Reusable UI components
-- `/src/pages` - Main application pages
-- `/src/contexts` - React contexts for state management
-- `/src/services` - API service integrations
-- `/src/hooks` - Custom React hooks
-- `/src/types` - TypeScript type definitions
-- `/src/utils` - Utility functions
-
-### Backend (/server)
-- `/src/routes` - API route definitions
-- `/src/models` - MongoDB schema models
-- `/src/middleware` - Express middleware
-- `/src/config` - Configuration files
-- `/src/utils` - Utility functions
-
-## Getting Started
-
-1. Clone the repository
-2. Install dependencies:
+1. **Clone the repository:**
    ```bash
-   # Install frontend dependencies
-   cd client
+   git clone https://github.com/yourusername/ontrak.git
+   cd ontrak
+   ```
+
+2. **Set up environment variables:**
+   - Copy `.env.example` to `.env`
+   - Update the variables as needed
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   # Install backend dependencies
+   cd server
    npm install
 
-   # Install backend dependencies
-   cd ../server
+   # Install frontend dependencies
+   cd ../client
    npm install
    ```
 
-3. Set up environment variables:
-   - Copy `.env.example` to `.env` in the root directory
-   - Configure the environment variables as needed
+4. **Start MongoDB:**
+   - macOS: `brew services start mongodb-community`
+   - Linux: `sudo systemctl start mongod`
+   - Windows: MongoDB runs as a Windows Service
 
-4. Set up MongoDB:
-   - Install MongoDB Community Edition for your platform:
-     - macOS: `brew install mongodb-community`
-     - Linux: Follow [MongoDB installation guide](https://www.mongodb.com/docs/manual/administration/install-on-linux/)
-     - Windows: Follow [MongoDB installation guide](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-windows/)
-   
-   - Start MongoDB service:
-     - macOS: `brew services start mongodb-community`
-     - Linux: `sudo systemctl start mongod`
-     - Windows: MongoDB runs as a Windows Service (starts automatically)
-   
-   - Verify MongoDB is running:
-     ```bash
-     mongosh
-     # You should see the MongoDB shell connect successfully
-     ```
-
-5. Start the development servers:
+5. **Start development servers:**
    ```bash
-   # Start backend server
-   cd server
+   # Start backend (from server directory)
    npm run dev
 
-   # Start frontend server (in a new terminal)
-   cd client
+   # Start frontend (from client directory)
    npm start
    ```
 
-## Development Guidelines
+The application will be available at:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:3456
 
-- Write clean, maintainable code
-- Follow TypeScript best practices
-- Use proper error handling
-- Implement proper logging
-- Follow security best practices
-- Test thoroughly before deployment
+### Production Deployment (Docker) 🐳
 
-## Production Deployment
+OnTrak uses two containers in production:
 
-### Using Docker (Recommended)
+1. **Frontend Container:**
+   - Nginx server serving the React application
+   - Exposed on port 3000
+   - Optimized build with minimal footprint
 
-1. Using Docker Compose (Recommended):
-   ```bash
-   # Build and start the container
-   docker-compose up -d
+2. **Backend Container:**
+   - Node.js server running the API
+   - Exposed on port 3456
+   - Includes automatic backup system
+   - Handles database connections
 
-   # View logs
-   docker-compose logs -f
-   ```
+To deploy using Docker:
 
-2. Using Docker directly:
-   ```bash
-   # Build the image
-   docker build -t ontrak .
+```bash
+# Build and start containers
+docker-compose up -d
 
-   # Run the container
-   docker run -d \
-     -p 0.0.0.0:3000:3000 \
-     -v mongodb_data:/app/database/data \
-     -v app_logs:/app/logs \
-     -e JWT_SECRET=your-secret-key \
-     -e HOST=0.0.0.0 \
-     --name ontrak \
-     ontrak
-   ```
+# View logs
+docker-compose logs -f
+```
 
-The application will be available at http://0.0.0.0:3000 and accessible from any network interface.
+The application will be available at:
+- Frontend: http://your-ip:3000
+- Backend: http://your-ip:3456
 
-## Monitoring and Maintenance
+## 📁 Volume Mounts
 
-### Regular Maintenance Tasks
-- Run database backups daily (automated via cron)
-- Store backups in a secure, external location
-- Monitor system logs for errors and unusual activity
-- Update dependencies monthly
-- Run security audits weekly
-- Clean up old logs weekly
+Docker deployment uses the following volume mounts:
+
+- `/app/logs`: Application logs
+- `/app/backups`: Database backups
+- `/app/database`: MongoDB data
+- `/.env`: Environment configuration
+
+## 🔧 Configuration
+
+Key environment variables:
+
+- `NODE_ENV`: Application environment (development/production)
+- `CLIENT_URL`: Frontend application URL
+- `BACKEND_URL`: Backend API URL
+- `MONGODB_URI`: MongoDB connection string
+- `JWT_SECRET`: Secret key for authentication
+
+See `.env.example` for all available options.
+
+## 🛡️ Security Features
+
+- JWT-based authentication
+- Role-based access control
+- Rate limiting
+- Secure password hashing
+- Input validation
+- Error logging
+
+## 📊 Monitoring
+
+- Application logs in `/server/logs`
+- MongoDB database backups in `/server/backups`
+- Error tracking and reporting
+- Performance monitoring
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ### Backup Management
 - Daily backups are stored in a separate backup location
@@ -177,27 +174,15 @@ The application will be available at http://0.0.0.0:3000 and accessible from any
 - Keep last 4 weekly backups
 - Keep last 3 monthly backups
 
-### Performance Monitoring
-- Monitor server resource usage
-- Track API response times
-- Monitor database performance
-- Set up alerts for abnormal conditions
+## 🆘 Support
 
-### Security Maintenance
-- Regular security updates for all dependencies
-- SSL certificate renewal monitoring
-- Access log review
-- Failed login attempt monitoring
-- Regular security scanning
+For support, please contact:
+- Email: support@ontrak.com
+- Issues: GitHub Issues page
 
-### Documentation
-- Keep documentation up to date with changes
-- Document all configuration changes
-- Maintain deployment procedures
-- Update troubleshooting guides
+## 🙏 Acknowledgments
 
-## Additional Documentation
-Refer to the following documents in the `docs` directory for detailed information:
-- `TRAINING_DAY_LOGIC.md` - Training session management logic
-- `STATISTICS_DATA_FLOW.md` - Data flow for statistics generation
-- `CRASH_PREVENTION.md` - System stability and crash prevention measures
+- MongoDB team
+- React team
+- Node.js community
+- All contributors
