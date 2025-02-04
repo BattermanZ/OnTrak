@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Download, ListPlus, Upload, HelpCircle, Copy } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, Download, ListPlus, Upload, HelpCircle, Copy, ListFilter, Calendar, Clock } from 'lucide-react';
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity, ActivityConflict } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,7 +39,6 @@ import {
 } from "../components/ui/select";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Alert, AlertDescription } from "../components/ui/alert";
-import { Calendar, Clock } from "lucide-react";
 import { Textarea } from "../components/ui/textarea";
 import { toast } from "../components/ui/use-toast";
 
@@ -87,6 +86,7 @@ export default function Setup() {
   const [previewTemplate, setPreviewTemplate] = useState<TemplateWithDisplayTimes | null>(null);
   const [hasPreviewChanges, setHasPreviewChanges] = useState(false);
   const [activityConflicts, setActivityConflicts] = useState<ActivityConflict[]>([]);
+  const [sortBy, setSortBy] = useState<string>('name-asc');
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -472,11 +472,39 @@ export default function Setup() {
     setSelectedFilterTags(selectedFilterTags.filter(t => t !== tag));
   };
 
-  // Update the templates filtering logic
-  const filteredTemplates = templates.filter((template: TemplateWithDisplayTimes) => 
-    template.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    (selectedFilterTags.length === 0 || 
-     selectedFilterTags.every(tag => template.tags?.includes(tag)))
+  // Add sorting function
+  const getSortedTemplates = (templatesToSort: TemplateWithDisplayTimes[]) => {
+    return [...templatesToSort].sort((a, b) => {
+      switch (sortBy) {
+        case 'name-asc':
+          return a.name.localeCompare(b.name);
+        case 'name-desc':
+          return b.name.localeCompare(a.name);
+        case 'days-asc':
+          return a.days - b.days;
+        case 'days-desc':
+          return b.days - a.days;
+        case 'activities-asc':
+          return a.activities.length - b.activities.length;
+        case 'activities-desc':
+          return b.activities.length - a.activities.length;
+        case 'created-asc':
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        case 'created-desc':
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        default:
+          return 0;
+      }
+    });
+  };
+
+  // Update the templates filtering logic to include sorting
+  const filteredTemplates = getSortedTemplates(
+    templates.filter((template: TemplateWithDisplayTimes) => 
+      template.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      (selectedFilterTags.length === 0 || 
+       selectedFilterTags.every(tag => template.tags?.includes(tag)))
+    )
   );
 
   const handleCloneTemplate = async (template: TemplateWithDisplayTimes) => {
@@ -892,6 +920,56 @@ export default function Setup() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          <Select
+            value={sortBy}
+            onValueChange={setSortBy}
+          >
+            <SelectTrigger className="w-[240px]">
+              <div className="flex items-center gap-2">
+                <ListFilter className="h-4 w-4" />
+                <SelectValue placeholder="Sort templates by..." />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {/* Name sorting */}
+              <SelectItem value="name-asc">
+                Name (A to Z)
+              </SelectItem>
+              <SelectItem value="name-desc">
+                Name (Z to A)
+              </SelectItem>
+
+              <div className="h-px bg-gray-100 my-2" />
+
+              {/* Days sorting */}
+              <SelectItem value="days-asc">
+                Days (Low to High)
+              </SelectItem>
+              <SelectItem value="days-desc">
+                Days (High to Low)
+              </SelectItem>
+
+              <div className="h-px bg-gray-100 my-2" />
+
+              {/* Activities sorting */}
+              <SelectItem value="activities-asc">
+                Activities (Least first)
+              </SelectItem>
+              <SelectItem value="activities-desc">
+                Activities (Most first)
+              </SelectItem>
+
+              <div className="h-px bg-gray-100 my-2" />
+
+              {/* Creation date sorting */}
+              <SelectItem value="created-asc">
+                Created (Oldest first)
+              </SelectItem>
+              <SelectItem value="created-desc">
+                Created (Newest first)
+              </SelectItem>
+            </SelectContent>
+          </Select>
           <div className="relative w-72">
             <div className="relative">
               <Input
@@ -1695,18 +1773,32 @@ export default function Setup() {
                                   const otherActivities = previewTemplate.activities.filter(a => a._id !== droppedActivity._id);
                                   
                                   // Get current day's activities
-                                  const currentDayActivities = otherActivities.filter(a => a.day === dayIndex + 1);
+                                  const currentDayActivities = otherActivities
+                                    .filter(a => a.day === dayIndex + 1)
+                                    .sort((a, b) => {
+                                      if (!a?.displayTime || !b?.displayTime) return 0;
+                                      return a.displayTime.localeCompare(b.displayTime);
+                                    });
                                   
-                                  // Create new activities array with the dropped activity at the start of the day
-                                  const updatedActivities = [
-                                    ...otherActivities.filter(a => a.day !== dayIndex + 1),
+                                  // Find the insertion index
+                                  const insertIndex = currentDayActivities.findIndex(a => a._id === activity._id) + 1;
+                                  
+                                  // Insert the activity at the correct position
+                                  const updatedDayActivities = [
+                                    ...currentDayActivities.slice(0, insertIndex),
                                     {
                                       ...droppedActivity,
                                       _id: droppedActivity._id || generateTempId(),
                                       day: dayIndex + 1,
-                                      displayTime: "09:00" // Will be recalculated
+                                      displayTime: calculateEndTime(activity.displayTime, activity.duration) // Will be recalculated
                                     },
-                                    ...currentDayActivities
+                                    ...currentDayActivities.slice(insertIndex)
+                                  ];
+
+                                  // Combine with other days' activities
+                                  const updatedActivities = [
+                                    ...otherActivities.filter(a => a.day !== dayIndex + 1),
+                                    ...updatedDayActivities
                                   ];
 
                                   // Recalculate timings
