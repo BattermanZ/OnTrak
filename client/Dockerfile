@@ -2,7 +2,7 @@
 FROM node:20-alpine as builder
 
 # Production environment variables
-ENV REACT_APP_BACKEND_URL=http://192.168.31.24:3456
+ENV REACT_APP_BACKEND_URL=https://ontrak.battercloud.cc
 ENV REACT_APP_LOG_LEVEL=debug
 ENV NODE_ENV=production
 
@@ -31,4 +31,4 @@ FROM nginx:alpine
 COPY --from=builder /app/build /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"] 
+CMD ["nginx", "-g", "daemon off;"]
