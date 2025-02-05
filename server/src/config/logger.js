@@ -52,22 +52,46 @@ const timestampFormat = () => {
   }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2');
 };
 
+// Format value helper function
+const formatValue = (value) => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.join('\n    ');
+  }
+  return JSON.stringify(value, null, 2);
+};
+
 // Custom format for better readability
 const customFormat = winston.format.printf(({ level, message, timestamp, ...metadata }) => {
+  // Format the message
   let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
   
+  // Add metadata if it exists, but format it nicely
   if (Object.keys(metadata).length > 0) {
-    const { service, userId, method, url, status, socketId, ...rest } = metadata;
+    // Remove 'service' from metadata if it exists
+    const { service, ...rest } = metadata;
     
-    if (userId) msg += ` - User: ${userId}`;
-    if (method && url) msg += ` - ${method.toUpperCase()} ${url}`;
-    if (status) msg += ` - Status: ${status}`;
-    if (socketId) msg += ` - Socket: ${socketId}`;
+    // Handle special cases for common metadata
+    if (rest.envPaths) {
+      msg += `\n  Paths checked:\n    ${formatValue(rest.envPaths)}`;
+      delete rest.envPaths;
+    }
     
-    // Add remaining metadata if any
-    const remaining = Object.keys(rest).length > 0 ? JSON.stringify(rest) : '';
-    if (remaining) msg += ` - ${remaining}`;
+    // Format remaining metadata
+    const remainingKeys = Object.keys(rest);
+    if (remainingKeys.length > 0) {
+      const formattedMeta = remainingKeys
+        .map(key => {
+          const value = formatValue(rest[key]);
+          return `${key}: ${value}`;
+        })
+        .join('\n  ');
+      msg += `\n  ${formattedMeta}`;
+    }
   }
+  
   return msg;
 });
 
@@ -79,7 +103,7 @@ const logger = winston.createLogger({
     }),
     winston.format.errors({ stack: true }),
     winston.format.splat(),
-    winston.format.json()
+    customFormat
   ),
   defaultMeta: { service: 'backend' },
   transports: [
@@ -87,12 +111,6 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: path.join(logsDir, 'backend.log'),
       level: 'debug',
-      format: winston.format.combine(
-        winston.format.timestamp({
-          format: timestampFormat
-        }),
-        customFormat
-      ),
       maxsize: 5242880, // 5MB
       maxFiles: 5,
       tailable: true,
