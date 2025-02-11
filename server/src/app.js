@@ -18,9 +18,9 @@ const backupScheduler = require('./utils/scheduler');
 // Load .env from multiple possible locations
 const envPaths = [
   path.join(__dirname, '../../.env'),  // Local development
-  path.join(__dirname, '../.env'),     // One level up in Docker
-  path.join(process.cwd(), '.env'),    // Current working directory
-  '/app/.env'                          // Explicit Docker mount point
+  path.join(__dirname, '../.env'),     // Docker container
+  '/.env',                            // Root in Docker
+  '.env'                              // Current directory
 ];
 
 // Try loading .env from each possible location
@@ -36,31 +36,14 @@ for (const envPath of envPaths) {
 
 if (!envLoaded) {
   logger.warn('No .env file found in any of the following locations:', envPaths);
-  logger.info('Continuing with environment variables from Docker/system');
 }
 
-// Validate required environment variables
-const requiredEnvVars = [
-  'NODE_ENV',
-  'CLIENT_URL',
-  'BACKEND_URL',
-  'MONGODB_URI',
-  'JWT_SECRET'
-];
-
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-if (missingVars.length > 0) {
-  logger.error('Missing required environment variables:', missingVars);
-  process.exit(1);
-}
-
-// Debug environment variables (sanitized)
-logger.info('Environment Configuration:', {
+// Debug environment variables
+logger.info('Environment Variables:', {
   nodeEnv: process.env.NODE_ENV,
   clientUrl: process.env.CLIENT_URL,
   backendUrl: process.env.BACKEND_URL,
-  port: process.env.PORT || 3456,
-  mongoDbUri: process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//[HIDDEN]:[HIDDEN]@'),
+  port: process.env.PORT,
   envPaths
 });
 
@@ -75,9 +58,7 @@ const allowedOrigins = isDevelopment
   ? ['http://localhost:3000', 'http://localhost:3456']
   : [
       process.env.CLIENT_URL,
-      // Allow IP-based origins for local network testing
-      'http://192.168.31.24:3457',
-      'http://192.168.31.24:3456'
+      process.env.BACKEND_URL
     ].filter(Boolean);
 
 logger.info('CORS Configuration:', {
@@ -119,8 +100,6 @@ const corsOptions = {
       if (origin.replace(/\/$/, '') === allowed) return true;
       // Match with trailing slash
       if (origin === allowed + '/') return true;
-      // Match IP-based origins
-      if (origin.startsWith('http://192.168.')) return true;
       return false;
     });
 
