@@ -253,6 +253,7 @@ const schedules = {
   update: (id: string, data: Partial<Schedule>) => api.put(`/schedules/${id}`, data),
   delete: (id: string) => api.delete(`/schedules/${id}`),
   getCurrent: () => api.get('/schedules/current'),
+  getActiveSessions: () => api.get('/schedules/active'),
   startDay: (templateId: string, day: number) => api.post('/schedules/start-day', { templateId, day }),
   closeDay: () => api.post('/schedules/close-day'),
   cancelDay: () => api.post('/schedules/cancel-day'),

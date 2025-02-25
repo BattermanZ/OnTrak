@@ -16,17 +16,17 @@ OnTrak is a comprehensive training management system designed to help trainers a
 
 ```
 ontrak/
-├── client/                 # Frontend application
-│   ├── src/               # Source code
-│   │   ├── components/    # React components
-│   │   ├── contexts/      # React contexts
+├── client/               # Frontend application
+│   ├── src/              # Source code
+│   │   ├── components/   # React components
+│   │   ├── contexts/     # React contexts
 │   │   ├── pages/        # Page components
 │   │   ├── services/     # API services
 │   │   └── utils/        # Utility functions
 │   ├── public/           # Static files
 │   └── Dockerfile        # Frontend container config
 │
-├── server/                # Backend application
+├── server/               # Backend application
 │   ├── src/              # Source code
 │   │   ├── config/       # Configuration files
 │   │   ├── models/       # Database models
@@ -37,9 +37,9 @@ ontrak/
 │   └── Dockerfile        # Backend container config
 │
 ├── scripts/              # Utility scripts
-├── database/            # Database files
-├── documentations/      # Project documentation
-└── docker-compose.yml   # Container orchestration
+├── database/             # Database files
+├── documentations/       # Project documentation
+└── docker-compose.yml    # Container orchestration
 ```
 
 ## 🚀 Getting Started

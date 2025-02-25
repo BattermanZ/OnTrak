@@ -549,4 +549,45 @@ router.post('/cancel-day',
   }
 );
 
+// Get active sessions (admin only)
+router.get('/active',
+  passport.authenticate('jwt', { session: false }),
+  isAdmin,
+  async (req, res, next) => {
+    try {
+      const activeSessions = await Schedule.find({ status: 'active' })
+        .populate('createdBy', 'firstName lastName email')
+        .populate('templateId', 'name');
+
+      const formattedSessions = activeSessions.map(session => {
+        const currentActivity = session.getCurrentActivity();
+        return {
+          _id: session._id,
+          trainer: {
+            _id: session.createdBy._id,
+            name: `${session.createdBy.firstName} ${session.createdBy.lastName}`,
+            email: session.createdBy.email
+          },
+          training: {
+            _id: session.templateId._id,
+            name: session.templateId.name
+          },
+          currentActivity: currentActivity ? {
+            name: currentActivity.name,
+            startTime: currentActivity.startTime,
+            actualStartTime: currentActivity.actualStartTime
+          } : null,
+          day: session.selectedDay,
+          startedAt: session.createdAt
+        };
+      });
+
+      res.json(formattedSessions);
+    } catch (error) {
+      logger.error('Error getting active sessions:', error);
+      next(error);
+    }
+  }
+);
+
 module.exports = router; 

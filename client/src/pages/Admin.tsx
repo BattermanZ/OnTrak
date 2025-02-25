@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, Plus } from 'lucide-react';
 import { auth } from '../services/api';
-
+import { useQuery } from '@tanstack/react-query';
+import { schedules } from '../services/api';
 import {
+  Container,
+  Typography,
+  Paper,
+  Box,
   Card,
   CardContent,
+  Grid,
+} from '@mui/material';
+import { format } from 'date-fns';
+
+import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
@@ -51,6 +61,26 @@ const initialFormData: UserFormData = {
   timezone: 'Amsterdam',
 };
 
+interface ActiveSession {
+  _id: string;
+  trainer: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  training: {
+    _id: string;
+    name: string;
+  };
+  currentActivity: {
+    name: string;
+    startTime: string;
+    actualStartTime: string;
+  } | null;
+  day: number;
+  startedAt: string;
+}
+
 const Admin = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -58,6 +88,15 @@ const Admin = () => {
   const [formData, setFormData] = useState<UserFormData>(initialFormData);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const { data: activeSessions = [] } = useQuery({
+    queryKey: ['activeSessions'],
+    queryFn: async () => {
+      const response = await schedules.getActiveSessions();
+      return response.data;
+    },
+    refetchInterval: 30000 // Refresh every 30 seconds
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -128,7 +167,65 @@ const Admin = () => {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        Admin Dashboard
+      </Typography>
+
+      {/* Active Sessions Section */}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Typography variant="h5" gutterBottom>
+          Active Training Sessions
+        </Typography>
+        <Grid container spacing={3}>
+          {activeSessions.length === 0 ? (
+            <Grid item xs={12}>
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  No active training sessions at the moment
+                </Typography>
+              </Box>
+            </Grid>
+          ) : (
+            activeSessions.map((session: ActiveSession) => (
+              <Grid item xs={12} md={6} key={session._id}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      {session.training.name}
+                    </Typography>
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle1" color="primary">
+                        Trainer: {session.trainer.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {session.trainer.email}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body1">
+                      Day {session.day}
+                    </Typography>
+                    {session.currentActivity && (
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          Current Activity: {session.currentActivity.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Started at: {format(new Date(session.currentActivity.actualStartTime), 'HH:mm')}
+                        </Typography>
+                      </Box>
+                    )}
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      Session started: {format(new Date(session.startedAt), 'dd/MM/yyyy HH:mm')}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))
+          )}
+        </Grid>
+      </Paper>
+
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -294,7 +391,7 @@ const Admin = () => {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </Container>
   );
 };
 
