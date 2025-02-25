@@ -1,16 +1,82 @@
 # OnTrak Training Management System 🏋️‍♂️
 
-OnTrak is a comprehensive training management system designed to help trainers and administrators organize and track training sessions effectively.
+OnTrak is a comprehensive training management system designed specifically for Learning & Development (L&D) teams to standardize, execute, and analyze training programs across multiple locations. It bridges the gap between training design and delivery by providing real-time tracking, execution support, and performance analytics.
 
-## 🌟 Features
+## 📋 What is OnTrak?
 
-- 📅 Training schedule management
-- 👥 User role management (Admin/Trainer)
-- 📊 Training statistics and reporting
-- 🔄 Template-based training plans
-- 🌐 Multi-timezone support
-- 📱 Responsive web interface
-- 🔒 Secure authentication system
+OnTrak helps L&D teams solve common training challenges:
+
+- **Standardization**: Ensure consistent training delivery across different locations and trainers
+- **Real-time Execution**: Track and manage training activities as they happen
+- **Performance Analysis**: Measure adherence to training plans and identify improvement areas
+- **Multi-location Support**: Manage training across different timezones and locations
+
+```mermaid
+graph TD
+    A[Training Templates] -->|Select & Start Day| B[Active Training Schedule]
+    B -->|Track Activities| C[Real-time Execution]
+    C -->|Complete Training| D[Performance Data]
+    D -->|Analyze| E[Statistics & Reports]
+    E -->|Improve| A
+```
+
+## 🎯 Benefits for L&D Teams
+
+| Challenge | OnTrak Solution | Business Impact |
+|-----------|-----------------|-----------------|
+| Inconsistent training delivery | Standardized templates with precise timing | Improved training quality and outcomes |
+| Difficulty tracking adherence | Real-time activity tracking | Better compliance and quality control |
+| Limited visibility into training execution | Comprehensive statistics and reporting | Data-driven training improvements |
+| Managing training across locations | Multi-timezone support | Consistent global training operations |
+| Manual training administration | Digital tracking and reporting | Reduced administrative overhead |
+| Training program improvements | Performance analytics | Continuous improvement of training programs |
+
+## 🌟 Key Features
+
+- **Template Management**
+  - Create reusable training plans with day-by-day activities
+  - Organize activities with precise timing requirements
+  - Tag and categorize templates for easy discovery
+
+- **Training Execution**
+  - Start training days from templates with one click
+  - Navigate through activities with clear timing guidance
+  - Track actual vs. planned timing for each activity
+
+- **Performance Analytics**
+  - Measure adherence to training schedules
+  - Analyze timing variances (early/on-time/late)
+  - Compare performance across trainers and programs
+
+- **User Management**
+  - Role-based access (Admin/Trainer)
+  - Location-based settings with timezone support
+  - Secure authentication system
+
+```mermaid
+flowchart LR
+    subgraph "Admin Functions"
+    A[Create Templates] --> B[Manage Users]
+    B --> C[View Analytics]
+    C --> D[System Management]
+    end
+    
+    subgraph "Trainer Functions"
+    E[Start Training Day] --> F[Execute Activities]
+    F --> G[Track Progress]
+    G --> H[View Personal Stats]
+    end
+    
+    A -.-> E
+    C -.-> H
+```
+
+## 💻 Technical Overview
+
+- **Frontend**: React, TypeScript, Shadcn UI components
+- **Backend**: Node.js, Express, MongoDB
+- **Real-time Updates**: WebSocket integration
+- **Deployment**: Docker containerization
 
 ## 🏗️ Project Structure
 
@@ -160,6 +226,12 @@ See `.env.example` for all available options.
 - Error tracking and reporting
 - Performance monitoring
 
+## 🔄 Backup Management
+- Daily backups are stored in a separate backup location
+- Keep last 7 daily backups
+- Keep last 4 weekly backups
+- Keep last 3 monthly backups
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -167,12 +239,6 @@ See `.env.example` for all available options.
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
-
-### Backup Management
-- Daily backups are stored in a separate backup location
-- Keep last 7 daily backups
-- Keep last 4 weekly backups
-- Keep last 3 monthly backups
 
 ## 🆘 Support
 
