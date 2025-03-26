@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="256" fill="#22C55E"/>
+  
+  <!-- Letter O - modern, clean design -->
+  <path d="M256 120C193.1 120 142 171.1 142 234C142 296.9 193.1 348 256 348C318.9 348 370 296.9 370 234C370 171.1 318.9 120 256 120ZM256 308C215.3 308 182 274.7 182 234C182 193.3 215.3 160 256 160C296.7 160 330 193.3 330 234C330 274.7 296.7 308 256 308Z" 
+        fill="white"/>
+  
+  <!-- Decorative Arc -->
+  <path d="M256 40C154.5 40 72 122.5 72 224C72 325.5 154.5 408 256 408C357.5 408 440 325.5 440 224"
+        stroke="white"
+        stroke-width="24"
+        stroke-linecap="round"
+        fill="none"/>
+</svg> 

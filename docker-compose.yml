@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  client:
+    image: ontrak-client:beta7
+    container_name: ontrak-client
+    ports:
+      - "3457:3000"  # Frontend port
+    environment:
+      - NODE_ENV=production
+    networks:
+      - ontrak_default
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+  server:
+    image: ontrak-server:beta1
+    container_name: ontrak-server
+    user: "node"
+    expose:
+      - "3456"  # Only expose to internal network
+    volumes:
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+      - ./database:/app/database
+      - ./.env:/app/.env:ro
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Amsterdam
+      - PUID=1035
+      - PGID=100
+      - NODE_ENV=production
+    networks:
+      - ontrak_default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3456/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  ontrak_default:
+    name: ontrak_default
+    driver: bridge
