@@ -3,7 +3,12 @@ import { Plus, Edit2, Trash2, Search, X, Download, ListPlus, Upload, HelpCircle,
 import { templates as templateApi } from '../services/api';
 import type { Template, Activity, ActivityConflict } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { convertFromAmsterdamTime, convertToAmsterdamTime } from '../utils/timezone';
+import { 
+  convertFromAmsterdamTime, 
+  convertToAmsterdamTime, 
+  processActivitiesForDisplay,
+  prepareActivityForSaving
+} from '../utils/timezone';
 import { AppTour } from '../components/AppTour';
 import { checkActivityConflicts } from '../utils/activityConflicts';
 
@@ -94,25 +99,22 @@ export default function Setup() {
       const response = await templateApi.getAll();
       console.log('User timezone:', user?.timezone);
       console.log('Raw template data:', response.data);
-      const templatesWithLocalTime: TemplateWithDisplayTimes[] = response.data.map((template: Template) => {
+      
+      // Process templates with special handling for Curaçao
+      const templatesWithAdjustedTimes = response.data.map((template: Template) => {
         console.log('Processing template:', template.name);
-        const processed = {
+        return {
           ...template,
-          activities: template.activities.map((activity: Activity) => {
-            console.log('Processing activity:', activity.name);
-            console.log('Original startTime:', activity.startTime);
-            const displayTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
-            console.log('Converted displayTime:', displayTime);
-            return {
-              ...activity,
-              displayTime
-            };
-          })
+          activities: user?.timezone 
+            ? processActivitiesForDisplay(template.activities, user.timezone)
+            : template.activities.map((activity: Activity) => ({
+                ...activity,
+                displayTime: activity.startTime
+              }))
         };
-        console.log('Processed template:', processed);
-        return processed;
       });
-      setTemplates(templatesWithLocalTime);
+      
+      setTemplates(templatesWithAdjustedTimes);
     } catch (err) {
       console.error('Error fetching templates:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while fetching templates');
@@ -191,44 +193,19 @@ export default function Setup() {
     try {
       if (!selectedTemplate?._id || !user?.timezone) return;
 
-      // Convert time to Amsterdam time before saving
-      const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
+      // Determine if this is the first activity of the day
+      const isFirstOfDay = selectedTemplate.activities
+        .filter(a => a.day === activityForm.day)
+        .length === 0;
       
-      // Check for conflicts before saving
-      const newActivity: Activity = {
-        _id: '',
-        ...activityForm,
-        startTime: amsterdamTime,
-        actualStartTime: null,
-        actualEndTime: null
-      };
+      // Prepare activity for saving with special handling for Curaçao
+      const preparedActivity = prepareActivityForSaving(
+        activityForm,
+        user.timezone,
+        isFirstOfDay
+      );
       
-      const conflicts = checkForConflicts(newActivity);
-      if (conflicts.length > 0) {
-        // Don't proceed if there are conflicts - they will be shown in the dialog
-        return;
-      }
-
-      // Use the dedicated addActivity endpoint
-      await templateApi.addActivity(selectedTemplate._id, newActivity);
-
-      // Update preview if open
-      if (previewTemplate && selectedTemplate._id === previewTemplate._id) {
-        const response = await templateApi.getAll();
-        const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
-        if (updatedTemplate) {
-          // Convert times for preview display
-          const templateWithDisplayTimes: TemplateWithDisplayTimes = {
-            ...updatedTemplate,
-            activities: updatedTemplate.activities.map((activity: Activity) => ({
-              ...activity,
-              displayTime: user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime
-            }))
-          };
-          setPreviewTemplate(templateWithDisplayTimes);
-        }
-      }
-
+      await templateApi.addActivity(selectedTemplate._id, preparedActivity);
       setIsAddActivityDialogOpen(false);
       setActivityForm({
         name: '',
@@ -237,7 +214,6 @@ export default function Setup() {
         description: '',
         day: 1
       });
-      setActivityConflicts([]);
       await fetchTemplates();
     } catch (err) {
       console.error('Error adding activity:', err);
@@ -250,62 +226,41 @@ export default function Setup() {
     e.preventDefault();
     try {
       if (!selectedTemplate?._id || !selectedActivity?._id || !user?.timezone) return;
-      
-      // Convert time to Amsterdam time before saving
-      const amsterdamTime = convertToAmsterdamTime(activityForm.startTime, user.timezone);
-      
-      const updatedActivity: ActivityWithDisplay = {
-        ...selectedActivity,
-        ...activityForm,
-        startTime: amsterdamTime,
-        displayTime: activityForm.startTime
-      };
 
-      // Check for conflicts before saving, excluding the current activity being edited
-      const conflicts = checkActivityConflicts(
-        selectedTemplate.activities.filter(a => a._id !== selectedActivity._id),
-        {
-          ...updatedActivity,
-          _id: selectedActivity._id // Keep the original ID for proper exclusion
-        }
+      // Check if this is the first activity of the day
+      const activitiesOfThisDay = selectedTemplate.activities
+        .filter(a => a.day === activityForm.day)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      
+      const isFirstOfDay = activitiesOfThisDay.length > 0 && 
+        activitiesOfThisDay[0]._id === selectedActivity._id;
+      
+      // Prepare activity for saving with special handling for Curaçao
+      const preparedActivity = prepareActivityForSaving(
+        activityForm,
+        user.timezone,
+        isFirstOfDay
       );
       
-      if (conflicts.length > 0) {
-        setActivityConflicts(conflicts);
-        return;
-      }
-
-      await templateApi.update(selectedTemplate._id, {
-        name: selectedTemplate.name,
-        days: selectedTemplate.days,
-        activities: selectedTemplate.activities.map(a => 
-          a._id === selectedActivity._id ? updatedActivity : a
-        )
-      });
-
-      // Update preview if open
-      if (previewTemplate && selectedTemplate._id === previewTemplate._id) {
-        const response = await templateApi.getAll();
-        const updatedTemplate = response.data.find((t: Template) => t._id === selectedTemplate._id);
-        if (updatedTemplate) {
-          // Convert times for preview display
-          const templateWithDisplayTimes: TemplateWithDisplayTimes = {
-            ...updatedTemplate,
-            activities: updatedTemplate.activities.map((activity: Activity) => ({
-              ...activity,
-              displayTime: user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime
-            }))
-          };
-          setPreviewTemplate(templateWithDisplayTimes);
-        }
-      }
-
+      await templateApi.updateActivity(
+        selectedTemplate._id, 
+        selectedActivity._id, 
+        preparedActivity
+      );
+      
       setIsEditActivityDialogOpen(false);
       setSelectedActivity(null);
-      setActivityConflicts([]);
+      setActivityForm({
+        name: '',
+        startTime: '',
+        duration: 30,
+        description: '',
+        day: 1
+      });
       await fetchTemplates();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to edit activity');
+      console.error('Error updating activity:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred while updating activity');
     }
   };
 

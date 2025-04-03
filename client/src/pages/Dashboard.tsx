@@ -26,7 +26,7 @@ import { Button } from '../components/ui/button';
 import ReactMarkdown from 'react-markdown';
 // @ts-ignore
 import remarkGfm from 'remark-gfm';
-import { convertFromAmsterdamTime } from '../utils/timezone';
+import { convertFromAmsterdamTime, processActivitiesForDisplay } from '../utils/timezone';
 import { useAuth } from '../contexts/AuthContext';
 import { AppTour } from '../components/AppTour';
 
@@ -90,6 +90,12 @@ export default function Dashboard() {
       return response.data;
     }
   });
+
+  // Process the activities for proper timezone display
+  // This ensures Curaçao activities start at 7:30 AM
+  const processedActivities = user?.timezone 
+    ? processActivitiesForDisplay(currentSchedule.activities || [], user.timezone)
+    : currentSchedule.activities || [];
 
   useEffect(() => {
     if (socket) {
@@ -195,6 +201,15 @@ export default function Dashboard() {
 
   const formatActivityTime = (time: string) => {
     if (!user?.timezone) return time;
+    
+    // For Curaçao, we'll rely on the pre-processed times
+    if (user.timezone === 'Curacao') {
+      // Find the activity with this time
+      const activity = processedActivities.find((a: Activity) => a.startTime === time);
+      return activity ? activity.displayTime : time;
+    }
+    
+    // For other timezones, use the regular conversion
     return convertFromAmsterdamTime(time, user.timezone);
   };
 

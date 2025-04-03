@@ -104,7 +104,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
         const now = new Date();
         
         // Get scheduled start and end times in user's timezone
-        const localStartTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
+        // First check if pre-processed displayTime exists (for Curaçao special case)
+        const localStartTime = activity.displayTime || 
+          (user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime);
+        
         const scheduledStartTime = parse(localStartTime, 'HH:mm', new Date());
         const scheduledEndTime = addMinutes(scheduledStartTime, activity.duration);
         
@@ -175,7 +178,10 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({
   }
 
   // Convert times to user's timezone
-  const localStartTime = user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime;
+  // First check if pre-processed displayTime exists (for Curaçao special case)
+  const localStartTime = activity.displayTime || 
+    (user?.timezone ? convertFromAmsterdamTime(activity.startTime, user.timezone) : activity.startTime);
+  
   const startTime = parse(localStartTime, 'HH:mm', new Date());
   const endTime = addMinutes(startTime, activity.duration);
   const endTimeString = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`;

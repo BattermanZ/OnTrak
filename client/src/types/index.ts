@@ -20,6 +20,7 @@ export interface Activity {
   completed?: boolean;
   actualStartTime: string | null;
   actualEndTime: string | null;
+  displayTime?: string;
 }
 
 export interface Template {
